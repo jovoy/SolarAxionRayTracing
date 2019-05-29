@@ -28,7 +28,7 @@ let
                   yaxis: Axis(title: "y-axis too"), autosize: false)
   p = Plot[float32](layout: layout, traces: @[d])
 echo p.save()
-#p.show()
+p.show()
 
 
 
@@ -355,12 +355,15 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
         if (not lineIntersectsCircle(pointExitCBMagneticField,pointExitCB,centerExitPipeCBVT3,radiusPipeCBVT3,pointExitPipeCBVT3)) : continue
 
         var pointExitPipeVT3XRT = vec3(0.0)
+        #pointExitPipeVT3XRT[0] = 
+        #pointExitPipeVT3XRT[1] =
+        #pointExitPipeVT3XRT[2] = + RAYTRACER_LENGTH_COLDBORE + RAYTRACER_LENGTH_PIPE_CB_VT3 + RAYTRACER_LENGTH_PIPE_VT3_XRT
 
         if (not lineIntersectsCircle(pointExitCB,pointExitPipeCBVT3,centerExitPipeVT3XRT,radiusPipeVT3XRT,pointExitPipeVT3XRT)) : continue
 
         var vectorBeforeXRT = vec3(0.0)
         vectorBeforeXRT = pointExitPipeVT3XRT - pointExitCB
-
+        echo vectorBeforeXRT
         ########von CB zum XRT
 
         var pointEntranceXRT = vec3(0.0)
@@ -501,5 +504,9 @@ echo calculateFluxFractions(radiationCharacteristic, xrtTransmissionAt10Arcmin, 
 #type
 #    vector3 = ref object of Vec3
 
-## things changed##
+## things changed## 
+# VT4 -> VT3
 # XRT Focal length 1600.0 -> 1500.0
+# RAYTRACER_RADIUS_PIPE_CB_VT3 = 33.6 #mm from drawing #30.0 #mm (original)
+# RAYTRACER_LENGTH_PIPE_VT3_XRT = 264.7 #mm from picture #198.2 #mm (original)
+# RAYTRACER_RADIUS_PIPE_VT3_XRT = 25.0 #mm from drawing #35.0 #m (original)
