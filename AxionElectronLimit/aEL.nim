@@ -11,30 +11,12 @@ import sequtils
 
 #nim c -r fig9_heatmap.nim
 
-let
-  # The GL heatmap is also supported as HeatMapGL
-  d = Trace[float32](mode: PlotMode.Lines, `type`: PlotType.HeatMap)
-
-d.colormap = ColorMap.Viridis
-# fill data for colormap with random values. The data needs to be supplied
-# as a nested seq.
-d.zs = newSeqWith(28, newSeq[float32](28))
-for x in 0 ..< 28:
-  for y in 0 ..< 28:
-    d.zs[x][y] = random(1.0)
-let
-  layout = Layout(title: "Heatmap example", width: 800, height: 800,
-                  xaxis: Axis(title: "A heatmap x-axis"),
-                  yaxis: Axis(title: "y-axis too"), autosize: false)
-  p = Plot[float32](layout: layout, traces: @[d])
-echo p.save()
-p.show()
-
 
 
 
 ##################rayTracer###############################
 # ToDo: Picture heatmap
+
 # put in XRT effeciency
 
 
@@ -227,7 +209,76 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   ######### some functions we're gonna need later##########
   # Now let's define a function to get us a random point on a disk, where we later can put the center of the
   # detector as center and the radius of the detector as radius
-  
+  # , vecdata_x : array[0..1000, float], vecdata_y : array[0..1000,float]
+  proc prepareheadmap( numberofrows : int, numberofcolumns : int, start_x : float, stop_x : float, start_y : float, stop_y : float, data_X :seq, data_Y : seq) : any =
+    var stepsize_X = 0.0
+    stepsize_X = (stop_x - start_x)/float(numberofrows) 
+    var stepsize_Y = 0.0
+    stepsize_Y = (stop_y - start_y)/float(numberofcolumns)
+    #[ 
+      |-------|-------|-------|
+      |-------|-------|-------|
+      |-------|-------|-------|
+      |-------|-------|-------|
+      |-------|-------|-------|
+    ]#
+    var headmaptable = newSeqWith(numberofrows, newSeq[float](numberofcolumns))
+    for i, value in data_X:
+      var coord_X = floor((data_X[i] - start_x) / stepsize_X)
+      var coord_Y = floor((data_Y[i] - start_y) / stepsize_Y)
+      if coord_X > 0:
+        if coord_Y > 0:
+          if coord_X < float(numberofrows):
+            if coord_Y < float(numberofcolumns):
+              headmaptable[int(coord_X)][int(coord_Y)] = headmaptable[int(coord_X)][int(coord_Y)] + 1 
+    result = headmaptable
+
+
+  proc drawfancydiagrams(diagramtitle : string, objectstodraw : any, width : int) : float =
+    let
+      # The GL heatmap is also supported as HeatMapGL
+      d = Trace[float32](mode: PlotMode.Lines, `type`: PlotType.HeatMap)
+    
+    d.colormap = ColorMap.Viridis
+    # fill data for colormap with random values. The data needs to be supplied
+    # as a nested seq.
+    #
+    #
+    #
+    #
+    #
+    d.zs = newSeqWith(width, newSeq[float32](width))
+    for x in 0 ..< width:
+      for y in 0 ..< width:
+        if x < width:
+          if y < width:
+            if x > 0:
+              if y > 0:
+                d.zs[x][y] = objectstodraw[x][y]      
+    let
+      layout = Layout(title: diagramtitle, width: 800, height: 800,
+                      xaxis: Axis(title: "A heatmap x-axis"),
+                      yaxis: Axis(title: "y-axis too"), autosize: false)
+      p = Plot[float32](layout: layout, traces: @[d])
+    echo p.save()
+    p.show()
+    var b = 2.2
+    result = b
+
+
+  var ara1 = @[31.0,23.0]
+  var ara2 = @[21.0,12.0]
+  var dataX = @[1.1,2.1,1.3,2.3,2.4,1.3,7.6,8.9,8.9,8.9,8.9]
+  var dataY = @[4.1,3.1,1.3,2.3,2.4,1.3,4.5,1.8,1.6,1.6,1.6]
+  var headmaptable = prepareheadmap(10,10,10.0,0.0,10.0,0.0,dataX,dataY)
+  echo headmaptable
+  echo drawfancydiagrams("Diagramtitel", headmaptable, 10)
+
+  var array1 = [[1,2],[3,4]]
+  echo array1[1][1]
+  echo array1[1][0]
+  echo array1[0][1]
+
   proc getRandomPointOnDisk(center: Vec3, radius:float64) : Vec3 =
     var x = 0.0
     var y = 0.0
@@ -239,6 +290,8 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     var vector = vec3(x,y,0.0)
     vector = vector + center
     result = vector 
+
+
 
   proc getRandomPointFromSolarModel(center : Vec3, radius : float64 ) : Vec3 =
     var x = 0.0
@@ -257,7 +310,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   echo getRandomPointFromSolarModel(centerSun,radiusSun) #Bedenke: der Ursprung dieser Koordinaten ist die Erde
   
 
-  proc lineIntersectsCircle(point_1 : Vec3, point_2 : Vec3, center : Vec3, radius : float64, intersect : Vec3) : bool =
+  proc lineIntersectsCircle(point_1 : Vec3, point_2 : Vec3, center : Vec3, radius : float64, intersect : Vec3) : bool = # probably still some error (lambda1 -> infinity)
     var vector = vec3(0.0)
     vector = point_2 - point_1
     var lambda1 = (center[2] - point_1[2]) / vector[2]
@@ -316,6 +369,9 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
       return t 
 
   ############done with the functions, let's use them############
+  
+  var pointdataX = @[0.0] 
+  var pointdataY = @[0.0]
 
   for iExitCB in 0..<numberOfPointsEndOfCB:
     #echo iExitCB
@@ -342,7 +398,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
 
         if (not intersectsEntranceCB):
             intersectsCB = lineIntersectsCylinderOnce(pointInSun,pointExitCBMagneticField,centerEntranceCB,centerExitCBMagneticField,radiusCB,intersect)
-
+          
         if (not intersectsEntranceCB and not intersectsCB): continue
 
         pathCB = pointExitCBMagneticField[2] - intersect[2]
@@ -354,16 +410,17 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
 
         if (not lineIntersectsCircle(pointExitCBMagneticField,pointExitCB,centerExitPipeCBVT3,radiusPipeCBVT3,pointExitPipeCBVT3)) : continue
 
+
         var pointExitPipeVT3XRT = vec3(0.0)
-        #pointExitPipeVT3XRT[0] = 
-        #pointExitPipeVT3XRT[1] =
-        #pointExitPipeVT3XRT[2] = + RAYTRACER_LENGTH_COLDBORE + RAYTRACER_LENGTH_PIPE_CB_VT3 + RAYTRACER_LENGTH_PIPE_VT3_XRT
+        pointExitPipeVT3XRT = pointInSun - pointExitCBMagneticField 
+        pointExitPipeVT3XRT = pointExitPipeVT3XRT/ sqrt(pointExitPipeVT3XRT[0]*pointExitPipeVT3XRT[0] + pointExitPipeVT3XRT[1]*pointExitPipeVT3XRT[1] + pointExitPipeVT3XRT[2]*pointExitPipeVT3XRT[2])
+        pointExitPipeVT3XRT = pointExitCBMagneticField + pointExitPipeVT3XRT * (RAYTRACER_LENGTH_COLDBORE + RAYTRACER_LENGTH_PIPE_CB_VT3 + RAYTRACER_LENGTH_PIPE_VT3_XRT)
 
-        if (not lineIntersectsCircle(pointExitCB,pointExitPipeCBVT3,centerExitPipeVT3XRT,radiusPipeVT3XRT,pointExitPipeVT3XRT)) : continue
-
+        #if (not lineIntersectsCircle(pointExitCB,pointExitPipeCBVT3,centerExitPipeVT3XRT,radiusPipeVT3XRT,pointExitPipeVT3XRT)) : continue
+        # needs to be decommented in 
         var vectorBeforeXRT = vec3(0.0)
         vectorBeforeXRT = pointExitPipeVT3XRT - pointExitCB
-        echo vectorBeforeXRT
+        #echo vectorBeforeXRT
         ########von CB zum XRT
 
         var pointEntranceXRT = vec3(0.0)
@@ -390,8 +447,8 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
         vectorAfterXRT[0] = sin(theta_x_prime) * 100.0
         vectorAfterXRT[1] = sin(theta_y_prime) * 100.0
         vectorAfterXRT[2] = 100.0
-        echo "now" 
-        echo vectorAfterXRT
+        #echo "now" 
+        #echo vectorAfterXRT
 
         var centerDetectorWindow = vec3(0.0)
         centerDetectorWindow[0] = 0.0
@@ -413,6 +470,11 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
 
         pointDetectorWindow[0] = pointDetectorWindow[0] + CHIPREGIONS_CHIP_CENTER_X
         pointDetectorWindow[1] = pointDetectorWindow[1] + CHIPREGIONS_CHIP_CENTER_Y
+        
+        pointdataX.add(pointDetectorWindow[0])
+        pointdataY.add(pointDetectorWindow[1])
+
+        #echo pointDetectorWindow
 
         var gold : bool
         gold = ( (pointDetectorWindow[0] >= CHIPREGIONS_GOLD_X_MIN) and (pointDetectorWindow[0] <= CHIPREGIONS_GOLD_X_MAX) and (pointDetectorWindow[1] >= CHIPREGIONS_GOLD_Y_MIN) and (pointDetectorWindow[1] <= CHIPREGIONS_GOLD_Y_MAX) )
@@ -438,17 +500,10 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
         if(detector and withinWindow): integralDetector = integralDetector + weight
         
         #if(withinWindow){  image->Fill(pointDetectorWindow[0],pointDetectorWindow[1],weight)
-
-
-
-
-
-
-
-
-
-       
-
+  #echo pointdataX
+  #echo pointdataY    
+  var headmaptable2 = prepareheadmap(40,40,5.0,9.0,5.4,9.4,pointdataX,pointdataY)
+  echo drawfancydiagrams("Diagramtitel", headmaptable2, 40)
 
 ########################### aEL main ############################
 
