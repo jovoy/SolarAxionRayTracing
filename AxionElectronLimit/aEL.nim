@@ -1,7 +1,7 @@
 import glm/vec
 import math
 import random
-# kompilieren und ausführen: nim c -r ael.nim
+# kompilieren und ausführen: nim cpp -r aEL.nim
 
 import nim-plotly-master/src/plotly
 import nim-plotly-master/src/plotly/chroma
@@ -9,7 +9,7 @@ import nim-plotly-master/src/plotly/names
 import random
 import sequtils
 
-#nim c -r fig9_heatmap.nim
+#nim cpp -r fig9_heatmap.nim
 
 
 
@@ -23,54 +23,54 @@ import sequtils
 
 ################################
 # VARIABLES from rayTracer.h
-var RAYTRACER_DISTANCE_SUN_EARTH =  1.5e14  #mm
-var RAYTRACER_RADIUS_SUN = 6.9e11 #mm
-var RAYTRACER_RADIUS_COLDBORE = 21.5 #mm
-var RAYTRACER_LENGTH_COLDBORE = 9756.0 #mm half B field to end of CB
-var RAYTRACER_LENGTH_COLDBORE_9T = 9260.0 #mm half B field to half B field
-var RAYTRACER_LENGTH_PIPE_CB_VT3 = 2571.5 #mm should stay the same #from beam pipe drawings
-var RAYTRACER_RADIUS_PIPE_CB_VT3 = 33.6 #mm from drawing #30.0 #mm smallest aperture between end of CB and VT4
-var RAYTRACER_LENGTH_PIPE_VT3_XRT = 264.7 #mm from picture #198.2 #mm from XRT drawing
-var RAYTRACER_RADIUS_PIPE_VT3_XRT = 25.0 #mm from drawing #35.0 #m irrelevant, large enough to not loose anything # needs to be mm
-var RAYTRACER_FOCAL_LENGTH_XRT = 1500.0 #mm is from llnl XRT https://iopscience.iop.org/article/10.1088/1475-7516/2015/12/008/pdf #1600.0 #mm was the Telescope of 2014 (MPE XRT) also: Aperatur changed
-var RAYTRACER_DISTANCE_AXIS_CB_AXIS_XRT = 58.44 #mm from XRT drawing #no change, because don't know
-var RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW = -10.0 #mm #no change, because don't know
-var numberOfPointsEndOfCB = 1000
-var numberOfPointsSun = 1000
+const RAYTRACER_DISTANCE_SUN_EARTH =  1.5e14  #mm
+const RAYTRACER_RADIUS_SUN = 6.9e11 #mm
+const RAYTRACER_RADIUS_COLDBORE = 21.5 #mm
+const RAYTRACER_LENGTH_COLDBORE = 9756.0 #mm half B field to end of CB
+const RAYTRACER_LENGTH_COLDBORE_9T = 9260.0 #mm half B field to half B field
+const RAYTRACER_LENGTH_PIPE_CB_VT3 = 2571.5 #mm should stay the same #from beam pipe drawings
+const RAYTRACER_RADIUS_PIPE_CB_VT3 = 30.0#33.6 #mm from drawing #30.0 #mm smallest aperture between end of CB and VT4
+const RAYTRACER_LENGTH_PIPE_VT3_XRT = 198.2#264.7 #mm from picture #198.2 #mm from XRT drawing
+const RAYTRACER_RADIUS_PIPE_VT3_XRT = 35.0#25.0 #mm from drawing #35.0 #m irrelevant, large enough to not loose anything # needs to be mm
+const RAYTRACER_FOCAL_LENGTH_XRT = 1600.0#1500.0 #mm is from llnl XRT https://iopscience.iop.org/article/10.1088/1475-7516/2015/12/008/pdf #1600.0 #mm was the Telescope of 2014 (MPE XRT) also: Aperatur changed
+const RAYTRACER_DISTANCE_AXIS_CB_AXIS_XRT = 58.44 #mm from XRT drawing #no change, because don't know
+const RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW = -10.0 #mm #no change, because don't know
+const numberOfPointsEndOfCB = 1000
+const numberOfPointsSun = 1000
 
 ## Chipregions#####
 
-var CHIPREGIONS_CHIP_X_MIN = 0.0
-var CHIPREGIONS_CHIP_X_MAX = 14.0
-var CHIPREGIONS_CHIP_Y_MIN = 0.0
-var CHIPREGIONS_CHIP_Y_MAX = 14.0
+const CHIPREGIONS_CHIP_X_MIN = 0.0
+const CHIPREGIONS_CHIP_X_MAX = 14.0
+const CHIPREGIONS_CHIP_Y_MIN = 0.0
+const CHIPREGIONS_CHIP_Y_MAX = 14.0
 
-var CHIPREGIONS_CHIP_CENTER_X = 7.0
-var CHIPREGIONS_CHIP_CENTER_Y = 7.0
+const CHIPREGIONS_CHIP_CENTER_X = 7.0
+const CHIPREGIONS_CHIP_CENTER_Y = 7.0
 
-var CHIPREGIONS_GOLD_X_MIN = 4.5
-var CHIPREGIONS_GOLD_X_MAX = 9.5
-var CHIPREGIONS_GOLD_Y_MIN = 4.5
-var CHIPREGIONS_GOLD_Y_MAX = 9.5
+const CHIPREGIONS_GOLD_X_MIN = 4.5
+const CHIPREGIONS_GOLD_X_MAX = 9.5
+const CHIPREGIONS_GOLD_Y_MIN = 4.5
+const CHIPREGIONS_GOLD_Y_MAX = 9.5
 
-var CHIPREGIONS_SILVER_RADIUS_MAX = 4.5
-var CHIPREGIONS_BRONZE_RADIUS_MAX = 5.5
+const CHIPREGIONS_SILVER_RADIUS_MAX = 4.5
+const CHIPREGIONS_BRONZE_RADIUS_MAX = 5.5
 
 ###### from rootConfig.h
-var ROOTCONFIG_CANVAS_WIDTH = 1600.0
-var ROOTCONFIG_CANVAS_HEIGHT = 1000.0
-var ROOTCONFIG_SQUARECANVAS_WIDTH = 720.0
-var ROOTCONFIG_SQUARECANVAS_HEIGHT = 600.0
-var ROOTCONFIG_CANVAS_MARGIN_LEFT = 0.15
-var ROOTCONFIG_CANVAS_MARGIN_RIGHT = 0.05
-var ROOTCONFIG_CANVAS_MARGIN_BOTTOM = 0.15
-var ROOTCONFIG_CANVAS_MARGIN_TOP = 0.1
-var ROOTCONFIG_SQUARECANVAS_MARGIN_LEFT = 0.15
-var ROOTCONFIG_SQUARECANVAS_MARGIN_RIGHT = 0.225
-var ROOTCONFIG_SQUARECANVAS_MARGIN_BOTTOM = 0.15
-var ROOTCONFIG_SQUARECANVAS_MARGIN_TOP = 0.1
-var ROOTCONFIG_FONT_TIMESNEWROMAN = 132
-var ROOTCONFIG_FONT_ARIAL = 42
+const ROOTCONFIG_CANVAS_WIDTH = 1600.0
+const ROOTCONFIG_CANVAS_HEIGHT = 1000.0
+const ROOTCONFIG_SQUARECANVAS_WIDTH = 720.0
+const ROOTCONFIG_SQUARECANVAS_HEIGHT = 600.0
+const ROOTCONFIG_CANVAS_MARGIN_LEFT = 0.15
+const ROOTCONFIG_CANVAS_MARGIN_RIGHT = 0.05
+const ROOTCONFIG_CANVAS_MARGIN_BOTTOM = 0.15
+const ROOTCONFIG_CANVAS_MARGIN_TOP = 0.1
+const ROOTCONFIG_SQUARECANVAS_MARGIN_LEFT = 0.15
+const ROOTCONFIG_SQUARECANVAS_MARGIN_RIGHT = 0.225
+const ROOTCONFIG_SQUARECANVAS_MARGIN_BOTTOM = 0.15
+const ROOTCONFIG_SQUARECANVAS_MARGIN_TOP = 0.1
+const ROOTCONFIG_FONT_TIMESNEWROMAN = 132
+const ROOTCONFIG_FONT_ARIAL = 42
 ################################
 
 proc rayTracer(numberOfPointsEndOfCB : int, numberOfPointsSun : int) : int= 1
@@ -210,7 +210,8 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   # Now let's define a function to get us a random point on a disk, where we later can put the center of the
   # detector as center and the radius of the detector as radius
   # , vecdata_x : array[0..1000, float], vecdata_y : array[0..1000,float]
-  proc prepareheadmap( numberofrows : int, numberofcolumns : int, start_x : float, stop_x : float, start_y : float, stop_y : float, data_X :seq, data_Y : seq) : any =
+
+  proc prepareheatmap( numberofrows : int, numberofcolumns : int, start_x : float, stop_x : float, start_y : float, stop_y : float, data_X :seq, data_Y : seq, weights : seq) : any =
     var stepsize_X = 0.0
     stepsize_X = (stop_x - start_x)/float(numberofrows) 
     var stepsize_Y = 0.0
@@ -222,7 +223,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
       |-------|-------|-------|
       |-------|-------|-------|
     ]#
-    var headmaptable = newSeqWith(numberofrows, newSeq[float](numberofcolumns))
+    var heatmaptable = newSeqWith(numberofrows, newSeq[float](numberofcolumns))
     for i, value in data_X:
       var coord_X = floor((data_X[i] - start_x) / stepsize_X)
       var coord_Y = floor((data_Y[i] - start_y) / stepsize_Y)
@@ -230,8 +231,8 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
         if coord_Y > 0:
           if coord_X < float(numberofrows):
             if coord_Y < float(numberofcolumns):
-              headmaptable[int(coord_X)][int(coord_Y)] = headmaptable[int(coord_X)][int(coord_Y)] + 1 
-    result = headmaptable
+              heatmaptable[int(coord_X)][int(coord_Y)] = heatmaptable[int(coord_X)][int(coord_Y)] + 1
+    result = heatmaptable
 
 
   proc drawfancydiagrams(diagramtitle : string, objectstodraw : any, width : int) : float =
@@ -254,31 +255,46 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
           if y < width:
             if x > 0:
               if y > 0:
-                d.zs[x][y] = objectstodraw[x][y]      
+                d.zs[x][y] = objectstodraw[x][y] 
+    randomize(42)  
+    let
+      x = toSeq(0 ..< 50)
+      y = toSeq(0 ..< 50).mapIt(rand(50))
+      e = Trace[float32](`type`: PlotType.Bar)
+    for i, value in x:
+      var newx = x[i].float
+      var newy = y[i].float
+      let
+        e = Trace[float32](`type`: PlotType.Bar,
+                    xs: newx,
+                    ys: newy,
+                    orientation: Orientation.Horizontal)   
+      
+                     
     let
       layout = Layout(title: diagramtitle, width: 800, height: 800,
                       xaxis: Axis(title: "A heatmap x-axis"),
                       yaxis: Axis(title: "y-axis too"), autosize: false)
-      p = Plot[float32](layout: layout, traces: @[d])
+      p = Plot[float32](layout: layout, traces: @[d, e])
     echo p.save()
     p.show()
     var b = 2.2
     result = b
 
 
-  var ara1 = @[31.0,23.0]
-  var ara2 = @[21.0,12.0]
-  var dataX = @[1.1,2.1,1.3,2.3,2.4,1.3,7.6,8.9,8.9,8.9,8.9]
-  var dataY = @[4.1,3.1,1.3,2.3,2.4,1.3,4.5,1.8,1.6,1.6,1.6]
-  var headmaptable = prepareheadmap(10,10,10.0,0.0,10.0,0.0,dataX,dataY)
-  echo headmaptable
-  echo drawfancydiagrams("Diagramtitel", headmaptable, 10)
+  #var ara1 = @[31.0,23.0]
+  #var ara2 = @[21.0,12.0]
+  #var dataX = @[1.1,2.1,1.3,2.3,2.4,1.3,7.6,8.9,8.9,8.9,8.9]
+  #var dataY = @[4.1,3.1,1.3,2.3,2.4,1.3,4.5,1.8,1.6,1.6,1.6]
+  #var heatmaptable = prepareheatmap(10,10,10.0,0.0,10.0,0.0,dataX,dataY)
+  #echo heatmaptable
+  #echo drawfancydiagrams("Diagramtitel", heatmaptable, 10)
 
   var array1 = [[1,2],[3,4]]
   echo array1[1][1]
   echo array1[1][0]
   echo array1[0][1]
-
+   
   proc getRandomPointOnDisk(center: Vec3, radius:float64) : Vec3 =
     var x = 0.0
     var y = 0.0
@@ -372,7 +388,8 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   
   var pointdataX = @[0.0] 
   var pointdataY = @[0.0]
-
+  var weights = @[0.0]
+  
   for iExitCB in 0..<numberOfPointsEndOfCB:
     #echo iExitCB
     var pointExitCBMagneticField = vec3(0.0)
@@ -388,14 +405,14 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
           echo "Error: Default radiation characteristic not implemented"
         else:
           echo "Error: Unknown axion radiation characteristic"
-
+        #echo pointInSun
         var intersect = vec3(0.0)
         var pathCB : float64
         var intersectsEntranceCB : bool
         intersectsEntranceCB = lineIntersectsCircle(pointInSun, pointExitCBMagneticField, centerEntranceCB, radiusCB, intersect)
         var intersectsCB : bool
         intersectsCB = false
-
+        
         if (not intersectsEntranceCB):
             intersectsCB = lineIntersectsCylinderOnce(pointInSun,pointExitCBMagneticField,centerEntranceCB,centerExitCBMagneticField,radiusCB,intersect)
           
@@ -405,22 +422,26 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
         var pointExitCB = vec3(0.0)
         
         if (not lineIntersectsCircle(pointInSun,pointExitCBMagneticField,centerExitCB,radiusCB,pointExitCB)): continue
-
+        
+        pointExitCB = pointInSun + ((centerExitCB[2] - pointInSun[2]) / (pointExitCBMagneticField - pointInSun)[2]) * (pointExitCBMagneticField - pointInSun)
         var pointExitPipeCBVT3 =vec3(0.0)
-
+        
         if (not lineIntersectsCircle(pointExitCBMagneticField,pointExitCB,centerExitPipeCBVT3,radiusPipeCBVT3,pointExitPipeCBVT3)) : continue
-
-
+        
+        pointExitPipeCBVT3 = pointExitCBMagneticField + ((centerExitPipeCBVT3[2] - pointExitCBMagneticField[2]) / (pointExitCB - pointExitCBMagneticField)[2]) * (pointExitCB - pointExitCBMagneticField)
         var pointExitPipeVT3XRT = vec3(0.0)
-        pointExitPipeVT3XRT = pointInSun - pointExitCBMagneticField 
-        pointExitPipeVT3XRT = pointExitPipeVT3XRT/ sqrt(pointExitPipeVT3XRT[0]*pointExitPipeVT3XRT[0] + pointExitPipeVT3XRT[1]*pointExitPipeVT3XRT[1] + pointExitPipeVT3XRT[2]*pointExitPipeVT3XRT[2])
-        pointExitPipeVT3XRT = pointExitCBMagneticField + pointExitPipeVT3XRT * (RAYTRACER_LENGTH_COLDBORE + RAYTRACER_LENGTH_PIPE_CB_VT3 + RAYTRACER_LENGTH_PIPE_VT3_XRT)
+        
+        if (not lineIntersectsCircle(pointExitCB,pointExitPipeCBVT3,centerExitPipeVT3XRT,radiusPipeVT3XRT,pointExitPipeVT3XRT)) : continue
 
-        #if (not lineIntersectsCircle(pointExitCB,pointExitPipeCBVT3,centerExitPipeVT3XRT,radiusPipeVT3XRT,pointExitPipeVT3XRT)) : continue
-        # needs to be decommented in 
+        pointExitPipeVT3XRT = pointExitCB + ((centerExitPipeVT3XRT[2] - pointExitCB[2]) / (pointExitPipeCBVT3 - pointExitCB)[2]) * (pointExitPipeCBVT3 - pointExitCB)
+        
+        #pointExitPipeVT3XRT = pointInSun - pointExitCBMagneticField 
+        #pointExitPipeVT3XRT = pointExitPipeVT3XRT/ sqrt(pointExitPipeVT3XRT[0]*pointExitPipeVT3XRT[0] + pointExitPipeVT3XRT[1]*pointExitPipeVT3XRT[1] + pointExitPipeVT3XRT[2]*pointExitPipeVT3XRT[2])
+        #pointExitPipeVT3XRT = pointExitCBMagneticField + pointExitPipeVT3XRT * (RAYTRACER_LENGTH_COLDBORE + RAYTRACER_LENGTH_PIPE_CB_VT3 + RAYTRACER_LENGTH_PIPE_VT3_XRT)
+
         var vectorBeforeXRT = vec3(0.0)
         vectorBeforeXRT = pointExitPipeVT3XRT - pointExitCB
-        #echo vectorBeforeXRT
+        
         ########von CB zum XRT
 
         var pointEntranceXRT = vec3(0.0)
@@ -429,7 +450,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
         pointEntranceXRT[2] = pointExitPipeVT3XRT[2]
 
         var angle : float64
-        angle = vectorBeforeXRT[1]  # Here we want to adress theta, the polar angle, which should be the second entrance of the vector
+        angle = arccos(vectorBeforeXRT[0]/sqrt(vectorBeforeXRT[0]+vectorBeforeXRT[0]+vectorBeforeXRT[1]*vectorBeforeXRT[1]+vectorBeforeXRT[2]*vectorBeforeXRT[2]))  # Here we want to adress theta, the polar angle, which should be the second entrance of the vector
         var r_x : float64
         r_x = pointEntranceXRT[0]
         var r_y : float64
@@ -443,12 +464,23 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
         var theta_y_prime : float64
         theta_y_prime= theta_y - ( r_y / RAYTRACER_FOCAL_LENGTH_XRT)
 
-        var vectorAfterXRT =vec3(0.0)
+        var vectorAfterXRT = vec3(0.0)
         vectorAfterXRT[0] = sin(theta_x_prime) * 100.0
         vectorAfterXRT[1] = sin(theta_y_prime) * 100.0
         vectorAfterXRT[2] = 100.0
+        
+        var vectorAfterXRTPolar = vec3(0.0)  #(r,theta,phi)
+        vectorAfterXRTPolar[0] = sqrt(vectorAfterXRT[0]+vectorAfterXRT[0]+vectorAfterXRT[1]*vectorAfterXRT[1]+vectorAfterXRT[2]*vectorAfterXRT[2])
+        vectorAfterXRTPolar[1] = radToDeg(arccos(vectorAfterXRT[0]/vectorAfterXRTPolar[0]))
+        vectorAfterXRTPolar[2] = radToDeg(arctan2(vectorAfterXRT[2],vectorAfterXRT[1]))
+
+        vectorAfterXRTPolar[1] = 90.0 - vectorAfterXRTPolar[1] #this is the pitch angle
+        vectorAfterXRTPolar[2] = 90.0 - vectorAfterXRTPolar[2] #this is the yaw angle
+
         #echo "now" 
         #echo vectorAfterXRT
+        #echo vectorAfterXRTPolar
+
 
         var centerDetectorWindow = vec3(0.0)
         centerDetectorWindow[0] = 0.0
@@ -473,6 +505,8 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
         
         pointdataX.add(pointDetectorWindow[0])
         pointdataY.add(pointDetectorWindow[1])
+        weights.add(weight)
+
 
         #echo pointDetectorWindow
 
@@ -502,8 +536,9 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
         #if(withinWindow){  image->Fill(pointDetectorWindow[0],pointDetectorWindow[1],weight)
   #echo pointdataX
   #echo pointdataY    
-  var headmaptable2 = prepareheadmap(40,40,5.0,9.0,5.4,9.4,pointdataX,pointdataY)
-  echo drawfancydiagrams("Diagramtitel", headmaptable2, 40)
+  var heatmaptable2 = prepareheatmap(40,40,5.0,9.0,5.4,9.4,pointdataX,pointdataY,weights)
+  #echo heatmaptable2
+  echo drawfancydiagrams("Diagramtitel", heatmaptable2, 40)
 
 ########################### aEL main ############################
 
