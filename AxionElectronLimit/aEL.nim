@@ -256,26 +256,37 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
             if x > 0:
               if y > 0:
                 d.zs[x][y] = objectstodraw[x][y] 
-    randomize(42)  
+    #randomize(42)  
+    #let
+      #x = toSeq(0 ..< 50)
+      #y = toSeq(0 ..< 50).mapIt(rand(50))
+    #var e = Trace[float32](`type`: PlotType.Bar,
+                    #xs: @[float32(1.0)],
+                    #ys: @[float32(1.0)],
+                    #orientation: Orientation.Horizontal)         
+    #for i, value in x:
+      #var newx1 = float(x[i])
+      #var newx = @[float32(1.0)]
+      #newx.add(newx1)
+      #var newy1 = float(y[i])
+      #var newy = @[float32(1.0)]
+      #newy.add(newy1)
+      #var e = Trace[float32](`type`: PlotType.Bar,
+                    #xs: newx,
+                    #ys: newy,
+                    #orientation: Orientation.Horizontal)   
+    const 
+      y = @[float32(CHIPREGIONS_GOLD_Y_MIN * 40.0 / 14.0), float32(CHIPREGIONS_GOLD_Y_MIN * 40.0 / 14.0),float32(CHIPREGIONS_GOLD_Y_MAX * 40.0 / 14.0),float32(CHIPREGIONS_GOLD_Y_MAX * 40.0 / 14.0),float32(CHIPREGIONS_GOLD_Y_MIN * 40.0 / 14.0)]
+      x = @[float32(CHIPREGIONS_GOLD_X_MIN * 40.0 / 14.0),float32(CHIPREGIONS_GOLD_X_MAX * 40.0 / 14.0),float32(CHIPREGIONS_GOLD_X_MAX * 40.0 / 14.0), float32(CHIPREGIONS_GOLD_X_MIN * 40.0 / 14.0), float32(CHIPREGIONS_GOLD_X_MIN * 40.0 / 14.0)]
     let
-      x = toSeq(0 ..< 50)
-      y = toSeq(0 ..< 50).mapIt(rand(50))
-      e = Trace[float32](`type`: PlotType.Bar)
-    for i, value in x:
-      var newx = x[i].float
-      var newy = y[i].float
-      let
-        e = Trace[float32](`type`: PlotType.Bar,
-                    xs: newx,
-                    ys: newy,
-                    orientation: Orientation.Horizontal)   
+      d4 = Trace[float32](mode: PlotMode.LinesMarkers, `type`: PlotType.ScatterGL, ys: y, xs : x) 
       
                      
     let
       layout = Layout(title: diagramtitle, width: 800, height: 800,
-                      xaxis: Axis(title: "A heatmap x-axis"),
-                      yaxis: Axis(title: "y-axis too"), autosize: false)
-      p = Plot[float32](layout: layout, traces: @[d, e])
+                      xaxis: Axis(title: "x-axis 40 = 14 mm"),
+                      yaxis: Axis(title: "y-axis 40 = 14 mm"), autosize: false)
+      p = Plot[float32](layout: layout, traces: @[d, d4])
     echo p.save()
     p.show()
     var b = 2.2
