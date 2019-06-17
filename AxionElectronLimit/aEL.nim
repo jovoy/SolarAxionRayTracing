@@ -8,7 +8,9 @@ import nim-plotly-master/src/plotly/chroma
 import nim-plotly-master/src/plotly/names
 import random
 import sequtils
-import nimhdf5
+import nimhdf5-master/src/nimhdf5
+import nimhdf5-master/src/nimhdf5/H5nimtypes
+import nimhdf5-master/src/nimhdf5/hdf5_wrapper
 
 #nim cpp -r fig9_heatmap.nim
 
@@ -749,10 +751,24 @@ proc generateLikelihoodMarlinDistribution(rootTree, chipRegion : string, totalCh
   #// add likelihood value of this event to the _likelihoodMarlinDistribution histogram
   #[var iEvent : int
   for iEvent in 0..]#
-  
-proc getUserblockSize(h5P : var) : seq[int] =
-  var status = h5Pget_userblock
-  return status
+
+const FILE = "calibration-cdl.h5"
+proc getSize(h5F : string) : seq[int] =
+  var 
+    file_id: hid_t
+    status: herr_t
+    size: ptr csize
+    #size: hid_t
+  file_id = H5Fopen(h5F,H5F_ACC_RDWR, H5P_DEFAULT)
+  file_id = hid_t H5Pget_size(file_id, h5F,size)
+  status = H5Fclose(file_id)
+  #status = H5Fclose(size)
+
+echo getSize(FILE)
+#
+  #var status = H5Pget_size
+  #return status
+
 
 
 #findEfficiencySetting(chipRegionBackgroundAndDataChannelOne,softwareEfficiencyChannelOne,efficiencySettingChannelOne)
@@ -761,7 +777,8 @@ proc getUserblockSize(h5P : var) : seq[int] =
 #type
 #    vector3 = ref object of Vec3
 
-## things changed## 
+## things changed## calibration-cdl.h5
+
 # VT4 -> VT3
 # XRT Focal length 1600.0 -> 1500.0
 # RAYTRACER_RADIUS_PIPE_CB_VT3 = 33.6 #mm from drawing #30.0 #mm (original)
