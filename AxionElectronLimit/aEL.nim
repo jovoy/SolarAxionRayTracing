@@ -8,6 +8,7 @@ import nim-plotly-master/src/plotly/chroma
 import nim-plotly-master/src/plotly/names
 import random
 import sequtils
+import nimhdf5
 
 #nim cpp -r fig9_heatmap.nim
 
@@ -37,7 +38,8 @@ const RAYTRACER_DISTANCE_AXIS_CB_AXIS_XRT = 58.44 #mm from XRT drawing #no chang
 const RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW = -10.0 #mm #no change, because don't know
 const numberOfPointsEndOfCB = 1000
 const numberOfPointsSun = 1000
-
+var xrtTransmissionAt10Arcmin : float64 
+xrtTransmissionAt10Arcmin = 0.7 #relative transmission for x-rays at 10' angle compared to parallel beams #need to be changed?
 ## Chipregions#####
 
 const CHIPREGIONS_CHIP_X_MIN = 0.0
@@ -89,6 +91,14 @@ proc getFluxFractionSilver(): float64 =
 var fluxFractionBronze = 0.0 
 proc getFluxFractionBronze(): float64 =
   result = fluxFractionBronze
+
+var fluxFractionDetector = 0.0 
+proc getFluxFractionDetector(): float64 =
+  result = fluxFractionDetector
+
+var fluxFractionTotal = 0.0 
+proc getFluxFractionTotal(): float64 =
+  result = fluxFractionTotal
                         
                   # der Typ ist noch nicht definiert <-- machen wir später, wenn wir Objekte bauen.Mit String ist auch ok, nur nicht so fancy
 proc getFluxFraction(chipRegionstring:string): float64 =
@@ -107,7 +117,7 @@ proc getFluxFraction(chipRegionstring:string): float64 =
   else: echo "Error: Unknown chip region!" 
 
 #echo getFluxFraction("region: silver")
-#echo getFluxFraction("region: gold")
+
 #echo getFluxFraction("region: goldPlusSilver")
                             # needs to be object
 proc calculateFluxFractions(axionRadiationCharacteristic: string, 
@@ -256,25 +266,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
             if x > 0:
               if y > 0:
                 d.zs[x][y] = objectstodraw[x][y] 
-    #randomize(42)  
-    #let
-      #x = toSeq(0 ..< 50)
-      #y = toSeq(0 ..< 50).mapIt(rand(50))
-    #var e = Trace[float32](`type`: PlotType.Bar,
-                    #xs: @[float32(1.0)],
-                    #ys: @[float32(1.0)],
-                    #orientation: Orientation.Horizontal)         
-    #for i, value in x:
-      #var newx1 = float(x[i])
-      #var newx = @[float32(1.0)]
-      #newx.add(newx1)
-      #var newy1 = float(y[i])
-      #var newy = @[float32(1.0)]
-      #newy.add(newy1)
-      #var e = Trace[float32](`type`: PlotType.Bar,
-                    #xs: newx,
-                    #ys: newy,
-                    #orientation: Orientation.Horizontal)   
+  
     const 
       y = @[float32(CHIPREGIONS_GOLD_Y_MIN * 40.0 / 14.0), float32(CHIPREGIONS_GOLD_Y_MIN * 40.0 / 14.0),float32(CHIPREGIONS_GOLD_Y_MAX * 40.0 / 14.0),float32(CHIPREGIONS_GOLD_Y_MAX * 40.0 / 14.0),float32(CHIPREGIONS_GOLD_Y_MIN * 40.0 / 14.0)]
       x = @[float32(CHIPREGIONS_GOLD_X_MIN * 40.0 / 14.0),float32(CHIPREGIONS_GOLD_X_MAX * 40.0 / 14.0),float32(CHIPREGIONS_GOLD_X_MAX * 40.0 / 14.0), float32(CHIPREGIONS_GOLD_X_MIN * 40.0 / 14.0), float32(CHIPREGIONS_GOLD_X_MIN * 40.0 / 14.0)]
@@ -393,8 +385,9 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     t = a*angle + b
     if (t<0.0):
       t = 0.0
-      return t 
 
+    return t 
+  
   ############done with the functions, let's use them############
   
   var pointdataX = @[0.0] 
@@ -429,6 +422,8 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
           
         if (not intersectsEntranceCB and not intersectsCB): continue
 
+        intersect = pointInSun + ((centerEntranceCB[2] - pointInSun[2]) / (pointExitCBMagneticField - pointInSun)[2]) * (pointExitCBMagneticField - pointInSun)
+        
         pathCB = pointExitCBMagneticField[2] - intersect[2]
         var pointExitCB = vec3(0.0)
         
@@ -452,8 +447,11 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
 
         var vectorBeforeXRT = vec3(0.0)
         vectorBeforeXRT = pointExitPipeVT3XRT - pointExitCB
+        #vectorBeforeXRT[0] = 0.4
+        #vectorBeforeXRT[1] = -0.2
+        #vectorBeforeXRT[2] = 2769.7
         
-        ########von CB zum XRT
+        ###################von CB zum XRT#######################
 
         var pointEntranceXRT = vec3(0.0)
         pointEntranceXRT[0] = pointExitPipeVT3XRT[0]
@@ -461,8 +459,8 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
         pointEntranceXRT[2] = pointExitPipeVT3XRT[2]
 
         var angle : float64
-        angle = arccos(vectorBeforeXRT[0]/sqrt(vectorBeforeXRT[0]+vectorBeforeXRT[0]+vectorBeforeXRT[1]*vectorBeforeXRT[1]+vectorBeforeXRT[2]*vectorBeforeXRT[2]))  # Here we want to adress theta, the polar angle, which should be the second entrance of the vector
-        var r_x : float64
+        angle = (arccos(vectorBeforeXRT[2]/sqrt(vectorBeforeXRT[0]*vectorBeforeXRT[0]+vectorBeforeXRT[1]*vectorBeforeXRT[1]+vectorBeforeXRT[2]*vectorBeforeXRT[2])))  # Here we want to adress theta, the polar angle, which should be the second entrance of the vector
+        var r_x : float64#vectorBeforeXRT[1] #
         r_x = pointEntranceXRT[0]
         var r_y : float64
         r_y = pointEntranceXRT[1]
@@ -474,14 +472,14 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
         theta_x_prime= theta_x - ( r_x / RAYTRACER_FOCAL_LENGTH_XRT) 
         var theta_y_prime : float64
         theta_y_prime= theta_y - ( r_y / RAYTRACER_FOCAL_LENGTH_XRT)
-
+        
         var vectorAfterXRT = vec3(0.0)
         vectorAfterXRT[0] = sin(theta_x_prime) * 100.0
         vectorAfterXRT[1] = sin(theta_y_prime) * 100.0
         vectorAfterXRT[2] = 100.0
         
         var vectorAfterXRTPolar = vec3(0.0)  #(r,theta,phi)
-        vectorAfterXRTPolar[0] = sqrt(vectorAfterXRT[0]+vectorAfterXRT[0]+vectorAfterXRT[1]*vectorAfterXRT[1]+vectorAfterXRT[2]*vectorAfterXRT[2])
+        vectorAfterXRTPolar[0] = sqrt(vectorAfterXRT[0]*vectorAfterXRT[0]+vectorAfterXRT[1]*vectorAfterXRT[1]+vectorAfterXRT[2]*vectorAfterXRT[2])
         vectorAfterXRTPolar[1] = radToDeg(arccos(vectorAfterXRT[0]/vectorAfterXRTPolar[0]))
         vectorAfterXRTPolar[2] = radToDeg(arctan2(vectorAfterXRT[2],vectorAfterXRT[1]))
 
@@ -489,7 +487,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
         vectorAfterXRTPolar[2] = 90.0 - vectorAfterXRTPolar[2] #this is the yaw angle
 
         #echo "now" 
-        #echo vectorAfterXRT
+        #echo angle
         #echo vectorAfterXRTPolar
 
 
@@ -504,11 +502,13 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
         pointDetectorWindow = pointEntranceXRT + lambda_0 * vectorAfterXRT
         pointDetectorWindow = pointDetectorWindow - misalignmentDetector
 
+        #echo telescopeTransmission(angle,xrtTransmissionAt10Arcmin)
+        #echo (1.0 - xrtTransmissionAt10Arcmin) / (0.0 - degToRad(10.0/60.0) )
         var weight : float64
         weight = ( telescopeTransmission(angle,xrtTransmissionAt10Arcmin) * (pathCB * pathCB / RAYTRACER_LENGTH_COLDBORE_9T / RAYTRACER_LENGTH_COLDBORE_9T) )
-        
+        #echo weight
         integralTotal = integralTotal + weight
-
+        
         ###detector COS has (0/0) at the bottom left corner of the chip
 
         pointDetectorWindow[0] = pointDetectorWindow[0] + CHIPREGIONS_CHIP_CENTER_X
@@ -551,6 +551,15 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   #echo heatmaptable2
   echo drawfancydiagrams("Diagramtitel", heatmaptable2, 40)
 
+  fluxFractionTotal    = integralTotal    / integralNormalisation
+  fluxFractionDetector = integralDetector / integralNormalisation
+  fluxFractionBronze   = integralBronze   / integralNormalisation
+  fluxFractionSilver   = integralSilver   / integralNormalisation
+  fluxFractionGold     = integralGold     / integralNormalisation
+
+  echo "Flux fraction for the gold region:"
+  echo getFluxFraction("region: gold")
+
 ########################### aEL main ############################
 
 #configuration
@@ -568,8 +577,8 @@ coldboreBlockedLength = 0.0
 #Xrt specific stuff
 var perfectXRT : bool 
 perfectXRT = false #if true transmission of 100 % is assumed for all energies else interpolated data from transmission measurements is used
-var xrtTransmissionAt10Arcmin : float64 
-xrtTransmissionAt10Arcmin = 0.7 #relative transmission for x-rays at 10' angle compared to parallel beams #need to be changed?
+#var xrtTransmissionAt10Arcmin : float64 
+#xrtTransmissionAt10Arcmin = 0.7 #relative transmission for x-rays at 10' angle compared to parallel beams #need to be changed?
 
 #detector specific stuff
 #detector::detectorVersion detectorVersion(detector::detectorVersion::mk2);
@@ -601,6 +610,153 @@ echo calculateFluxFractions(radiationCharacteristic, xrtTransmissionAt10Arcmin, 
 
 #echo calculateFluxFractions(,1.0,1.0,1.0,1.0,1.0,1.0,1.0)
                           #hier muss der richtige String rein
+
+#########################efficiencyCalculator#####################
+
+#constants#
+
+const EFFICIENCYCALCULATOR_NUMBER_RANGES = 8
+const EFFICIENCYCALCULATOR_ROOTTREE_RANGE0 = "calibration-cdl-apr2014-C-EPIC-0.6kV"
+const EFFICIENCYCALCULATOR_ENERGY_RANGE0_LOW = 0.15
+const EFFICIENCYCALCULATOR_ENERGY_RANGE0_HIGH = 0.4
+const EFFICIENCYCALCULATOR_CHARGE_RANGE0_MIN = 0.0
+const EFFICIENCYCALCULATOR_CHARGE_RANGE0_MAX = 5.0e4
+const EFFICIENCYCALCULATOR_RMSY_RANGE0_MIN = 0.1
+const EFFICIENCYCALCULATOR_RMSY_RANGE0_MAX = 20.0
+const EFFICIENCYCALCULATOR_LENGTH_RANGE0_MAX = 6.0
+const EFFICIENCYCALCULATOR_ROOTTREE_RANGE1 = "calibration-cdl-apr2014-Cu-EPIC-0.9kV"
+const EFFICIENCYCALCULATOR_ENERGY_RANGE1_LOW = 0.4
+const EFFICIENCYCALCULATOR_ENERGY_RANGE1_HIGH = 0.7
+const EFFICIENCYCALCULATOR_CHARGE_RANGE1_MIN = 3.0e4
+const EFFICIENCYCALCULATOR_CHARGE_RANGE1_MAX = 8.0e4
+const EFFICIENCYCALCULATOR_RMSY_RANGE1_MIN = 0.0
+const EFFICIENCYCALCULATOR_RMSY_RANGE1_MAX = 1.1
+const EFFICIENCYCALCULATOR_LENGTH_RANGE1_MAX = 6.0
+const EFFICIENCYCALCULATOR_ROOTTREE_RANGE2 = "calibration-cdl-apr2014-Cu-EPIC-2kV"
+const EFFICIENCYCALCULATOR_ENERGY_RANGE2_LOW = 0.7
+const EFFICIENCYCALCULATOR_ENERGY_RANGE2_HIGH = 1.2
+const EFFICIENCYCALCULATOR_CHARGE_RANGE2_MIN = 7.0e4
+const EFFICIENCYCALCULATOR_CHARGE_RANGE2_MAX = 1.3e5
+const EFFICIENCYCALCULATOR_RMSY_RANGE2_MIN = 0.0
+const EFFICIENCYCALCULATOR_RMSY_RANGE2_MAX = 1.1
+const EFFICIENCYCALCULATOR_LENGTH_RANGE2_MAX = 7.0
+const EFFICIENCYCALCULATOR_ROOTTREE_RANGE3 = "calibration-cdl-apr2014-Al-Al-4kV"
+const EFFICIENCYCALCULATOR_ENERGY_RANGE3_LOW = 1.2
+const EFFICIENCYCALCULATOR_ENERGY_RANGE3_HIGH = 2.1
+const EFFICIENCYCALCULATOR_CHARGE_RANGE3_MIN = 9.0e4
+const EFFICIENCYCALCULATOR_CHARGE_RANGE3_MAX = 2.1e5
+const EFFICIENCYCALCULATOR_RMSY_RANGE3_MIN = 0.0
+const EFFICIENCYCALCULATOR_RMSY_RANGE3_MAX = 1.1
+const EFFICIENCYCALCULATOR_LENGTH_RANGE3_MAX = 7.0
+const EFFICIENCYCALCULATOR_ROOTTREE_RANGE4 = "calibration-cdl-apr2014-Ag-Ag-6kV"
+const EFFICIENCYCALCULATOR_ENERGY_RANGE4_LOW = 2.1
+const EFFICIENCYCALCULATOR_ENERGY_RANGE4_HIGH = 3.2
+const EFFICIENCYCALCULATOR_CHARGE_RANGE4_MIN = 2.0e5
+const EFFICIENCYCALCULATOR_CHARGE_RANGE4_MAX = 4.0e5
+const EFFICIENCYCALCULATOR_RMSY_RANGE4_MIN = 0.0
+const EFFICIENCYCALCULATOR_RMSY_RANGE4_MAX = 1.1
+const EFFICIENCYCALCULATOR_LENGTH_RANGE4_MAX = 7.0
+const EFFICIENCYCALCULATOR_ROOTTREE_RANGE5 = "calibration-cdl-apr2014-Ti-Ti-9kV"
+const EFFICIENCYCALCULATOR_ENERGY_RANGE5_LOW = 3.2
+const EFFICIENCYCALCULATOR_ENERGY_RANGE5_HIGH = 4.9
+const EFFICIENCYCALCULATOR_CHARGE_RANGE5_MIN = 2.9e5
+const EFFICIENCYCALCULATOR_CHARGE_RANGE5_MAX = 5.5e5
+const EFFICIENCYCALCULATOR_RMSY_RANGE5_MIN = 0.0
+const EFFICIENCYCALCULATOR_RMSY_RANGE5_MAX = 1.1
+const EFFICIENCYCALCULATOR_LENGTH_RANGE5_MAX = 7.0
+const EFFICIENCYCALCULATOR_ROOTTREE_RANGE6 = "calibration-cdl-apr2014-Mn-Cr-12kV"
+const EFFICIENCYCALCULATOR_ENERGY_RANGE6_LOW = 4.9
+const EFFICIENCYCALCULATOR_ENERGY_RANGE6_HIGH = 6.9
+const EFFICIENCYCALCULATOR_CHARGE_RANGE6_MIN = 3.5e5
+const EFFICIENCYCALCULATOR_CHARGE_RANGE6_MAX = 6.0e5
+const EFFICIENCYCALCULATOR_RMSY_RANGE6_MIN = 0.0
+const EFFICIENCYCALCULATOR_RMSY_RANGE6_MAX = 1.1
+const EFFICIENCYCALCULATOR_LENGTH_RANGE6_MAX = 7.0
+const EFFICIENCYCALCULATOR_ROOTTREE_RANGE7 = "calibration-cdl-apr2014-Cu-Ni-15kV"
+const EFFICIENCYCALCULATOR_ENERGY_RANGE7_LOW = 6.9
+const EFFICIENCYCALCULATOR_ENERGY_RANGE7_HIGH = 10.0
+const EFFICIENCYCALCULATOR_CHARGE_RANGE7_MIN = 5.9e5
+const EFFICIENCYCALCULATOR_CHARGE_RANGE7_MAX = 1.0e6 
+const EFFICIENCYCALCULATOR_RMSY_RANGE7_MIN = 0.0
+const EFFICIENCYCALCULATOR_RMSY_RANGE7_MAX = 1.1
+const EFFICIENCYCALCULATOR_LENGTH_RANGE7_MAX = 7.0
+
+var e0 = vec2(0.0)
+e0[0] = EFFICIENCYCALCULATOR_ENERGY_RANGE0_LOW
+e0[1] = EFFICIENCYCALCULATOR_ENERGY_RANGE0_HIGH
+var e1 = vec2(0.0)
+e1[0] = EFFICIENCYCALCULATOR_ENERGY_RANGE1_LOW
+e1[1] = EFFICIENCYCALCULATOR_ENERGY_RANGE1_HIGH
+var energyRanges = @[e0,e1]#,e2,e3,e4,e5,e6,e7]
+echo energyRanges
+echo energyRanges[0][0]
+
+var c0 = vec2(0.0)
+c0[0] = EFFICIENCYCALCULATOR_CHARGE_RANGE0_MIN
+c0[1] = EFFICIENCYCALCULATOR_CHARGE_RANGE0_MAX
+var c1 = vec2(0.0)
+c1[0] = EFFICIENCYCALCULATOR_CHARGE_RANGE1_MIN
+c1[1] = EFFICIENCYCALCULATOR_CHARGE_RANGE1_MAX
+var chargeRanges = @[c0,c1]#,c2,c3,c4,c5,c6,c7]
+
+proc findEfficiencySetting(chipRegion : string, softwareEfficiency: float64, efficiencySetting : float64) : int = 
+
+  # function to find the correct efficiency setting for each energy region and write
+  # them to efficiencySetting array
+  # chipRegion:         considered region on the chip (gold, silver, bronze...)
+  # softwareEfficiency: the desired software efficiency from which the cut value
+  #                     is deduced
+  # efficiencySetting:  array which stores the cut values, which are obtained
+
+  var success : int
+  success = 0
+  var i : int
+  for i in countup(0, EFFICIENCYCALCULATOR_NUMBER_RANGES):
+    echo i
+    #success = success + generateLikelihoodMarlinDistribution(rootTrees[i],chipRegion,chargeRanges[i][0],chargeRanges[i][1],lengthMaxs[i],rmsYRanges[i][0],rmsYRanges[i][1])
+
+    #efficiencySetting[i] = findLikelihoodMarlinCutValue(softwareEfficiency)
+  return success
+
+
+proc generateLikelihoodMarlinDistribution(rootTree, chipRegion : string, totalChargeMin : float64, totalChargeMax : float64, lengthMax : float64, rmsYMin : float64, rmsYMax : float64) : int =
+  var 
+    goldCutActive = false
+    silverCutActive = false
+    bronzeCutActive = false
+    wholeChipActive = false
+
+  case chipRegion
+  of "region: gold":
+    goldCutActive = true
+  of "region: silver":
+    silverCutActive = true
+  of "region: bronze":
+    bronzeCutActive = true
+  of "region: goldPlusSilver":
+    goldCutActive = true
+    silverCutActive = true
+  of "region: goldPlusSilverPlusBronze":
+    goldCutActive = true
+    silverCutActive = true
+    bronzeCutActive = true
+  of "region: chip":
+    wholeChipActive = true
+  else: echo "Error: Unknown chip region!"
+  return 1
+
+  #// run over all events and for each check all cuts and if they are met,
+  #// add likelihood value of this event to the _likelihoodMarlinDistribution histogram
+  #[var iEvent : int
+  for iEvent in 0..]#
+  
+proc getUserblockSize(h5P : var) : seq[int] =
+  var status = h5Pget_userblock
+  return status
+
+
+#findEfficiencySetting(chipRegionBackgroundAndDataChannelOne,softwareEfficiencyChannelOne,efficiencySettingChannelOne)
+
 
 #type
 #    vector3 = ref object of Vec3
