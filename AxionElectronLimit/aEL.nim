@@ -1,24 +1,20 @@
 import glm/vec
 import math
 import random
-# kompilieren und ausführen: nim cpp -r aEL.nim
+# kompilieren und ausführen: nim cpp -r aEL.nim, nim c -r --threads:on --showAllMismatches:on aEL.nim
 
-import nim-plotly-master/src/plotly
-import nim-plotly-master/src/plotly/chroma
-import nim-plotly-master/src/plotly/names
+import plotly
 import random
-import sequtils
-import nimhdf5-master/src/nimhdf5
-import nimhdf5-master/src/nimhdf5/H5nimtypes
-import nimhdf5-master/src/nimhdf5/hdf5_wrapper
+import sequtils, os, strutils
+import nimhdf5
+import ingrid/[tos_helpers, likelihood, ingrid_types]
 
-#nim cpp -r fig9_heatmap.nim
 
 
 
 
 ##################rayTracer###############################
-# ToDo: Picture heatmap
+
 
 # put in XRT effeciency
 
@@ -607,6 +603,9 @@ useStatisticalErrors = false
 var createBackgroundRatePlots : bool 
 createBackgroundRatePlots = true
 
+const
+  softwareEfficiencyChannelOne = 0.8
+
 
 echo calculateFluxFractions(radiationCharacteristic, xrtTransmissionAt10Arcmin, detectorWindowAperture, 0.0, 0.0, 0.0, 0.0, coldboreBlockedLength) # radiationCharacteristic = "axionRadiation::characteristic::sar"
 
@@ -618,90 +617,22 @@ echo calculateFluxFractions(radiationCharacteristic, xrtTransmissionAt10Arcmin, 
 #constants#
 
 const EFFICIENCYCALCULATOR_NUMBER_RANGES = 8
-const EFFICIENCYCALCULATOR_ROOTTREE_RANGE0 = "calibration-cdl-apr2014-C-EPIC-0.6kV"
-const EFFICIENCYCALCULATOR_ENERGY_RANGE0_LOW = 0.15
-const EFFICIENCYCALCULATOR_ENERGY_RANGE0_HIGH = 0.4
-const EFFICIENCYCALCULATOR_CHARGE_RANGE0_MIN = 0.0
-const EFFICIENCYCALCULATOR_CHARGE_RANGE0_MAX = 5.0e4
-const EFFICIENCYCALCULATOR_RMSY_RANGE0_MIN = 0.1
-const EFFICIENCYCALCULATOR_RMSY_RANGE0_MAX = 20.0
-const EFFICIENCYCALCULATOR_LENGTH_RANGE0_MAX = 6.0
-const EFFICIENCYCALCULATOR_ROOTTREE_RANGE1 = "calibration-cdl-apr2014-Cu-EPIC-0.9kV"
-const EFFICIENCYCALCULATOR_ENERGY_RANGE1_LOW = 0.4
-const EFFICIENCYCALCULATOR_ENERGY_RANGE1_HIGH = 0.7
-const EFFICIENCYCALCULATOR_CHARGE_RANGE1_MIN = 3.0e4
-const EFFICIENCYCALCULATOR_CHARGE_RANGE1_MAX = 8.0e4
-const EFFICIENCYCALCULATOR_RMSY_RANGE1_MIN = 0.0
-const EFFICIENCYCALCULATOR_RMSY_RANGE1_MAX = 1.1
-const EFFICIENCYCALCULATOR_LENGTH_RANGE1_MAX = 6.0
-const EFFICIENCYCALCULATOR_ROOTTREE_RANGE2 = "calibration-cdl-apr2014-Cu-EPIC-2kV"
-const EFFICIENCYCALCULATOR_ENERGY_RANGE2_LOW = 0.7
-const EFFICIENCYCALCULATOR_ENERGY_RANGE2_HIGH = 1.2
-const EFFICIENCYCALCULATOR_CHARGE_RANGE2_MIN = 7.0e4
-const EFFICIENCYCALCULATOR_CHARGE_RANGE2_MAX = 1.3e5
-const EFFICIENCYCALCULATOR_RMSY_RANGE2_MIN = 0.0
-const EFFICIENCYCALCULATOR_RMSY_RANGE2_MAX = 1.1
-const EFFICIENCYCALCULATOR_LENGTH_RANGE2_MAX = 7.0
-const EFFICIENCYCALCULATOR_ROOTTREE_RANGE3 = "calibration-cdl-apr2014-Al-Al-4kV"
-const EFFICIENCYCALCULATOR_ENERGY_RANGE3_LOW = 1.2
-const EFFICIENCYCALCULATOR_ENERGY_RANGE3_HIGH = 2.1
-const EFFICIENCYCALCULATOR_CHARGE_RANGE3_MIN = 9.0e4
-const EFFICIENCYCALCULATOR_CHARGE_RANGE3_MAX = 2.1e5
-const EFFICIENCYCALCULATOR_RMSY_RANGE3_MIN = 0.0
-const EFFICIENCYCALCULATOR_RMSY_RANGE3_MAX = 1.1
-const EFFICIENCYCALCULATOR_LENGTH_RANGE3_MAX = 7.0
-const EFFICIENCYCALCULATOR_ROOTTREE_RANGE4 = "calibration-cdl-apr2014-Ag-Ag-6kV"
-const EFFICIENCYCALCULATOR_ENERGY_RANGE4_LOW = 2.1
-const EFFICIENCYCALCULATOR_ENERGY_RANGE4_HIGH = 3.2
-const EFFICIENCYCALCULATOR_CHARGE_RANGE4_MIN = 2.0e5
-const EFFICIENCYCALCULATOR_CHARGE_RANGE4_MAX = 4.0e5
-const EFFICIENCYCALCULATOR_RMSY_RANGE4_MIN = 0.0
-const EFFICIENCYCALCULATOR_RMSY_RANGE4_MAX = 1.1
-const EFFICIENCYCALCULATOR_LENGTH_RANGE4_MAX = 7.0
-const EFFICIENCYCALCULATOR_ROOTTREE_RANGE5 = "calibration-cdl-apr2014-Ti-Ti-9kV"
-const EFFICIENCYCALCULATOR_ENERGY_RANGE5_LOW = 3.2
-const EFFICIENCYCALCULATOR_ENERGY_RANGE5_HIGH = 4.9
-const EFFICIENCYCALCULATOR_CHARGE_RANGE5_MIN = 2.9e5
-const EFFICIENCYCALCULATOR_CHARGE_RANGE5_MAX = 5.5e5
-const EFFICIENCYCALCULATOR_RMSY_RANGE5_MIN = 0.0
-const EFFICIENCYCALCULATOR_RMSY_RANGE5_MAX = 1.1
-const EFFICIENCYCALCULATOR_LENGTH_RANGE5_MAX = 7.0
-const EFFICIENCYCALCULATOR_ROOTTREE_RANGE6 = "calibration-cdl-apr2014-Mn-Cr-12kV"
-const EFFICIENCYCALCULATOR_ENERGY_RANGE6_LOW = 4.9
-const EFFICIENCYCALCULATOR_ENERGY_RANGE6_HIGH = 6.9
-const EFFICIENCYCALCULATOR_CHARGE_RANGE6_MIN = 3.5e5
-const EFFICIENCYCALCULATOR_CHARGE_RANGE6_MAX = 6.0e5
-const EFFICIENCYCALCULATOR_RMSY_RANGE6_MIN = 0.0
-const EFFICIENCYCALCULATOR_RMSY_RANGE6_MAX = 1.1
-const EFFICIENCYCALCULATOR_LENGTH_RANGE6_MAX = 7.0
-const EFFICIENCYCALCULATOR_ROOTTREE_RANGE7 = "calibration-cdl-apr2014-Cu-Ni-15kV"
-const EFFICIENCYCALCULATOR_ENERGY_RANGE7_LOW = 6.9
-const EFFICIENCYCALCULATOR_ENERGY_RANGE7_HIGH = 10.0
-const EFFICIENCYCALCULATOR_CHARGE_RANGE7_MIN = 5.9e5
-const EFFICIENCYCALCULATOR_CHARGE_RANGE7_MAX = 1.0e6 
-const EFFICIENCYCALCULATOR_RMSY_RANGE7_MIN = 0.0
-const EFFICIENCYCALCULATOR_RMSY_RANGE7_MAX = 1.1
-const EFFICIENCYCALCULATOR_LENGTH_RANGE7_MAX = 7.0
+const EFFICIENCYCALCULATOR_ROOTTREE_RANGE0 = "C-EPIC-0.6kV"
+const EFFICIENCYCALCULATOR_ROOTTREE_RANGE1 = "Cu-EPIC-0.9kV"
+const EFFICIENCYCALCULATOR_ROOTTREE_RANGE2 = "Cu-EPIC-2kV"
+const EFFICIENCYCALCULATOR_ROOTTREE_RANGE3 = "Al-Al-4kV"
+const EFFICIENCYCALCULATOR_ROOTTREE_RANGE4 = "Ag-Ag-6kV"
+const EFFICIENCYCALCULATOR_ROOTTREE_RANGE5 = "Ti-Ti-9kV"
+const EFFICIENCYCALCULATOR_ROOTTREE_RANGE6 = "Mn-Cr-12kV"
+const EFFICIENCYCALCULATOR_ROOTTREE_RANGE7 = "Cu-Ni-15kV"
 
-var e0 = vec2(0.0)
-e0[0] = EFFICIENCYCALCULATOR_ENERGY_RANGE0_LOW
-e0[1] = EFFICIENCYCALCULATOR_ENERGY_RANGE0_HIGH
-var e1 = vec2(0.0)
-e1[0] = EFFICIENCYCALCULATOR_ENERGY_RANGE1_LOW
-e1[1] = EFFICIENCYCALCULATOR_ENERGY_RANGE1_HIGH
-var energyRanges = @[e0,e1]#,e2,e3,e4,e5,e6,e7]
-echo energyRanges
-echo energyRanges[0][0]
+var efficiencySettingChannelOne : array[EFFICIENCYCALCULATOR_NUMBER_RANGES, int]
 
-var c0 = vec2(0.0)
-c0[0] = EFFICIENCYCALCULATOR_CHARGE_RANGE0_MIN
-c0[1] = EFFICIENCYCALCULATOR_CHARGE_RANGE0_MAX
-var c1 = vec2(0.0)
-c1[0] = EFFICIENCYCALCULATOR_CHARGE_RANGE1_MIN
-c1[1] = EFFICIENCYCALCULATOR_CHARGE_RANGE1_MAX
-var chargeRanges = @[c0,c1]#,c2,c3,c4,c5,c6,c7]
+const FILE = "calibration-cdl.h5"
+var dset1 = @[EFFICIENCYCALCULATOR_ROOTTREE_RANGE0, EFFICIENCYCALCULATOR_ROOTTREE_RANGE1, EFFICIENCYCALCULATOR_ROOTTREE_RANGE2, EFFICIENCYCALCULATOR_ROOTTREE_RANGE3, EFFICIENCYCALCULATOR_ROOTTREE_RANGE4, EFFICIENCYCALCULATOR_ROOTTREE_RANGE5, EFFICIENCYCALCULATOR_ROOTTREE_RANGE6, EFFICIENCYCALCULATOR_ROOTTREE_RANGE7]
 
-proc findEfficiencySetting(chipRegion : string, softwareEfficiency: float64, efficiencySetting : float64) : int = 
+
+proc findEfficiencySetting(region: ChipRegion, softwareEfficiency: float64, efficiencySetting : array[EFFICIENCYCALCULATOR_NUMBER_RANGES, int]) : int = 
 
   # function to find the correct efficiency setting for each energy region and write
   # them to efficiencySetting array
@@ -715,72 +646,29 @@ proc findEfficiencySetting(chipRegion : string, softwareEfficiency: float64, eff
   var i : int
   for i in countup(0, EFFICIENCYCALCULATOR_NUMBER_RANGES):
     echo i
-    #success = success + generateLikelihoodMarlinDistribution(rootTrees[i],chipRegion,chargeRanges[i][0],chargeRanges[i][1],lengthMaxs[i],rmsYRanges[i][0],rmsYRanges[i][1])
-
-    #efficiencySetting[i] = findLikelihoodMarlinCutValue(softwareEfficiency)
+    
+    #success = success + buildLogLHist(FILE, dset1[i], crGold) #generateLikelihoodMarlinDistribution(rootTrees[i],chipRegion,chargeRanges[i][0],chargeRanges[i][1],lengthMaxs[i],rmsYRanges[i][0],rmsYRanges[i][1])
+    #efficiencySetting[i] = determineCutValue(buildLogLHist(FILE, dset1[i], crGold), softwareEfficiency) #findLikelihoodMarlinCutValue(softwareEfficiency)
   return success
 
-
-proc generateLikelihoodMarlinDistribution(rootTree, chipRegion : string, totalChargeMin : float64, totalChargeMax : float64, lengthMax : float64, rmsYMin : float64, rmsYMax : float64) : int =
-  var 
-    goldCutActive = false
-    silverCutActive = false
-    bronzeCutActive = false
-    wholeChipActive = false
-
-  case chipRegion
-  of "region: gold":
-    goldCutActive = true
-  of "region: silver":
-    silverCutActive = true
-  of "region: bronze":
-    bronzeCutActive = true
-  of "region: goldPlusSilver":
-    goldCutActive = true
-    silverCutActive = true
-  of "region: goldPlusSilverPlusBronze":
-    goldCutActive = true
-    silverCutActive = true
-    bronzeCutActive = true
-  of "region: chip":
-    wholeChipActive = true
-  else: echo "Error: Unknown chip region!"
-  return 1
-
-  #// run over all events and for each check all cuts and if they are met,
-  #// add likelihood value of this event to the _likelihoodMarlinDistribution histogram
-  #[var iEvent : int
-  for iEvent in 0..]#
-
-const FILE = "calibration-cdl.h5"
-proc getSize(h5F : string) : seq[int] =
-  var 
-    file_id: hid_t
-    status: herr_t
-    size: ptr csize
-    #size: hid_t
-  file_id = H5Fopen(h5F,H5F_ACC_RDWR, H5P_DEFAULT)
-  file_id = hid_t H5Pget_size(file_id, h5F,size)
-  status = H5Fclose(file_id)
-  #status = H5Fclose(size)
-
-echo getSize(FILE)
-#
-  #var status = H5Pget_size
-  #return status
+#echo buildLogLHist(FILE, dset1[2], crGold)
+echo "now"
+echo determineCutValue(buildLogLHist(FILE, dset1[2], crGold), softwareEfficiencyChannelOne)#
+echo "end"
 
 
-
-#findEfficiencySetting(chipRegionBackgroundAndDataChannelOne,softwareEfficiencyChannelOne,efficiencySettingChannelOne)
+  
+echo findEfficiencySetting(crGold,softwareEfficiencyChannelOne,efficiencySettingChannelOne)
 
 
 #type
 #    vector3 = ref object of Vec3
 
-## things changed## calibration-cdl.h5
+## things changed## 
 
 # VT4 -> VT3
 # XRT Focal length 1600.0 -> 1500.0
 # RAYTRACER_RADIUS_PIPE_CB_VT3 = 33.6 #mm from drawing #30.0 #mm (original)
 # RAYTRACER_LENGTH_PIPE_VT3_XRT = 264.7 #mm from picture #198.2 #mm (original)
 # RAYTRACER_RADIUS_PIPE_VT3_XRT = 25.0 #mm from drawing #35.0 #m (original)
+
