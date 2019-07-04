@@ -1,13 +1,14 @@
 import glm/vec
 import math
 import random
-# kompilieren und ausführen: nim cpp -r aEL.nim, nim c -r --threads:on --showAllMismatches:on aEL.nim
+# kompilieren und ausführen: nim cpp -r aEL.nim, nim c -r --threads:on --showAllMismatches:on aEL.nim # nim cpp -r --gc:boehm --verbosity:3 aEL.nim ##hdfview likelihood_2018_2.h5  
 
 import plotly
 import random
 import sequtils, os, strutils
 import nimhdf5
 #import ingrid/[tos_helpers, likelihood, ingrid_types]
+
 
 
 
@@ -232,7 +233,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     result = heatmaptable
 
   proc getMaxVal(table : any, numberofrows : int) : float =
-    var maxVals = @[0.0]
+    var maxVals : seq[float]
     var maxVal : float64
     for i in 0 ..< numberofrows:
       maxVals.add(max(table[i]))
@@ -262,16 +263,16 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
                 d.zs[x][y] = objectstodraw[x][y] 
   
     const 
-      y = @[float32(CHIPREGIONS_GOLD_Y_MIN * 140.0 / 14.0), float32(CHIPREGIONS_GOLD_Y_MIN * 140.0 / 14.0),float32(CHIPREGIONS_GOLD_Y_MAX * 140.0 / 14.0),float32(CHIPREGIONS_GOLD_Y_MAX * 140.0 / 14.0),float32(CHIPREGIONS_GOLD_Y_MIN * 140.0 / 14.0)]
-      x = @[float32(CHIPREGIONS_GOLD_X_MIN * 140.0 / 14.0),float32(CHIPREGIONS_GOLD_X_MAX * 140.0 / 14.0),float32(CHIPREGIONS_GOLD_X_MAX * 140.0 / 14.0), float32(CHIPREGIONS_GOLD_X_MIN * 140.0 / 14.0), float32(CHIPREGIONS_GOLD_X_MIN * 140.0 / 14.0)]
+      y = @[float32(CHIPREGIONS_GOLD_Y_MIN * 1400.0 / 14.0), float32(CHIPREGIONS_GOLD_Y_MIN * 1400.0 / 14.0),float32(CHIPREGIONS_GOLD_Y_MAX * 1400.0 / 14.0),float32(CHIPREGIONS_GOLD_Y_MAX * 1400.0 / 14.0),float32(CHIPREGIONS_GOLD_Y_MIN * 1400.0 / 14.0)]
+      x = @[float32(CHIPREGIONS_GOLD_X_MIN * 1400.0 / 14.0),float32(CHIPREGIONS_GOLD_X_MAX * 1400.0 / 14.0),float32(CHIPREGIONS_GOLD_X_MAX * 1400.0 / 14.0), float32(CHIPREGIONS_GOLD_X_MIN * 1400.0 / 14.0), float32(CHIPREGIONS_GOLD_X_MIN * 1400.0 / 14.0)]
     let
       d4 = Trace[float32](mode: PlotMode.LinesMarkers, `type`: PlotType.ScatterGL, ys: y, xs : x) 
       
                      
     let
       layout = Layout(title: diagramtitle, width: 800, height: 800,
-                      xaxis: Axis(title: "x-axis [x10⁻1 mm]"),
-                      yaxis: Axis(title: "y-axis [x10⁻1 mm]"), autosize: false)
+                      xaxis: Axis(title: "x-axis [mm]"),#,  range: (0.0, 14.0)),
+                      yaxis: Axis(title: "y-axis [mm]"), autosize: false)
       p = Plot[float32](layout: layout, traces: @[d, d4])
     echo p.save()
     p.show()
@@ -286,7 +287,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
       y = 0.0
       r = radius * random(1.0)#sqrt(random(1.0))  #Zufallszahl zwischen 0 und 1 (hoffe), die Wurzel nach C++-Vorlage(wtf)
     # _randomGEnerator -> Circle(x,y,r)  is done through the following
-      angle = 140 * random(1.0) #random angle
+      angle = 1400 * random(1.0) #random angle
     x = cos(angle) * r
     y = sin(angle) * r
     var vector = vec3(x,y,0.0)
@@ -303,7 +304,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
       r = radius * 1e-1 * random(1.0) #
     #in case of the standard axion radiation, we use 1/100 of the solar radius as 
     #the origin of axion radiation. In that region we assume homogeneous emission
-      angle1 = 140 * random(1.0)
+      angle1 = 1400 * random(1.0)
       angle2 = 180 * random(1.0)
     x = cos(angle1) * sin(angle2) * r
     y = sin(angle1) * sin(angle2) * r
@@ -414,39 +415,56 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
 
   #get the x and y values from the run-file to compare them to our model
 
-  proc getXandY(h5file, dset : string, xOrY : string) : seq[float] =
+  proc getXandY( h5file : string , dsetgrp1 :string, numFirstRun : int, numLastRun : int, chip : string, xOrY : string) : seq[float] =
+    #[var h5f2 = H5File( h5file, "r")
+    echo h5f2
+    var g1_name = "likelihood"
+    var g1 = h5f2[g1_name.grp_str] 
+    echo g1
+    var dsetgrpb = g1]#
+    #var dsetgrp : H5Group
+    #for dsetgrpb in items(h5f2, start_path = "likelihood"):
     
-    var grp_name = dset
-    var 
-      valuesX = @[0.0]
-      valuesY = @[0.0]
-    withH5(h5file, "r"):
-      # open h5 file using template
-      let
-        energy = h5f[(grp_name / "energyFromCharge"), float64]
-        #logL = h5file[(grp_name / "likelihood"), float32]
-        centerX = h5f[(grp_name / "centerX"), float64]
-        centerY = h5f[(grp_name / "centerY"), float64]
-        #ecc = h5file[(grp_name / "Excentricity"), float32]
-        #length = h5file[(grp_name / "Length"), float32]
-        #charge = h5file[(grp_name / "TotalCharge"), float32]
-        #rmsTrans = h5file[(grp_name / "RmsTransverse"), float32]
-        #npix = h5file[(grp_name / "NumberOfPixels"), float32]
-      for i in 0 .. energy.high:
-        valuesX.add(centerX[i])
-        valuesY.add(centerY[i])
+    var
+      grp_name : string
+      run_name : string
+      valuesX : seq[float]
+      valuesY : seq[float]
+    for i in 0 .. (numLastRun-numFirstRun):
+      run_name = "/run_" & $(numFirstRun+i)
+      grp_name = dsetgrp1 & run_name & "/" & chip#& "/" & $(grp) & "/" & chip# 
+
+      #if contains(dsetgrpb, dsetgrp1 & run_name): #contains(h5f, "likelihood")
+      try:  
+        withH5( h5file, "r"):
+              # open h5 file using template
+          var
+            energy = h5f[(grp_name / "energyFromCharge"), float64]
+              #logL = h5file[(grp_name / "likelihood"), float32]
+            centerX = h5f[(grp_name / "centerX"), float64]
+            centerY = h5f[(grp_name / "centerY"), float64]
+              #ecc = h5file[(grp_name / "Excentricity"), float32]
+              #length = h5file[(grp_name / "Length"), float32]
+              #charge = h5file[(grp_name / "TotalCharge"), float32]
+              #rmsTrans = h5file[(grp_name / "RmsTransverse"), float32]
+              #npix = h5file[(grp_name / "NumberOfPixels"), float32]
+          for i in 0 .. energy.high:
+            valuesX.add(centerX[i])
+            valuesY.add(centerY[i])
+      except :
+        echo "KeyError!"
+        #else: echo @[0.0]
     if xOrY == "X":
       result = valuesX
     elif xOrY == "Y": 
       result = valuesY
     else: return @[0.0]
 
-  
   ############done with the functions, let's use them############
   
-  var pointdataX = @[0.0] 
-  var pointdataY = @[0.0]
-  var weights = @[0.0]
+  var pointdataX : seq[float] 
+  var pointdataY : seq[float]
+  var weights : seq[float]
   
   
   for iExitCB in 1..numberOfPointsEndOfCB:
@@ -585,43 +603,43 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   #echo pointdataX[0]
   # get the heatmaps out of the sequences of data X and data Y, first for the amount of data in one pixel
   # compared to the overall amount and then the data in one pixel compared to the maximal amount of data in any pixel   
-  var heatmaptable1 = prepareheatmap(140,140,5.0,9.0,5.4,9.4,pointdataX,pointdataY,weights,integralNormalisation)#colour scale is now the number of points in one pixel divided by the the number of all events
-  var heatmaptable2 = prepareheatmap(140,140,5.0,9.0,5.4,9.4,pointdataX,pointdataY,weights,1.0)
+  var heatmaptable1 = prepareheatmap(1400,1400,5.0,9.0,5.4,9.4,pointdataX,pointdataY,weights,integralNormalisation)#colour scale is now the number of points in one pixel divided by the the number of all events
+  var heatmaptable2 = prepareheatmap(1400,1400,5.0,9.0,5.4,9.4,pointdataX,pointdataY,weights,1.0)
   #echo heatmaptable2 #= 5417.0
-  echo getMaxVal(heatmaptable2, 140)
-  var heatmaptable3 = prepareheatmap(140,140,5.0,9.0,5.4,9.4,pointdataX,pointdataY,weights,getMaxVal(heatmaptable2, 140)) # if change number of rows: has to be in the maxVal as well
+  echo getMaxVal(heatmaptable2, 1400)
+  var heatmaptable3 = prepareheatmap(1400,1400,5.0,9.0,5.4,9.4,pointdataX,pointdataY,weights,getMaxVal(heatmaptable2, 1400)) # if change number of rows: has to be in the maxVal as well
   echo "Probability of it originating from an axion if a photon hits at x = 5,3mm and y = 8,4mm (in this model):"
   echo (heatmaptable3[53][84]) * 100.0  #echo heatmaptable3[x][y]
 
-  #echo drawfancydiagrams("AxionModelFluxfraction", heatmaptable1, 140) 
-  #echo drawfancydiagrams("AxionModelProbability", heatmaptable3, 140) #Probabilities, that a photon, that hits a certain pixel could originate from an Axion, if the highest is 100%
+  #echo drawfancydiagrams("AxionModelFluxfraction", heatmaptable1, 1400) 
+  #echo drawfancydiagrams("AxionModelProbability", heatmaptable3, 1400) #Probabilities, that a photon, that hits a certain pixel could originate from an Axion, if the highest is 100%
   echo integralNormalisation # number of hits before the setup
   echo pointdataX.len # number of hits after the setup
 
-  # get the heatmap of the data of a run for comparison
+  # get the heatmap of the data of a run for comparison 
 
-  const FILE = "likelihood_2018_2.h5"
-  var dataValuesX = getXandY( FILE,"likelihood/run_242/chip_3","X")
-  var dataValuesY = getXandY( FILE,"likelihood/run_242/chip_3","Y")
-  echo getXandY( FILE,"likelihood/run_242/chip_3","X")
-  echo getXandY( FILE,"likelihood/run_242/chip_3","Y")
-  var weightData = @[0.0]
-  var weightProb = @[0.0]
+
+  var FILE = "likelihood_2018_2.h5"
+  var dataValuesX = getXandY( FILE,"likelihood",242, 306, "chip_3","X")
+  var dataValuesY = getXandY( FILE,"likelihood",242, 306,"chip_3","Y")
+
+  var weightData : seq[float]
+  var weightProb : seq[float]
   echo dataValuesX.len
-  for i in 1 ..< dataValuesX.len:
+  for i in 0 ..< dataValuesX.len:
     weightData.add(1.0) 
-    var X = int(dataValuesX[i]*10.0)
-    echo X
-    var Y = int(dataValuesY[i]* 10.0)
-    echo Y
-    echo heatmaptable3[X][Y] * 10.0
+    var X = int(dataValuesX[i]*100.0)
+    var Y = int(dataValuesY[i]* 100.0)
+    #echo heatmaptable3[X][Y] * 10.0
     weightProb.add(heatmaptable3[X][Y] * 100.0)
-  echo dataValuesX
-  echo dataValuesY
-  var heatmaptable4 = prepareheatmap(140,140,0.0,14.0,0.0,14.0,dataValuesX,dataValuesY,weightData,1.0)
-  #echo drawfancydiagrams("AxionModelDataRaw", heatmaptable4, 140) # the normal data of a run of chip 3 
-  var heatmaptable5 = prepareheatmap(140,140,0.0,14.0,0.0,14.0,dataValuesX,dataValuesY,weightProb,1.0)
-  echo drawfancydiagrams("AxionModelProbability in %", heatmaptable5, 140) #the probability distribution of being an axion of the data of a run of chip 3
+  #echo dataValuesX
+  #echo dataValuesY
+  var heatmaptable4 = prepareheatmap(1400,1400,0.0,14.0,0.0,14.0,dataValuesX,dataValuesY,weightData,1.0)
+  echo drawfancydiagrams("AxionModelDataRaw", heatmaptable4, 1400) # the normal data of a run of chip 3 
+  var heatmaptable5 = prepareheatmap(1400,1400,0.0,14.0,0.0,14.0,dataValuesX,dataValuesY,weightProb,1.0)
+  #echo drawfancydiagrams("AxionModelProbability in %", heatmaptable5, 1400) #the probability distribution of being an axion of the data of a run of chip 3
+
+  
 
   #### now let's get the fluxfraction of the gold region by getting the weight of each event (probability of transition, dependend on the XRay-telescope transmission and the lenth of the 
   # path the particle would have traveled through the magnet) and divide it through the number of all events
