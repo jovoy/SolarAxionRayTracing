@@ -39,7 +39,7 @@ const RAYTRACER_LENGTH_PIPE_VT3_XRT = 150 #mm from drawings #198.2 #mm from XRT 
 const RAYTRACER_RADIUS_PIPE_VT3_XRT = 35.0#25.0 #mm from drawing #35.0 #m irrelevant, large enough to not loose anything # needs to be mm #ok
 const RAYTRACER_FOCAL_LENGTH_XRT = 1485.0 #mm is from llnl XRT https://iopscience.iop.org/article/10.1088/1475-7516/2015/12/008/pdf #1600.0 #mm was the Telescope of 2014 (MPE XRT) also: Aperatur changed #ok
 const RAYTRACER_DISTANCE_AXIS_CB_AXIS_XRT = 0.0#62.1#58.44 #mm from XRT drawing #there is no difference in the axis even though the picture gets transfered 62,1mm down, but in the detector center
-const RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW = -10.0 #mm #no change, because don't know
+const RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW = 20.0 #mm #no change, because don't know # is actually -10.0 mm
 const numberOfPointsEndOfCB = 1000
 const numberOfPointsSun = 1000
 var xrtTransmissionAt10Arcmin : float64 
@@ -297,8 +297,8 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     d2.marker = Marker[float32](size: sizes, color: colors)]##d2.marker = Marker[float32](size: sizes, colorVals: vals, colorMap: ColorMap.Jet)#
 
     const 
-      y = @[float32(CHIPREGIONS_GOLD_Y_MIN * 1400.0 / 14.0), float32(CHIPREGIONS_GOLD_Y_MIN * 1400.0 / 14.0),float32(CHIPREGIONS_GOLD_Y_MAX * 1400.0 / 14.0),float32(CHIPREGIONS_GOLD_Y_MAX * 1400.0 / 14.0),float32(CHIPREGIONS_GOLD_Y_MIN * 1400.0 / 14.0)]
-      x = @[float32(CHIPREGIONS_GOLD_X_MIN * 1400.0 / 14.0),float32(CHIPREGIONS_GOLD_X_MAX * 1400.0 / 14.0),float32(CHIPREGIONS_GOLD_X_MAX * 1400.0 / 14.0), float32(CHIPREGIONS_GOLD_X_MIN * 1400.0 / 14.0), float32(CHIPREGIONS_GOLD_X_MIN * 1400.0 / 14.0)]
+      y = @[float32(CHIPREGIONS_GOLD_Y_MIN * 3500.0 / 14.0), float32(CHIPREGIONS_GOLD_Y_MIN * 3500.0 / 14.0),float32(CHIPREGIONS_GOLD_Y_MAX * 3500.0 / 14.0),float32(CHIPREGIONS_GOLD_Y_MAX * 3500.0 / 14.0),float32(CHIPREGIONS_GOLD_Y_MIN * 3500.0 / 14.0)]
+      x = @[float32(CHIPREGIONS_GOLD_X_MIN * 3500.0 / 14.0),float32(CHIPREGIONS_GOLD_X_MAX * 3500.0 / 14.0),float32(CHIPREGIONS_GOLD_X_MAX * 3500.0 / 14.0), float32(CHIPREGIONS_GOLD_X_MIN * 3500.0 / 14.0), float32(CHIPREGIONS_GOLD_X_MIN * 3500.0 / 14.0)]
     let
       d4 = Trace[float32](mode: PlotMode.LinesMarkers, `type`: PlotType.ScatterGL, ys: y, xs : x) 
     #d.marker = Marker[float64](size: sizes, Color(r: 0.9, g: 0.1, b: 0.1, a: 1.0))
@@ -507,7 +507,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     const 
       d = 83.0 #mm
     var r_xy_intersect = sqrt(intersect[0] * intersect[0] + (intersect[1]+d) * (intersect[1]+d))
-    if r_xy_intersect < R1 and r_xy_intersect > (prevR1 + 0.02) :
+    if r_xy_intersect <= R1 and r_xy_intersect >= (prevR1) :
       return true
     else: 
       return false
@@ -637,25 +637,43 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
       pointEntranceXRT[2] = pointExitPipeVT3XRT[2]
       #echo pointEntranceXRT
       #echo 
-      var valuesPix = getPixelValue(pointEntranceXRT)
-      if not lineIntersectsCircleEdge(circleTotal, getPixelValue(pointEntranceXRT)):
-        pixvalsX.add(valuesPix[0])
-        pixvalsY.add(valuesPix[1])
-      #echo getPixelValue(pointEntranceXRT)
-      #echo lineIntersectsCircleEdge(circleTotal, getPixelValue(pointEntranceXRT))
-      if  pointEntranceXRT[0] <= 2.0 and pointEntranceXRT[0] >= -2.0: continue #there is a 2mm wide graphit block between each glass mirror, to seperate them in the middle of the x-Ray telescope
       
       if lineIntersectsCircleEdge(circleTotal, getPixelValue(pointEntranceXRT)): continue
+        
+      #echo getPixelValue(pointEntranceXRT)
+      #echo lineIntersectsCircleEdge(circleTotal, getPixelValue(pointEntranceXRT))
+      # x and y is interchanged from this point on since it somehow is interchanged in the picture
+      if  pointEntranceXRT[0] <= 2.0 and pointEntranceXRT[0] >= -2.0: continue #there is a 2mm wide graphit block between each glass mirror, to seperate them in the middle of the x-Ray telescope
+      
+      var 
+        vectorAfterXRTCircular = vec3(0.0)
+        radius1 = sqrt(pointEntranceXRT[0] * pointEntranceXRT[0] + (pointEntranceXRT[1]+d) * (pointEntranceXRT[1]+d))
+        phi_radius = arctan2(pointEntranceXRT[0],(pointEntranceXRT[1]+d)) #arccos((pointEntranceXRT[1]+d) / radius1)
+        alpha = arctan(radius1 / RAYTRACER_FOCAL_LENGTH_XRT)
+      vectorAfterXRTCircular[0] = radius1
+      vectorAfterXRTCircular[1] = phi_radius
+      vectorAfterXRTCircular[2] = alpha
+
+      
+      
+      #for i in 1 .. < allR1.len:
+        #echo lineIntersectsArea( (allR1[i] + 0.2), allR1[i], pointEntranceXRT)
+        #if lineIntersectsArea( (allR1[i] + 0.2), allR1[i], pointEntranceXRT):continue
+      
+
+      var valuesPix = getPixelValue(pointEntranceXRT)
       pointdataXBefore.add(pointEntranceXRT[0])
       pointdataYBefore.add(pointEntranceXRT[1])
-
-      var r_xy_XRT = sqrt(pointEntranceXRT[0] * pointEntranceXRT[0] + (pointEntranceXRT[1]+d) * (pointEntranceXRT[1]+d))
-      echo r_xy_XRT
+      pixvalsX.add(valuesPix[0])
+      pixvalsY.add(valuesPix[1])
+      #[var r_xy_XRT = sqrt(pointEntranceXRT[0] * pointEntranceXRT[0] + (pointEntranceXRT[1]+d) * (pointEntranceXRT[1]+d))
+      #echo r_xy_XRT
       #echo lineIntersectsArea( allR1[2], 0.0, pointEntranceXRT)
       if lineIntersectsArea( allR1[1], 0.0, pointEntranceXRT):
         pointEntranceXRT[0] = sqrt((r_xy_XRT - allR1[0]) * (r_xy_XRT - allR1[0]) - pointEntranceXRT[1] * pointEntranceXRT[1])
         pointEntranceXRT[1] = sqrt((r_xy_XRT - allR1[0]) * (r_xy_XRT - allR1[0]) - pointEntranceXRT[0] * pointEntranceXRT[0])
       elif lineIntersectsArea( allR1[2], allR1[1], pointEntranceXRT):
+
         pointEntranceXRT[0] = sqrt((r_xy_XRT - (allR1[1] + 0.2)) * (r_xy_XRT - (allR1[1] + 0.2)) - pointEntranceXRT[1] * pointEntranceXRT[1])
         pointEntranceXRT[1] = sqrt((r_xy_XRT - (allR1[1] + 0.2)) * (r_xy_XRT - (allR1[1] + 0.2)) - pointEntranceXRT[0] * pointEntranceXRT[0])
       elif lineIntersectsArea( allR1[3], allR1[2], pointEntranceXRT):
@@ -667,8 +685,8 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
       elif lineIntersectsArea( allR1[4], allR1[3], pointEntranceXRT):
         pointEntranceXRT[0] = sqrt((r_xy_XRT - (allR1[3] + 0.2)) * (r_xy_XRT - (allR1[3] + 0.2)) - pointEntranceXRT[1] * pointEntranceXRT[1])
         pointEntranceXRT[1] = sqrt((r_xy_XRT - (allR1[3] + 0.2)) * (r_xy_XRT - (allR1[3] + 0.2)) - pointEntranceXRT[0] * pointEntranceXRT[0])
-      else: continue
-      echo pointEntranceXRT
+      else: continue]#
+      #echo pointEntranceXRT
       #[var 
         angle = (arccos(vectorBeforeXRT[2]/sqrt(vectorBeforeXRT[0]*vectorBeforeXRT[0]+vectorBeforeXRT[1]*vectorBeforeXRT[1]+vectorBeforeXRT[2]*vectorBeforeXRT[2])))  # Here we want to adress theta, the polar angle, which should be the second entrance of the vector
         r_x = pointEntranceXRT[0]
@@ -678,10 +696,35 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
         theta_x_prime = theta_x - ( r_x / RAYTRACER_FOCAL_LENGTH_XRT) 
         theta_y_prime = theta_y - ( r_y / RAYTRACER_FOCAL_LENGTH_XRT)]#
        
-      var vectorAfterXRT = vec3(0.0)
-      vectorAfterXRT[0] = vectorBeforeXRT[0]#sin(theta_x_prime) * 100.0 # theta_x_prime seemes to be in rad, since sin in c++ also does calculate from rad
-      vectorAfterXRT[1] = vectorBeforeXRT[1]#sin(theta_y_prime) * 100.0
-      vectorAfterXRT[2] = 100.0
+      #[var vectorAfterXRT = vec3(0.0)
+      vectorAfterXRT[0] = vectorBeforeXRT[0] #sin(theta_x_prime) * 100.0 # theta_x_prime seemes to be in rad, since sin in c++ also does calculate from rad
+      vectorAfterXRT[1] = vectorBeforeXRT[1] #sin(theta_y_prime) * 100.0
+      vectorAfterXRT[2] = 100.0]#
+      
+      
+
+      var centerDetectorWindow = vec3(0.0)
+      centerDetectorWindow[0] = 0.0
+      centerDetectorWindow[1] = 0.0
+      centerDetectorWindow[2] = 0.0 #RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW # + pointEntranceXRT[2] + RAYTRACER_FOCAL_LENGTH_XRT
+
+      var pointDetectorWindowCircle = vec3(0.0)
+      pointDetectorWindowCircle[0] = tan(vectorAfterXRTCircular[2]) * RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW
+      pointDetectorWindowCircle[1] = vectorAfterXRTCircular[1]
+      pointDetectorWindowCircle[2] = vectorAfterXRTCircular[2]
+      var pointDetectorWindow = vec3(0.0)
+      pointDetectorWindow[0] = pointDetectorWindowCircle[0] * sin(pointDetectorWindowCircle[1])
+      pointDetectorWindow[1] = pointDetectorWindowCircle[0] * cos(pointDetectorWindowCircle[1])
+      pointDetectorWindow[2] = 0.0
+      
+      #echo vectorAfterXRTCircular
+      #echo pointDetectorWindow
+
+      #[var lambda_0 = ( centerDetectorWindow[2] - pointEntranceXRT[2] ) / vectorAfterXRT[2]
+      
+      pointDetectorWindow = pointEntranceXRT + lambda_0 * vectorAfterXRT
+      pointDetectorWindow = pointDetectorWindow - misalignmentDetector]#
+      
         
       var vectorBeforeXRTPolar = vec3(0.0)  #(r,theta,phi)
       vectorBeforeXRTPolar[0] = sqrt(vectorBeforeXRT[0]*vectorBeforeXRT[0]+vectorBeforeXRT[1]*vectorBeforeXRT[1]+vectorBeforeXRT[2]*vectorBeforeXRT[2])
@@ -696,22 +739,9 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
         transmissionTelescopePitch = (0.0008*p*p*p*p + 1e-04*p*p*p - 0.4489*p*p - 0.3116*p + 96.787) / 100.0
         transmissionTelescopeYaw = (-0.0316*ya*ya + 0.0421*ya + 99.771) / 100.0
         transmissionMagnet = cos(ya) * 1.0 # this is the transformation probability of an axion into a photon, if an axion flying straight through the magnet had one of 100%, angular dependency of the primakoff effect
-      #echo "now" 
-      #echo angle
-      #echo vectorBeforeXRTPolar
-      
 
-      var centerDetectorWindow = vec3(0.0)
-      centerDetectorWindow[0] = 0.0
-      centerDetectorWindow[1] = d
-      centerDetectorWindow[2] = pointEntranceXRT[2] + RAYTRACER_FOCAL_LENGTH_XRT + RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW
 
-      var lambda_0 = ( centerDetectorWindow[2] - pointEntranceXRT[2] ) / vectorAfterXRT[2]
-      var pointDetectorWindow = vec3(0.0)
-      pointDetectorWindow = pointEntranceXRT + lambda_0 * vectorAfterXRT
-      pointDetectorWindow = pointDetectorWindow - misalignmentDetector
-      
-      
+
       var weight = (transmissionTelescopePitch*transmissionTelescopeYaw* transmissionMagnet * (pathCB * pathCB / RAYTRACER_LENGTH_COLDBORE_9T / RAYTRACER_LENGTH_COLDBORE_9T) ) #transmission probabilities times time the axion spend in the magnet
       #var weight = ( telescopeTransmission(angle,xrtTransmissionAt10Arcmin) * (pathCB * pathCB / RAYTRACER_LENGTH_COLDBORE_9T / RAYTRACER_LENGTH_COLDBORE_9T) )
       integralTotal = integralTotal + weight
@@ -750,20 +780,22 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     endX = 14.0 #- distanceCBAxisXRTAxis * 0.01
     beginY = 0.0 #- distanceCBAxisXRTAxis * 0.01
     endY = 14.0 #- distanceCBAxisXRTAxis * 0.01
-  var heatmaptable1 = prepareheatmap(1400,1400,beginX,endX,beginY,endY,pointdataX,pointdataY,weights,integralNormalisation)#colour scale is now the number of points in one pixel divided by the the number of all events
-  var heatmaptable2 = prepareheatmap(1400,1400,beginX,endX,beginY,endY,pointdataX,pointdataY,weights,1.0)
+  var heatmaptable1 = prepareheatmap(3500,3500,beginX,endX,beginY,endY,pointdataX,pointdataY,weights,integralNormalisation)#colour scale is now the number of points in one pixel divided by the the number of all events
+  var heatmaptable2 = prepareheatmap(3500,3500,beginX,endX,beginY,endY,pointdataX,pointdataY,weights,1.0)
   #echo heatmaptable2 #= 5417.0
-  echo getMaxVal(heatmaptable2, 1400)
-  var heatmaptable3 = prepareheatmap(1400,1400,beginX,endX,beginY,endY,pointdataX,pointdataY,weights,getMaxVal(heatmaptable2, 1400)) # if change number of rows: has to be in the maxVal as well
+  echo getMaxVal(heatmaptable2, 3500)
+  var heatmaptable3 = prepareheatmap(3500,3500,beginX,endX,beginY,endY,pointdataX,pointdataY,weights,getMaxVal(heatmaptable2, 3500)) # if change number of rows: has to be in the maxVal as well
   echo "Probability of it originating from an axion if a photon hits at x = 5,3mm and y = 8,4mm (in this model):"
   echo (heatmaptable3[53][84]) * 100.0  #echo heatmaptable3[x][y]
 
-  #echo drawfancydiagrams("AxionModelFluxfraction", heatmaptable1, 1400) 
-  echo drawfancydiagrams("AxionModelProbability", heatmaptable3, 1400) #Probabilities, that a photon, that hits a certain pixel could originate from an Axion, if the highest is 100%
+  #echo drawfancydiagrams("AxionModelFluxfraction", heatmaptable1, 3500) 
+  echo drawfancydiagrams("AxionModelProbability", heatmaptable3, 3500) #Probabilities, that a photon, that hits a certain pixel could originate from an Axion, if the highest is 100%
   echo integralNormalisation # number of hits before the setup
   echo pointdataX.len # number of hits after the setup
 
   # get the heatmap of the data of a run for comparison 
+  echo "here"
+  echo weights.len
 
 
   var FILE = "likelihood_2018_2_all.h5"
@@ -773,7 +805,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   var weightData : seq[float]
   
   var weightProb : seq[float]
-  echo getLenght(heatmaptable3, 1400)
+  echo getLenght(heatmaptable3, 3500)
   #echo dataValuesX.len
   for i in 0 ..< dataValuesX.len:
     weightData.add(1.0) 
@@ -784,10 +816,10 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
 
   #echo dataValuesX
   #echo dataValuesY
-  var heatmaptable4 = prepareheatmap(1400,1400,0.0,14.0,0.0,14.0,dataValuesX,dataValuesY,weightData,1.0)
-  #echo drawfancydiagrams("AxionModelDataRaw", heatmaptable4, 1400) # the normal data of a run of chip 3 
-  var heatmaptable5 = prepareheatmap(1400,1400,0.0,14.0,0.0,14.0,dataValuesX,dataValuesY,weightProb,1.0)
-  #echo drawfancydiagrams("AxionModelProbability in %", heatmaptable5, 1400) #the probability distribution of being an axion of the data of a run of chip 3
+  var heatmaptable4 = prepareheatmap(3500,3500,0.0,14.0,0.0,14.0,dataValuesX,dataValuesY,weightData,1.0)
+  #echo drawfancydiagrams("AxionModelDataRaw", heatmaptable4, 3500) # the normal data of a run of chip 3 
+  var heatmaptable5 = prepareheatmap(3500,3500,0.0,14.0,0.0,14.0,dataValuesX,dataValuesY,weightProb,1.0)
+  #echo drawfancydiagrams("AxionModelProbability in %", heatmaptable5, 3500) #the probability distribution of being an axion of the data of a run of chip 3
   #[var weightData1 : seq[float]
   for i in 0 ..< circleX.len:
     weightData1.add(1.0)
