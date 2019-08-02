@@ -1,0 +1,39 @@
+ReadSolarModel.cc:
++ ReadEnergyValues:
+++ look at file axion_gae_flux.dat in resources and store all the energies (first column) in a vector
++ AccessSolarModel:
+++ look at AGSS09_solar_model.dat in resources (one table, goes up in the radius from the core of the sun by 0.05% and gives temperature, density and mass fractions for a lot of elements in them)
+++ store in a file a table with the radius from 0.15% to 1.6% and the electron density (where from?)
+++ store the row with al values in a vector of rows
+++ because opacity files only use the most abundand isotope of an element one doesent have to sum up over all isotope metall mass fractions
+++ calculate the non-metal mass fraction by adding H and He mass fractions and the metal mass fraction by adding over the other elements (but only those that are stated in the opacity files because we want to compare them)
+++ calculate X_Z_metal as the mass fractions of the elements divided by the total metal mass fraction respectively
+++ compare those values with the names of the opacity files and take the one closest to most of the values
+++ get H and He mass fraction of each row and find it in the selected file (or the closest one to it) --> table of logR and logT in opacity file
+++ get density value of each row and search for the correct (closest) logR value (stored in OP files as: log10(density/(temperatur*10⁻⁶,³))) and do the same for logT (get the closest value of everything compared)
+++ store as opacity_value the AccessOpacityFile** of the mass fraction of H and He, the logR value and logT value
++ ComputeEmissionRates:
+
++ GaussLagQuad::lagCoef: (and the others afterwards)
+
++ **AccessOpacityFile(int s, int HandHe, int R, int T):
+
++ ReadOpacityFileNames: 
+++ extract metal mass fractions (how much metal in sun) from each opacity vallue file (values are in file name)
+++ get vector of vectors of metal mass fractions
+++ name: mass fractions of: C-N-O-Ne-Na-Mg-Al-Si-P-S-Cl-Ar-K-Ca-Ti-CR-Mn-Fe-Ni
+--> XZ_VecForOpFile
+
+
+
+ReadOpacityFile.cc:
++ GetTableIndex:
+++ find the values for: (to access the tables in the opacity files, where logR and logT are stored)
+  X   = Hydrogen mass fraction
+  Y   = Helium mass fraction             
+  Z   = Metal mass fraction
++ ReadAndStoreTable:
+++ find table in Opacity files with values X,Y and Z
+++ store the Index as the number of the Table and the line number where the table starts (in select[i])
+
+for a value of opacity (how much light passes through)

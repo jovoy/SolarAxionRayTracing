@@ -40,8 +40,8 @@ const RAYTRACER_RADIUS_PIPE_VT3_XRT = 35.0#25.0 #mm from drawing #35.0 #m irrele
 const RAYTRACER_FOCAL_LENGTH_XRT = 1485.0 #mm is from llnl XRT https://iopscience.iop.org/article/10.1088/1475-7516/2015/12/008/pdf #1600.0 #mm was the Telescope of 2014 (MPE XRT) also: Aperatur changed #ok
 const RAYTRACER_DISTANCE_AXIS_CB_AXIS_XRT = 0.0#62.1#58.44 #mm from XRT drawing #there is no difference in the axis even though the picture gets transfered 62,1mm down, but in the detector center
 const RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW = 20.0 #mm #no change, because don't know # is actually -10.0 mm
-const numberOfPointsEndOfCB = 1000
-const numberOfPointsSun = 1000
+const numberOfPointsEndOfCB = 4000
+const numberOfPointsSun = 4000
 var xrtTransmissionAt10Arcmin : float64 
 xrtTransmissionAt10Arcmin = 0.7 #relative transmission for x-rays at 10' angle compared to parallel beams #need to be changed?
 ## Chipregions#####
@@ -643,7 +643,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
       #echo getPixelValue(pointEntranceXRT)
       #echo lineIntersectsCircleEdge(circleTotal, getPixelValue(pointEntranceXRT))
       # x and y is interchanged from this point on since it somehow is interchanged in the picture
-      if  pointEntranceXRT[0] <= 2.0 and pointEntranceXRT[0] >= -2.0: continue #there is a 2mm wide graphit block between each glass mirror, to seperate them in the middle of the x-Ray telescope
+      if  pointEntranceXRT[0] <= 1.0 and pointEntranceXRT[0] >= -1.0: continue #there is a 2mm wide graphit block between each glass mirror, to seperate them in the middle of the x-Ray telescope
       
       var 
         vectorAfterXRTCircular = vec3(0.0)
