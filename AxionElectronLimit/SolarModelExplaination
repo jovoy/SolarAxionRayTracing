@@ -1,22 +1,43 @@
 ReadSolarModel.cc:
-+ ReadEnergyValues:
++ ***ReadEnergyValues:
 ++ look at file axion_gae_flux.dat in resources and store all the energies (first column) in a vector
 + AccessSolarModel:
 ++ look at AGSS09_solar_model.dat in resources (one table, goes up in the radius from the core of the sun by 0.05% and gives temperature, density and mass fractions for a lot of elements in them)
 ++ store in a file a table with the radius from 0.15% to 1.6% and the electron density (where from?)
-++ store the row with al values in a vector of rows
+++ store the row with all values in a vector of rows
 ++ because opacity files only use the most abundand isotope of an element one doesent have to sum up over all isotope metall mass fractions
 ++ calculate the non-metal mass fraction by adding H and He mass fractions and the metal mass fraction by adding over the other elements (but only those that are stated in the opacity files because we want to compare them)
 ++ calculate X_Z_metal as the mass fractions of the elements divided by the total metal mass fraction respectively
 ++ compare those values with the names of the opacity files and take the one closest to most of the values
 ++ get H and He mass fraction of each row and find it in the selected file (or the closest one to it) --> table of logR and logT in opacity file
 ++ get density value of each row and search for the correct (closest) logR value (stored in OP files as: log10(density/(temperatur*10⁻⁶,³))) and do the same for logT (get the closest value of everything compared)
-++ store as opacity_value the AccessOpacityFile** of the mass fraction of H and He, the logR value and logT value
-+ ComputeEmissionRates:
+++ store as opacity_value the AccessOpacityFile** of the mass fraction of H and He, the logR value and logT value, but 10^log10(opacity value)= opacity value
+++ have an opacity value for each row (for each radius of the sun)
+++ Number density: calculate the number density for each row for each isotope (that has been in the solar model table and therefore in each row) as: (mass frac(of isotope)/atomic mass(of isotope)) * (density/atomic mass unit) 
+++ give the number density in keV (by calculating it with c=1 and h=1)
+++ Electron number density: calculate the electron number density for each row as: (density/atomic mass unit) * (1+ mass fraction of H)/2 and also give it in keV
+++ Debye screening scale: calculate this and y as: debye_scale = sqrt( (4 * M_PI * alpha / row[i].temp_keV) * (row[i].n_e + row[i].n_Z[0] + 4*row[i].n_Z[1]) * 7.645e-24 )
+and y = debye_scale/(sqrt(2*m_e_keV*row[i].temp_keV)) ; with alpha: coupling constant of elm interaction (1.0/137.0)
+++ to compare values with those of M. Giannotti: calculate Se and Sz in line 429
 
-+ GaussLagQuad::lagCoef: (and the others afterwards)
++ ComputeEmissionRates:
+++ take energy out of energy vector from ReadEnergyValues*** and calculate w= energy/temp (in keV from the solar model vector (one for each radius))
+++ Absorbtion coefficient: abs_coeff = opacity_value * density (for each row)
+++ Compton emission rate: compton_emrate = (alpha * g_ae * g_ae * energy * energy * row[i].n_e_keV)/(3. * m_e_keV * m_e_keV * (exp(row[i].w)-1.))
+++ Bremsstrahlung emmision rate: brems_emrate = (alpha * alpha * g_ae * g_ae * (4./3.) * std::sqrt(M_PI) * row[i].n_e_keV * row[i].n_e_keV * exp(-row[i].w) * gauss.F(row[i].w,std::sqrt(2)*row[i].y)) / (std::sqrt(row[i].temp_keV) * std::pow(m_e_keV,3.5) * energy)
+--> Total emission rate: 
+--term1 = (g_ae * g_ae * energy * energy * row[i].abs_coeff) / (2. * e_charge * e_charge * m_e_keV * m_e_keV * (exp(row[i].w)-1.)) ; // includes contribution from ff, fb and bb processes and a part of the Comption contribution
+--term2 = ((exp(row[i].w)-2.) * row[i].compton_emrate) / (2.* (exp(row[i].w)-1.)) ; // completes the Compton contribution
+--term3 = row[i].brems_emrate // contribution from ee-bremsstahlung
+--total_emrate = term1 + term2 + term3
+
++ GaussLagQuad::lagCoef: computes integral in equation 2.16 in J. Redondo's paper
+++ (and the others afterwards)--> goal to calculate function F(w,y) for Bremsstrahlung emission rate
 
 + **AccessOpacityFile(int s, int HandHe, int R, int T):
+++ searching for the table in an opacity file with values HandHe (mass fractions of H and He) and stor location of the table as lineNumber
+++ look at table we want to access
+++ if a row has the correct logT value: find correct log R value and save the point in the table where they meet, which is the opacity value (log10(opacity value) actually)
 
 + ReadOpacityFileNames: 
 ++ extract metal mass fractions (how much metal in sun) from each opacity vallue file (values are in file name)
