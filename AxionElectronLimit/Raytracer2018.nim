@@ -1,8 +1,9 @@
 import glm/vec
 import math
 import random
-# kompilieren und ausführen: nim cpp -r aEL.nim, nim c -r --threads:on --showAllMismatches:on aEL.nim # nim cpp -r --gc:boehm --verbosity:3 aEL.nim ##hdfview likelihood_2018_2.h5  
-
+# kompilieren und ausführen: nim cpp -r aEL.nim, nim c -r --threads:on --showAllMismatches:on aEL.nim # nim cpp -r --gc:boehm --verbosity:3 Raytracer2018.nim ##hdfview likelihood_2018_2.h5  
+import strutils
+import algorithm
 import plotly
 import random
 import sequtils, os, strutils
@@ -40,8 +41,8 @@ const RAYTRACER_RADIUS_PIPE_VT3_XRT = 35.0#25.0 #mm from drawing #35.0 #m irrele
 const RAYTRACER_FOCAL_LENGTH_XRT = 1485.0 #mm is from llnl XRT https://iopscience.iop.org/article/10.1088/1475-7516/2015/12/008/pdf #1600.0 #mm was the Telescope of 2014 (MPE XRT) also: Aperatur changed #ok
 const RAYTRACER_DISTANCE_AXIS_CB_AXIS_XRT = 0.0#62.1#58.44 #mm from XRT drawing #there is no difference in the axis even though the picture gets transfered 62,1mm down, but in the detector center
 const RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW = 20.0 #mm #no change, because don't know # is actually -10.0 mm
-const numberOfPointsEndOfCB = 4000
-const numberOfPointsSun = 4000
+const numberOfPointsEndOfCB = 200
+const numberOfPointsSun = 200
 var xrtTransmissionAt10Arcmin : float64 
 xrtTransmissionAt10Arcmin = 0.7 #relative transmission for x-rays at 10' angle compared to parallel beams #need to be changed?
 ## Chipregions#####
@@ -148,6 +149,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   centerSun = centerSun + misalignmentSun
 
   var radiusSun = RAYTRACER_RADIUS_SUN
+  var radiusSunTwentyPecent = radiusSun * 0.2
 
   var centerEntranceCB = vec3(0.0)
   centerEntranceCB[0] = 0
@@ -315,6 +317,38 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   # Now let's define a function to get us a random point on a disk, where we later can put the center of the
   # detector as center and the radius of the detector as radius
 
+  proc drawgraph(diagramtitle : string, data_X : seq, data_Y: seq, energyOrRadius: string) : float = 
+    var
+      #colors : seq[Color]
+      #colors = new_seq[Color](data_X.len)
+      size = @[16.0]
+      color = @[Color(r: 0.9, g: 0.1, b: 0.1, a: 1.0)]
+      layout = Layout()
+      #sizes = new_seq[float64](data_X.len)
+    #for i in 0..<data_X.len:
+      #sizes[i] = (10.0)
+      #colors[i] = Color(r: 0.9, g: 0.1, b: 0.1, a: 1.0)#0xFAF0E6)#
+    
+    let d = Trace[float64](mode: PlotMode.Markers, `type`: PlotType.ScatterGL,
+                             xs: data_X, ys: data_Y)
+    #d.marker = Marker[float64](size: size, color: color)
+    if energyOrRadius == "energy" :
+      
+      
+      layout = Layout(title: diagramtitle, width: 800, height: 800,
+                        xaxis: Axis(title: "Energy [keV]"),
+                        yaxis: Axis(title: "Fluxfraction [10^20 m^-2 year^-1 keV^-1]"), autosize: false)
+
+    elif energyOrRadius == "radius" :
+      
+      
+      layout = Layout(title: diagramtitle, width: 800, height: 800,
+                        xaxis: Axis(title: "Radius [% of the radius of the sun]"),
+                        yaxis: Axis(title: "Fluxfraction [10^20 m^-2 year^-1 keV^-1]"), autosize: false)
+    let p = Plot[float](layout: layout, traces: @[d])
+    echo p.save()
+    p.show()
+
    
   proc getRandomPointOnDisk(center: Vec3, radius:float64) : Vec3 =
     #randomize()
@@ -458,7 +492,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
 
   proc circleEdges( theR1 : seq[float]): any =
     const 
-      sizeViewfield = 45.5 #mm
+      sizeViewfield = 48.0 #mm
       d = 83.0 #mm
       
     var 
@@ -488,7 +522,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     result = circleEdges 
 
   proc getPixelValue(intersects : Vec3): Vec3 =
-    const sizeViewfield = 45.5 #mm
+    const sizeViewfield = 48.0 #mm
     var intersectsPix = vec3(0.0)
     intersectsPix[0] = floor(intersects[0] / (sizeViewfield/1400.0)) + 700
     intersectsPix[1] = floor(intersects[1] / (sizeViewfield/1400.0)) + 700
@@ -548,6 +582,72 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
       result = valuesY
     else: return @[0.0]
 
+  proc getAxionEnergy() : any =
+    var 
+      f = open("energies.txt")
+      line = ""
+      energy : seq[float]
+      energystring : string
+
+    #doAssert f.getPosition()
+    while f.readLine(line): 
+      let energystring = line
+      energy.add(parseFloat(energystring)) 
+    
+    defer: f.close()
+    return energy
+
+  proc getfluxfracVec () : any =
+    var 
+      #f = open("flux_fractions.txt")
+      f = open("flux_fractions_with_fB.txt") #with Bose-Einstein distribution of the thermal photon bath
+      line = ""
+      fluxstring : string
+      fluxfractions : seq[float]
+
+    while f.readLine(line): 
+      let fluxstring = line
+      fluxfractions.add(parseFloat(fluxstring))
+    
+    defer: f.close()
+    return fluxfractions
+
+  proc getfluxfrac (radius : float, energyVec: seq[float], iEnergy : int) : int = 
+    var
+      linenum : int
+      linenumfloat : float
+      posfluxfraction : int
+      radiusPerc : float
+
+    
+    #r = 0.0015 + float(linenum - 1) * 0.0005 
+    radiusPerc = radius / radiusSun
+    linenumfloat = ((radiusPerc - 0.0015) / 0.0005) + 1.0
+    
+    if round(linenumfloat, 1) < (floor(linenumfloat) + 0.5) :
+      linenum = int(floor(linenumfloat))
+    else:
+      linenum = int(ceil(linenumfloat))
+    
+    if linenum > 0 and linenum < 398:
+      posfluxfraction = (linenum - 1 ) * (energyVec.len ) + (iEnergy )
+    elif linenum > 397:
+      posfluxfraction = (linenum - 2 ) * (energyVec.len ) + (iEnergy )
+    elif linenum == 0: 
+      posfluxfraction = (linenum ) * (energyVec.len ) + (iEnergy )
+    elif linenum < 0:
+      posfluxfraction = (linenum + 2) * (energyVec.len ) + (iEnergy )
+      #echo "idiot"
+
+
+    
+    #if radiusPerc == 0.2: 
+      #return 7777777
+    #else: 
+    return posfluxfraction#linenum##posfluxfraction#
+    
+
+
   ############done with the functions, let's use them############
   
   var pointdataX : seq[float] 
@@ -563,215 +663,253 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     d = 83.0 #mm
   var pixvalsX : seq[float] 
   var pixvalsY : seq[float]
+  var energy = getAxionEnergy()
+  var fluxfracs = getfluxfracVec()
   
+  var fluxfractionrad : seq[float]
+  var fluxfractionen : seq[float]
+  var radii : seq[float]
+  var energies : seq[float]
   #echo min(circleX)
   #echo min(circleY)
   #echo circleTotal
 
   # count through all points in the magnet end (coldbore) and then in the sun (set to 1000 points), to connect them and get 1000000 lines (axion traces)
+  for iEnergy in 0.. < energy.len:
+    var fluxfractionAll = 0.0
+    var energyAx = energy[iEnergy]
+    for iExitCB in 1..numberOfPointsEndOfCB:
+      #echo iExitCB
+      var pointExitCBMagneticField = vec3(0.0)
+      pointExitCBMagneticField = getRandomPointOnDisk(centerExitCBMagneticField, radiusCB)
+      for iSun in 1..numberOfPointsSun:
+        integralNormalisation = integralNormalisation + 1
+        var pointInSun = vec3(0.0)
+        case  axionRadiationCharacteristic
+        of "axionRadiation::characteristic::sar":
+          pointInSun = getRandomPointOnDisk(centerSun,radiusSunTwentyPecent)#pointInSun = getRandomPointFromSolarModel(centerSun,radiusSun)
+        of "axionRadiation::characteristic::def":
+          echo "Error: Default radiation characteristic not implemented"
+        else:
+          echo "Error: Unknown axion radiation characteristic"
+            
+        var radiusInSun = sqrt(pointInSun[0] * pointInSun[0] + pointInSun[1] * pointInSun[1])
+         #iEnergy] #Rownum in brackets
+        var fluxfraction = fluxfracs[getfluxfrac(radiusInSun, energy, iEnergy)]
+        if iEnergy == 142 : 
+          echo fluxfraction
+          fluxfractionrad.add(fluxfraction)
+          radii.add(radiusInSun/radiusSun)
 
-  for iExitCB in 1..numberOfPointsEndOfCB:
-    #echo iExitCB
-    var pointExitCBMagneticField = vec3(0.0)
-    pointExitCBMagneticField = getRandomPointOnDisk(centerExitCBMagneticField, radiusCB)
-    for iSun in 1..numberOfPointsSun:
-      integralNormalisation = integralNormalisation + 1
-      var pointInSun = vec3(0.0)
-      case  axionRadiationCharacteristic
-      of "axionRadiation::characteristic::sar":
-        pointInSun = getRandomPointFromSolarModel(centerSun,radiusSun)
-      of "axionRadiation::characteristic::def":
-        echo "Error: Default radiation characteristic not implemented"
-      else:
-        echo "Error: Unknown axion radiation characteristic"
+        if (radiusInSun/radiusSun) < 0.001 and (radiusInSun/radiusSun) > 0.000:
+          fluxfractionen.add(fluxfraction)
+          energies.add(energyAx)
+        fluxfractionAll = fluxfractionAll + fluxfraction
+
+
       
-      
-      var intersect = vec3(0.0)
-      var pathCB : float64
-      var intersectsEntranceCB : bool
-      intersectsEntranceCB = lineIntersectsCircle(pointInSun, pointExitCBMagneticField, centerEntranceCB, radiusCB, intersect)
-      var intersectsCB = false
+        var intersect = vec3(0.0)
+        var pathCB : float64
+        var intersectsEntranceCB : bool
+        intersectsEntranceCB = lineIntersectsCircle(pointInSun, pointExitCBMagneticField, centerEntranceCB, radiusCB, intersect)
+        var intersectsCB = false
         
-      if (not intersectsEntranceCB):
-        intersectsCB = lineIntersectsCylinderOnce(pointInSun,pointExitCBMagneticField,centerEntranceCB,centerExitCBMagneticField,radiusCB,intersect)
+        if (not intersectsEntranceCB):
+          intersectsCB = lineIntersectsCylinderOnce(pointInSun,pointExitCBMagneticField,centerEntranceCB,centerExitCBMagneticField,radiusCB,intersect)
           
-      if (not intersectsEntranceCB and not intersectsCB): continue
+        if (not intersectsEntranceCB and not intersectsCB): continue
 
-      if (not intersectsEntranceCB): #generates problems with the weight because the weight is multiplied with the difference of the leght of the path of the particle and the legth of the coldbore
-        intersect = getIntersectLineIntersectsCylinderOnce(pointInSun,pointExitCBMagneticField,centerEntranceCB,centerExitCBMagneticField,radiusCB,intersect)#pointInSun + ((centerEntranceCB[2] - pointInSun[2]) / (pointExitCBMagneticField - pointInSun)[2]) * (pointExitCBMagneticField - pointInSun)
-      #if (not intersectsCB):
-        #intersect = pointInSun + ((centerEntranceCB[2] - pointInSun[2]) / (pointExitCBMagneticField - pointInSun)[2]) * (pointExitCBMagneticField - pointInSun) 
-      pathCB = pointExitCBMagneticField[2] - intersect[2]
-      var pointExitCB = vec3(0.0)
+        if (not intersectsEntranceCB): #generates problems with the weight because the weight is multiplied with the difference of the leght of the path of the particle and the legth of the coldbore
+          intersect = getIntersectLineIntersectsCylinderOnce(pointInSun,pointExitCBMagneticField,centerEntranceCB,centerExitCBMagneticField,radiusCB,intersect)#pointInSun + ((centerEntranceCB[2] - pointInSun[2]) / (pointExitCBMagneticField - pointInSun)[2]) * (pointExitCBMagneticField - pointInSun)
+        #if (not intersectsCB):
+          #intersect = pointInSun + ((centerEntranceCB[2] - pointInSun[2]) / (pointExitCBMagneticField - pointInSun)[2]) * (pointExitCBMagneticField - pointInSun) 
+        pathCB = pointExitCBMagneticField[2] - intersect[2]
+        var pointExitCB = vec3(0.0)
         
-      if (not lineIntersectsCircle(pointInSun,pointExitCBMagneticField,centerExitCB,radiusCB,pointExitCB)): continue
+        if (not lineIntersectsCircle(pointInSun,pointExitCBMagneticField,centerExitCB,radiusCB,pointExitCB)): continue
         
-      pointExitCB = pointInSun + ((centerExitCB[2] - pointInSun[2]) / (pointExitCBMagneticField - pointInSun)[2]) * (pointExitCBMagneticField - pointInSun)
+        pointExitCB = pointInSun + ((centerExitCB[2] - pointInSun[2]) / (pointExitCBMagneticField - pointInSun)[2]) * (pointExitCBMagneticField - pointInSun)
       
-      var pointExitPipeCBVT3 =vec3(0.0)
+        var pointExitPipeCBVT3 =vec3(0.0)
         
-      if (not lineIntersectsCircle(pointExitCBMagneticField,pointExitCB,centerExitPipeCBVT3,radiusPipeCBVT3,pointExitPipeCBVT3)) : continue
+        if (not lineIntersectsCircle(pointExitCBMagneticField,pointExitCB,centerExitPipeCBVT3,radiusPipeCBVT3,pointExitPipeCBVT3)) : continue
         
-      pointExitPipeCBVT3 = pointExitCBMagneticField + ((centerExitPipeCBVT3[2] - pointExitCBMagneticField[2]) / (pointExitCB - pointExitCBMagneticField)[2]) * (pointExitCB - pointExitCBMagneticField)
-      var pointExitPipeVT3XRT = vec3(0.0)
+        pointExitPipeCBVT3 = pointExitCBMagneticField + ((centerExitPipeCBVT3[2] - pointExitCBMagneticField[2]) / (pointExitCB - pointExitCBMagneticField)[2]) * (pointExitCB - pointExitCBMagneticField)
+        var pointExitPipeVT3XRT = vec3(0.0)#seq[float]
         
-      if (not lineIntersectsCircle(pointExitCB,pointExitPipeCBVT3,centerExitPipeVT3XRT,radiusPipeVT3XRT,pointExitPipeVT3XRT)) : continue
+        if (not lineIntersectsCircle(pointExitCB,pointExitPipeCBVT3,centerExitPipeVT3XRT,radiusPipeVT3XRT,pointExitPipeVT3XRT)) : continue
 
-      pointExitPipeVT3XRT = pointExitCB + ((centerExitPipeVT3XRT[2] - pointExitCB[2]) / (pointExitPipeCBVT3 - pointExitCB)[2]) * (pointExitPipeCBVT3 - pointExitCB)
+        pointExitPipeVT3XRT = pointExitCB + ((centerExitPipeVT3XRT[2] - pointExitCB[2]) / (pointExitPipeCBVT3 - pointExitCB)[2]) * (pointExitPipeCBVT3 - pointExitCB)
         
-      #pointExitPipeVT3XRT = pointInSun - pointExitCBMagneticField 
-      #pointExitPipeVT3XRT = pointExitPipeVT3XRT/ sqrt(pointExitPipeVT3XRT[0]*pointExitPipeVT3XRT[0] + pointExitPipeVT3XRT[1]*pointExitPipeVT3XRT[1] + pointExitPipeVT3XRT[2]*pointExitPipeVT3XRT[2])
-      #pointExitPipeVT3XRT = pointExitCBMagneticField + pointExitPipeVT3XRT * (RAYTRACER_LENGTH_COLDBORE + RAYTRACER_LENGTH_PIPE_CB_VT3 + RAYTRACER_LENGTH_PIPE_VT3_XRT)
+        #pointExitPipeVT3XRT = pointInSun - pointExitCBMagneticField 
+        #pointExitPipeVT3XRT = pointExitPipeVT3XRT/ sqrt(pointExitPipeVT3XRT[0]*pointExitPipeVT3XRT[0] + pointExitPipeVT3XRT[1]*pointExitPipeVT3XRT[1] + pointExitPipeVT3XRT[2]*pointExitPipeVT3XRT[2])
+        #pointExitPipeVT3XRT = pointExitCBMagneticField + pointExitPipeVT3XRT * (RAYTRACER_LENGTH_COLDBORE + RAYTRACER_LENGTH_PIPE_CB_VT3 + RAYTRACER_LENGTH_PIPE_VT3_XRT)
 
-      var vectorBeforeXRT = vec3(0.0)
-      vectorBeforeXRT = pointExitPipeVT3XRT - pointExitCB
-
-      
-      
-        
-      ###################von CB (coldbore(pipe in Magnet)) zum XRT (XrayTelescope)#######################
-
-      var pointEntranceXRT = vec3(0.0)
-      pointEntranceXRT[0] = pointExitPipeVT3XRT[0] #- distanceCBAxisXRTAxis
-      pointEntranceXRT[1] = pointExitPipeVT3XRT[1] 
-      pointEntranceXRT[2] = pointExitPipeVT3XRT[2]
-      #echo pointEntranceXRT
-      #echo 
-      
-      if lineIntersectsCircleEdge(circleTotal, getPixelValue(pointEntranceXRT)): continue
-        
-      #echo getPixelValue(pointEntranceXRT)
-      #echo lineIntersectsCircleEdge(circleTotal, getPixelValue(pointEntranceXRT))
-      # x and y is interchanged from this point on since it somehow is interchanged in the picture
-      if  pointEntranceXRT[0] <= 1.0 and pointEntranceXRT[0] >= -1.0: continue #there is a 2mm wide graphit block between each glass mirror, to seperate them in the middle of the x-Ray telescope
-      
-      var 
-        vectorAfterXRTCircular = vec3(0.0)
-        radius1 = sqrt(pointEntranceXRT[0] * pointEntranceXRT[0] + (pointEntranceXRT[1]+d) * (pointEntranceXRT[1]+d))
-        phi_radius = arctan2(pointEntranceXRT[0],(pointEntranceXRT[1]+d)) #arccos((pointEntranceXRT[1]+d) / radius1)
-        alpha = arctan(radius1 / RAYTRACER_FOCAL_LENGTH_XRT)
-      vectorAfterXRTCircular[0] = radius1
-      vectorAfterXRTCircular[1] = phi_radius
-      vectorAfterXRTCircular[2] = alpha
+        var vectorBeforeXRT = vec3(0.0)
+        vectorBeforeXRT = pointExitPipeVT3XRT - pointExitCB
 
       
       
-      #for i in 1 .. < allR1.len:
-        #echo lineIntersectsArea( (allR1[i] + 0.2), allR1[i], pointEntranceXRT)
-        #if lineIntersectsArea( (allR1[i] + 0.2), allR1[i], pointEntranceXRT):continue
+        
+        ###################von CB (coldbore(pipe in Magnet)) zum XRT (XrayTelescope)#######################
+
+        var pointEntranceXRT = vec3(0.0)
+        pointEntranceXRT[0] = pointExitPipeVT3XRT[0] #- distanceCBAxisXRTAxis
+        pointEntranceXRT[1] = pointExitPipeVT3XRT[1] 
+        pointEntranceXRT[2] = pointExitPipeVT3XRT[2]
+         
+        if (getPixelValue(pointEntranceXRT)[0] > 1400.0 or getPixelValue(pointEntranceXRT)[1] > 1400.0): continue
+        if lineIntersectsCircleEdge(circleTotal, getPixelValue(pointEntranceXRT)): continue
+        
+        #echo getPixelValue(pointEntranceXRT)
+        #echo lineIntersectsCircleEdge(circleTotal, getPixelValue(pointEntranceXRT))
+        # x and y is interchanged from this point on since it somehow is interchanged in the picture
+        if  pointEntranceXRT[0] <= 1.0 and pointEntranceXRT[0] >= -1.0: continue #there is a 2mm wide graphit block between each glass mirror, to seperate them in the middle of the x-Ray telescope
+      
+        var 
+          vectorAfterXRTCircular = vec3(0.0)
+          radius1 = sqrt(pointEntranceXRT[0] * pointEntranceXRT[0] + (pointEntranceXRT[1]+d) * (pointEntranceXRT[1]+d))
+          phi_radius = arctan2(pointEntranceXRT[0],(pointEntranceXRT[1]+d)) #arccos((pointEntranceXRT[1]+d) / radius1)
+          alpha = arctan(radius1 / RAYTRACER_FOCAL_LENGTH_XRT)
+        vectorAfterXRTCircular[0] = radius1
+        vectorAfterXRTCircular[1] = phi_radius
+        vectorAfterXRTCircular[2] = alpha
+
+      
+      
+        #for i in 1 .. < allR1.len:
+          #echo lineIntersectsArea( (allR1[i] + 0.2), allR1[i], pointEntranceXRT)
+          #if lineIntersectsArea( (allR1[i] + 0.2), allR1[i], pointEntranceXRT):continue
       
 
-      var valuesPix = getPixelValue(pointEntranceXRT)
-      pointdataXBefore.add(pointEntranceXRT[0])
-      pointdataYBefore.add(pointEntranceXRT[1])
-      pixvalsX.add(valuesPix[0])
-      pixvalsY.add(valuesPix[1])
-      #[var r_xy_XRT = sqrt(pointEntranceXRT[0] * pointEntranceXRT[0] + (pointEntranceXRT[1]+d) * (pointEntranceXRT[1]+d))
-      #echo r_xy_XRT
-      #echo lineIntersectsArea( allR1[2], 0.0, pointEntranceXRT)
-      if lineIntersectsArea( allR1[1], 0.0, pointEntranceXRT):
-        pointEntranceXRT[0] = sqrt((r_xy_XRT - allR1[0]) * (r_xy_XRT - allR1[0]) - pointEntranceXRT[1] * pointEntranceXRT[1])
-        pointEntranceXRT[1] = sqrt((r_xy_XRT - allR1[0]) * (r_xy_XRT - allR1[0]) - pointEntranceXRT[0] * pointEntranceXRT[0])
-      elif lineIntersectsArea( allR1[2], allR1[1], pointEntranceXRT):
+        var valuesPix = getPixelValue(pointEntranceXRT)
+        pointdataXBefore.add(pointEntranceXRT[0])
+        pointdataYBefore.add(pointEntranceXRT[1])
+        pixvalsX.add(valuesPix[0])
+        pixvalsY.add(valuesPix[1])
+        #[var r_xy_XRT = sqrt(pointEntranceXRT[0] * pointEntranceXRT[0] + (pointEntranceXRT[1]+d) * (pointEntranceXRT[1]+d))
+        #echo r_xy_XRT
+        #echo lineIntersectsArea( allR1[2], 0.0, pointEntranceXRT)
+        if lineIntersectsArea( allR1[1], 0.0, pointEntranceXRT):
+          pointEntranceXRT[0] = sqrt((r_xy_XRT - allR1[0]) * (r_xy_XRT - allR1[0]) - pointEntranceXRT[1] * pointEntranceXRT[1])
+          pointEntranceXRT[1] = sqrt((r_xy_XRT - allR1[0]) * (r_xy_XRT - allR1[0]) - pointEntranceXRT[0] * pointEntranceXRT[0])
+        elif lineIntersectsArea( allR1[2], allR1[1], pointEntranceXRT):
 
-        pointEntranceXRT[0] = sqrt((r_xy_XRT - (allR1[1] + 0.2)) * (r_xy_XRT - (allR1[1] + 0.2)) - pointEntranceXRT[1] * pointEntranceXRT[1])
-        pointEntranceXRT[1] = sqrt((r_xy_XRT - (allR1[1] + 0.2)) * (r_xy_XRT - (allR1[1] + 0.2)) - pointEntranceXRT[0] * pointEntranceXRT[0])
-      elif lineIntersectsArea( allR1[3], allR1[2], pointEntranceXRT):
-        pointEntranceXRT[0] = sqrt((r_xy_XRT - (allR1[2] + 0.2)) * (r_xy_XRT - (allR1[2] + 0.2)) - pointEntranceXRT[1] * pointEntranceXRT[1])
-        pointEntranceXRT[1] = sqrt((r_xy_XRT - (allR1[2] + 0.2)) * (r_xy_XRT - (allR1[2] + 0.2)) - pointEntranceXRT[0] * pointEntranceXRT[0])
-      elif lineIntersectsArea( allR1[4], allR1[3], pointEntranceXRT):
-        pointEntranceXRT[0] = sqrt((r_xy_XRT - (allR1[3] + 0.2)) * (r_xy_XRT - (allR1[3] + 0.2)) - pointEntranceXRT[1] * pointEntranceXRT[1])
-        pointEntranceXRT[1] = sqrt((r_xy_XRT - (allR1[3] + 0.2)) * (r_xy_XRT - (allR1[3] + 0.2)) - pointEntranceXRT[0] * pointEntranceXRT[0])
-      elif lineIntersectsArea( allR1[4], allR1[3], pointEntranceXRT):
-        pointEntranceXRT[0] = sqrt((r_xy_XRT - (allR1[3] + 0.2)) * (r_xy_XRT - (allR1[3] + 0.2)) - pointEntranceXRT[1] * pointEntranceXRT[1])
-        pointEntranceXRT[1] = sqrt((r_xy_XRT - (allR1[3] + 0.2)) * (r_xy_XRT - (allR1[3] + 0.2)) - pointEntranceXRT[0] * pointEntranceXRT[0])
-      else: continue]#
-      #echo pointEntranceXRT
-      #[var 
-        angle = (arccos(vectorBeforeXRT[2]/sqrt(vectorBeforeXRT[0]*vectorBeforeXRT[0]+vectorBeforeXRT[1]*vectorBeforeXRT[1]+vectorBeforeXRT[2]*vectorBeforeXRT[2])))  # Here we want to adress theta, the polar angle, which should be the second entrance of the vector
-        r_x = pointEntranceXRT[0]
-        r_y = pointEntranceXRT[1]
-        theta_x = vectorBeforeXRT[0] / vectorBeforeXRT[2]
-        theta_y = vectorBeforeXRT[1] / vectorBeforeXRT[2]
-        theta_x_prime = theta_x - ( r_x / RAYTRACER_FOCAL_LENGTH_XRT) 
-        theta_y_prime = theta_y - ( r_y / RAYTRACER_FOCAL_LENGTH_XRT)]#
+          pointEntranceXRT[0] = sqrt((r_xy_XRT - (allR1[1] + 0.2)) * (r_xy_XRT - (allR1[1] + 0.2)) - pointEntranceXRT[1] * pointEntranceXRT[1])
+          pointEntranceXRT[1] = sqrt((r_xy_XRT - (allR1[1] + 0.2)) * (r_xy_XRT - (allR1[1] + 0.2)) - pointEntranceXRT[0] * pointEntranceXRT[0])
+        elif lineIntersectsArea( allR1[3], allR1[2], pointEntranceXRT):
+          pointEntranceXRT[0] = sqrt((r_xy_XRT - (allR1[2] + 0.2)) * (r_xy_XRT - (allR1[2] + 0.2)) - pointEntranceXRT[1] * pointEntranceXRT[1])
+          pointEntranceXRT[1] = sqrt((r_xy_XRT - (allR1[2] + 0.2)) * (r_xy_XRT - (allR1[2] + 0.2)) - pointEntranceXRT[0] * pointEntranceXRT[0])
+        elif lineIntersectsArea( allR1[4], allR1[3], pointEntranceXRT):
+          pointEntranceXRT[0] = sqrt((r_xy_XRT - (allR1[3] + 0.2)) * (r_xy_XRT - (allR1[3] + 0.2)) - pointEntranceXRT[1] * pointEntranceXRT[1])
+          pointEntranceXRT[1] = sqrt((r_xy_XRT - (allR1[3] + 0.2)) * (r_xy_XRT - (allR1[3] + 0.2)) - pointEntranceXRT[0] * pointEntranceXRT[0])
+        elif lineIntersectsArea( allR1[4], allR1[3], pointEntranceXRT):
+          pointEntranceXRT[0] = sqrt((r_xy_XRT - (allR1[3] + 0.2)) * (r_xy_XRT - (allR1[3] + 0.2)) - pointEntranceXRT[1] * pointEntranceXRT[1])
+          pointEntranceXRT[1] = sqrt((r_xy_XRT - (allR1[3] + 0.2)) * (r_xy_XRT - (allR1[3] + 0.2)) - pointEntranceXRT[0] * pointEntranceXRT[0])
+        else: continue]#
+        #echo pointEntranceXRT
+        #[var 
+          angle = (arccos(vectorBeforeXRT[2]/sqrt(vectorBeforeXRT[0]*vectorBeforeXRT[0]+vectorBeforeXRT[1]*vectorBeforeXRT[1]+vectorBeforeXRT[2]*vectorBeforeXRT[2])))  # Here we want to adress theta, the polar angle, which should be the second entrance of the vector
+          r_x = pointEntranceXRT[0]
+          r_y = pointEntranceXRT[1]
+          theta_x = vectorBeforeXRT[0] / vectorBeforeXRT[2]
+          theta_y = vectorBeforeXRT[1] / vectorBeforeXRT[2]
+          theta_x_prime = theta_x - ( r_x / RAYTRACER_FOCAL_LENGTH_XRT) 
+          theta_y_prime = theta_y - ( r_y / RAYTRACER_FOCAL_LENGTH_XRT)]#
        
-      #[var vectorAfterXRT = vec3(0.0)
-      vectorAfterXRT[0] = vectorBeforeXRT[0] #sin(theta_x_prime) * 100.0 # theta_x_prime seemes to be in rad, since sin in c++ also does calculate from rad
-      vectorAfterXRT[1] = vectorBeforeXRT[1] #sin(theta_y_prime) * 100.0
-      vectorAfterXRT[2] = 100.0]#
+        #[var vectorAfterXRT = vec3(0.0)
+        vectorAfterXRT[0] = vectorBeforeXRT[0] #sin(theta_x_prime) * 100.0 # theta_x_prime seemes to be in rad, since sin in c++ also does calculate from rad
+        vectorAfterXRT[1] = vectorBeforeXRT[1] #sin(theta_y_prime) * 100.0
+        vectorAfterXRT[2] = 100.0]#
       
       
 
-      var centerDetectorWindow = vec3(0.0)
-      centerDetectorWindow[0] = 0.0
-      centerDetectorWindow[1] = 0.0
-      centerDetectorWindow[2] = 0.0 #RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW # + pointEntranceXRT[2] + RAYTRACER_FOCAL_LENGTH_XRT
+        var centerDetectorWindow = vec3(0.0)
+        centerDetectorWindow[0] = 0.0
+        centerDetectorWindow[1] = 0.0
+        centerDetectorWindow[2] = 0.0 #RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW # + pointEntranceXRT[2] + RAYTRACER_FOCAL_LENGTH_XRT
 
-      var pointDetectorWindowCircle = vec3(0.0)
-      pointDetectorWindowCircle[0] = tan(vectorAfterXRTCircular[2]) * RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW
-      pointDetectorWindowCircle[1] = vectorAfterXRTCircular[1]
-      pointDetectorWindowCircle[2] = vectorAfterXRTCircular[2]
-      var pointDetectorWindow = vec3(0.0)
-      pointDetectorWindow[0] = pointDetectorWindowCircle[0] * sin(pointDetectorWindowCircle[1])
-      pointDetectorWindow[1] = pointDetectorWindowCircle[0] * cos(pointDetectorWindowCircle[1])
-      pointDetectorWindow[2] = 0.0
+        var pointDetectorWindowCircle = vec3(0.0)
+        pointDetectorWindowCircle[0] = tan(vectorAfterXRTCircular[2]) * RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW
+        pointDetectorWindowCircle[1] = vectorAfterXRTCircular[1]
+        pointDetectorWindowCircle[2] = vectorAfterXRTCircular[2]
+        var pointDetectorWindow = vec3(0.0)
+        pointDetectorWindow[0] = pointDetectorWindowCircle[0] * sin(pointDetectorWindowCircle[1])
+        pointDetectorWindow[1] = pointDetectorWindowCircle[0] * cos(pointDetectorWindowCircle[1])
+        pointDetectorWindow[2] = 0.0
       
-      #echo vectorAfterXRTCircular
-      #echo pointDetectorWindow
+        #echo vectorAfterXRTCircular
+        #echo pointDetectorWindow
 
-      #[var lambda_0 = ( centerDetectorWindow[2] - pointEntranceXRT[2] ) / vectorAfterXRT[2]
+        #[var lambda_0 = ( centerDetectorWindow[2] - pointEntranceXRT[2] ) / vectorAfterXRT[2]
       
-      pointDetectorWindow = pointEntranceXRT + lambda_0 * vectorAfterXRT
-      pointDetectorWindow = pointDetectorWindow - misalignmentDetector]#
+        pointDetectorWindow = pointEntranceXRT + lambda_0 * vectorAfterXRT
+        pointDetectorWindow = pointDetectorWindow - misalignmentDetector]#
       
         
-      var vectorBeforeXRTPolar = vec3(0.0)  #(r,theta,phi)
-      vectorBeforeXRTPolar[0] = sqrt(vectorBeforeXRT[0]*vectorBeforeXRT[0]+vectorBeforeXRT[1]*vectorBeforeXRT[1]+vectorBeforeXRT[2]*vectorBeforeXRT[2])
-      vectorBeforeXRTPolar[1] = radToDeg(arccos(vectorBeforeXRT[0]/vectorBeforeXRTPolar[0]))
-      vectorBeforeXRTPolar[2] = radToDeg(arctan2(vectorBeforeXRT[2],vectorBeforeXRT[1]))
+        var vectorBeforeXRTPolar = vec3(0.0)  #(r,theta,phi)
+        vectorBeforeXRTPolar[0] = sqrt(vectorBeforeXRT[0]*vectorBeforeXRT[0]+vectorBeforeXRT[1]*vectorBeforeXRT[1]+vectorBeforeXRT[2]*vectorBeforeXRT[2])
+        vectorBeforeXRTPolar[1] = radToDeg(arccos(vectorBeforeXRT[0]/vectorBeforeXRTPolar[0]))
+        vectorBeforeXRTPolar[2] = radToDeg(arctan2(vectorBeforeXRT[2],vectorBeforeXRT[1]))
 
-      vectorBeforeXRTPolar[1] = 90.0 - vectorBeforeXRTPolar[1] #this is the pitch angle
-      var p = vectorBeforeXRTPolar[1]
-      vectorBeforeXRTPolar[2] = 90.0 - vectorBeforeXRTPolar[2] #this is the yaw angle, floor to roof
-      var ya = vectorBeforeXRTPolar[2]
-      var 
-        transmissionTelescopePitch = (0.0008*p*p*p*p + 1e-04*p*p*p - 0.4489*p*p - 0.3116*p + 96.787) / 100.0
-        transmissionTelescopeYaw = (-0.0316*ya*ya + 0.0421*ya + 99.771) / 100.0
-        transmissionMagnet = cos(ya) * 1.0 # this is the transformation probability of an axion into a photon, if an axion flying straight through the magnet had one of 100%, angular dependency of the primakoff effect
-
-
-
-      var weight = (transmissionTelescopePitch*transmissionTelescopeYaw* transmissionMagnet * (pathCB * pathCB / RAYTRACER_LENGTH_COLDBORE_9T / RAYTRACER_LENGTH_COLDBORE_9T) ) #transmission probabilities times time the axion spend in the magnet
-      #var weight = ( telescopeTransmission(angle,xrtTransmissionAt10Arcmin) * (pathCB * pathCB / RAYTRACER_LENGTH_COLDBORE_9T / RAYTRACER_LENGTH_COLDBORE_9T) )
-      integralTotal = integralTotal + weight
-     
-      ###detector COS has (0/0) at the bottom left corner of the chip
-
-      pointDetectorWindow[0] = pointDetectorWindow[0] + CHIPREGIONS_CHIP_CENTER_X
-      pointDetectorWindow[1] = pointDetectorWindow[1] + CHIPREGIONS_CHIP_CENTER_Y
-      #echo pointDetectorWindow
-      pointdataX.add(pointDetectorWindow[0])
-      pointdataY.add(pointDetectorWindow[1])
-      weights.add(weight)
-
-
-      #echo pointDetectorWindow
-
-      var 
-        gold = ( (pointDetectorWindow[0] >= CHIPREGIONS_GOLD_X_MIN) and (pointDetectorWindow[0] <= CHIPREGIONS_GOLD_X_MAX) and (pointDetectorWindow[1] >= CHIPREGIONS_GOLD_Y_MIN) and (pointDetectorWindow[1] <= CHIPREGIONS_GOLD_Y_MAX) )
-        r_xy = sqrt( ( (pointDetectorWindow[0] - CHIPREGIONS_CHIP_CENTER_X) * (pointDetectorWindow[0] - CHIPREGIONS_CHIP_CENTER_X) ) + ( (pointDetectorWindow[1] - CHIPREGIONS_CHIP_CENTER_Y) * (pointDetectorWindow[1] - CHIPREGIONS_CHIP_CENTER_Y) ) )
-        silver = (r_xy <= CHIPREGIONS_SILVER_RADIUS_MAX ) and not gold
-        bronze = not gold and not silver and ( r_xy <= CHIPREGIONS_BRONZE_RADIUS_MAX )
-        withinWindow = r_xy < detectorWindowAperture/2
-        detector = ( (pointDetectorWindow[0] >= CHIPREGIONS_CHIP_X_MIN) and (pointDetectorWindow[0] <= CHIPREGIONS_CHIP_X_MAX) and (pointDetectorWindow[1] >= CHIPREGIONS_CHIP_Y_MIN) and (pointDetectorWindow[1] <= CHIPREGIONS_CHIP_Y_MAX) )
-
-      if(gold and withinWindow): integralGold = integralGold + weight
-      if(silver and withinWindow): integralSilver = integralSilver + weight
-      if(bronze and withinWindow): integralBronze = integralBronze + weight
-      if(detector and withinWindow): integralDetector = integralDetector + weight
+        vectorBeforeXRTPolar[1] = 90.0 - vectorBeforeXRTPolar[1] #this is the pitch angle
+        var p = vectorBeforeXRTPolar[1]
+        vectorBeforeXRTPolar[2] = 90.0 - vectorBeforeXRTPolar[2] #this is the yaw angle, floor to roof
+        var ya = vectorBeforeXRTPolar[2]
+        var 
+          transmissionTelescopePitch = (0.0008*p*p*p*p + 1e-04*p*p*p - 0.4489*p*p - 0.3116*p + 96.787) / 100.0
+          transmissionTelescopeYaw = (-0.0316*ya*ya + 0.0421*ya + 99.771) / 100.0
+          probConversionMagnet = 0.025 * 9.0 * 1e-24 * (1 / (1.44 * 1.2398)) * (1 / (1.44 * 1.2398)) * (pathCB * 1e-3) * (pathCB * 1e-3)
+          transmissionMagnet = cos(ya) * probConversionMagnet#1.0 # this is the transformation probability of an axion into a photon, if an axion flying straight through the magnet had one of 100%, angular dependency of the primakoff effect
+          transmissionTelescopeEnergy : float
         
-      #if(withinWindow){  image->Fill(pointDetectorWindow[0],pointDetectorWindow[1],weight)
+        if energyAx < 2.0:
+          transmissionTelescopeEnergy = (-0.013086145 * energyAx * energyAx * energyAx * energyAx + 0.250552655 * energyAx * energyAx * energyAx - 1.541426299 * energyAx * energyAx + 2.064933639 * energyAx + 7.625254445) / 14.38338 #total eff area of telescope = 1438.338mm² = 14.38338cm²
+        elif energyAx >= 2.0 and energyAx < 8.0:
+          transmissionTelescopeEnergy = (0.0084904 * energyAx * energyAx * energyAx * energyAx * energyAx * energyAx - 0.199553 * energyAx * energyAx * energyAx * energyAx * energyAx + 1.75302 * energyAx * energyAx * energyAx * energyAx - 7.05939 * energyAx * energyAx * energyAx + 12.6706 * energyAx * energyAx - 9.23947 * energyAx + 9.96953) / 14.38338
+        else:
+          transmissionTelescopeEnergy = 0.0
+          
+
+        if transmissionTelescopeEnergy < 0.0 :
+          transmissionTelescopeEnergy = 0.0
+        
+
+        
+        var weight = (fluxfraction* transmissionTelescopeEnergy* transmissionTelescopePitch*transmissionTelescopeYaw* transmissionMagnet * (pathCB * pathCB / RAYTRACER_LENGTH_COLDBORE_9T / RAYTRACER_LENGTH_COLDBORE_9T) ) #transmission probabilities times time the axion spend in the magnet
+        #var weight = ( telescopeTransmission(angle,xrtTransmissionAt10Arcmin) * (pathCB * pathCB / RAYTRACER_LENGTH_COLDBORE_9T / RAYTRACER_LENGTH_COLDBORE_9T) )
+        integralTotal = integralTotal + weight
+        ###detector COS has (0/0) at the bottom left corner of the chip
+
+        pointDetectorWindow[0] = pointDetectorWindow[0] + CHIPREGIONS_CHIP_CENTER_X
+        pointDetectorWindow[1] = pointDetectorWindow[1] + CHIPREGIONS_CHIP_CENTER_Y
+        #echo pointDetectorWindow
+        pointdataX.add(pointDetectorWindow[0])
+        pointdataY.add(pointDetectorWindow[1])
+        weights.add(weight)
+        ### fluxfraction after telescope
+        #if (radiusInSun/radiusSun) < 0.001 and (radiusInSun/radiusSun) > 0.000:
+          #fluxfractionen.add(weight)
+          #energies.add(energyAx)
+        #echo pointDetectorWindow
+
+        var 
+          gold = ( (pointDetectorWindow[0] >= CHIPREGIONS_GOLD_X_MIN) and (pointDetectorWindow[0] <= CHIPREGIONS_GOLD_X_MAX) and (pointDetectorWindow[1] >= CHIPREGIONS_GOLD_Y_MIN) and (pointDetectorWindow[1] <= CHIPREGIONS_GOLD_Y_MAX) )
+          r_xy = sqrt( ( (pointDetectorWindow[0] - CHIPREGIONS_CHIP_CENTER_X) * (pointDetectorWindow[0] - CHIPREGIONS_CHIP_CENTER_X) ) + ( (pointDetectorWindow[1] - CHIPREGIONS_CHIP_CENTER_Y) * (pointDetectorWindow[1] - CHIPREGIONS_CHIP_CENTER_Y) ) )
+          silver = (r_xy <= CHIPREGIONS_SILVER_RADIUS_MAX ) and not gold
+          bronze = not gold and not silver and ( r_xy <= CHIPREGIONS_BRONZE_RADIUS_MAX )
+          withinWindow = r_xy < detectorWindowAperture/2
+          detector = ( (pointDetectorWindow[0] >= CHIPREGIONS_CHIP_X_MIN) and (pointDetectorWindow[0] <= CHIPREGIONS_CHIP_X_MAX) and (pointDetectorWindow[1] >= CHIPREGIONS_CHIP_Y_MIN) and (pointDetectorWindow[1] <= CHIPREGIONS_CHIP_Y_MAX) )
+
+        if(gold and withinWindow): integralGold = integralGold + weight
+        if(silver and withinWindow): integralSilver = integralSilver + weight
+        if(bronze and withinWindow): integralBronze = integralBronze + weight
+        if(detector and withinWindow): integralDetector = integralDetector + weight
+        
+    
+    #fluxfractionen.add(fluxfractionAll)
+    #energies.add(energyAx)
+        
   #echo pointdataX[0]
   # get the heatmaps out of the sequences of data X and data Y, first for the amount of data in one pixel
   # compared to the overall amount and then the data in one pixel compared to the maximal amount of data in any pixel  
@@ -788,8 +926,9 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   echo "Probability of it originating from an axion if a photon hits at x = 5,3mm and y = 8,4mm (in this model):"
   echo (heatmaptable3[53][84]) * 100.0  #echo heatmaptable3[x][y]
 
-  #echo drawfancydiagrams("AxionModelFluxfraction", heatmaptable1, 3500) 
-  echo drawfancydiagrams("AxionModelProbability", heatmaptable3, 3500) #Probabilities, that a photon, that hits a certain pixel could originate from an Axion, if the highest is 100%
+  echo getMaxVal(heatmaptable2, 3500)
+  #echo drawfancydiagrams("AxionModelFluxfraction", heatmaptable2, 3500) 
+  #echo drawfancydiagrams("AxionModelProbability", heatmaptable3, 3500) #Probabilities, that a photon, that hits a certain pixel could originate from an Axion, if the highest is 100%
   echo integralNormalisation # number of hits before the setup
   echo pointdataX.len # number of hits after the setup
 
@@ -831,10 +970,13 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   for i in 0 ..< pixvalsY.len:
     weightData2.add(1.0)
 
-  var heatmaptable7 = prepareheatmap(1400,1400,0.0,1400.0,0.0,1400.0,pixvalsX,pixvalsY,weightData2,1.0)
+  #var heatmaptable7 = prepareheatmap(1400,1400,0.0,1400.0,0.0,1400.0,pixvalsX,pixvalsY,weightData2,1.0)
   #echo drawfancydiagrams("Mirrors", heatmaptable7, 1400)
   #echo drawfancydiagrams("Mirrors",circleTotal , 1400)
+  
 
+  echo drawgraph("Energy142", radii, fluxfractionrad, "radius")
+  #echo drawgraph("Radius0%", energies, fluxfractionen, "energy")
   
 
   #### now let's get the fluxfraction of the gold region by getting the weight of each event (probability of transition, dependend on the XRay-telescope transmission and the lenth of the 
