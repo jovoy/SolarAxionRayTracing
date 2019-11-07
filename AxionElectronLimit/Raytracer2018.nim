@@ -26,20 +26,19 @@ import chroma
 # VARIABLES from rayTracer.h
 const 
   RAYTRACER_DISTANCE_SUN_EARTH =  1.5e14  #mm #ok
-  RAYTRACER_RADIUS_SUN = 6.9e11 #mm #ok
-  RAYTRACER_RADIUS_COLDBORE = 21.5 #mm #ok
+  radiusSun = 6.9e11 #mm #ok
+  radiusCB = 21.5 #mm #ok
   RAYTRACER_LENGTH_COLDBORE = 9756.0 #mm half B field to end of CB #ok
   RAYTRACER_LENGTH_COLDBORE_9T = 9260.0 #mm half B field to half B field #ok
   RAYTRACER_LENGTH_PIPE_CB_VT3 = 2571.5 #mm should stay the same #from beam pipe drawings #ok
-  RAYTRACER_RADIUS_PIPE_CB_VT3 = 39.64 #30.0 #mm smallest aperture between end of CB and VT4 # 43 mm but only 85% of area: 39,64mm #ok
+  radiusPipeCBVT3 = 39.64 #30.0 #mm smallest aperture between end of CB and VT4 # 43 mm but only 85% of area: 39,64mm #ok
   RAYTRACER_LENGTH_PIPE_VT3_XRT = 150 #mm from drawings #198.2 #mm from XRT drawing #ok
-  RAYTRACER_RADIUS_PIPE_VT3_XRT = 35.0#25.0 #mm from drawing #35.0 #m irrelevant, large enough to not loose anything # needs to be mm #ok
+  radiusPipeVT3XRT = 35.0#25.0 #mm from drawing #35.0 #m irrelevant, large enough to not loose anything # needs to be mm #ok
   RAYTRACER_FOCAL_LENGTH_XRT = 1485.0 #mm is from llnl XRT https://iopscience.iop.org/article/10.1088/1475-7516/2015/12/008/pdf #1600.0 #mm was the Telescope of 2014 (MPE XRT) also: Aperatur changed #ok
-  RAYTRACER_DISTANCE_AXIS_CB_AXIS_XRT = 0.0#62.1#58.44 #mm from XRT drawing #there is no difference in the axis even though the picture gets transfered 62,1mm down, but in the detector center
+  distanceCBAxisXRTAxis = 0.0#62.1#58.44 #mm from XRT drawing #there is no difference in the axis even though the picture gets transfered 62,1mm down, but in the detector center
   RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW = 20.0 #mm #no change, because don't know # is actually -10.0 mm
   numberOfPointsEndOfCB = 200
   numberOfPointsSun = 20000
-
 ## Chipregions#####
 
 const 
@@ -255,6 +254,260 @@ proc getRandomEnergyFromSolarModel(emRateVecSums : seq[float], vectorInSun: Vec3
 
   result = energy
 
+## The following are some functions to determine inetersection of the rays with the geometry (pipes, magnet, mirrors) of the setup ##
+
+proc lineIntersectsCircle(point_1 : Vec3, point_2 : Vec3, center : Vec3, radius : float64, intersect : Vec3) : bool = # probably still some error (lambda1 -> infinity)
+
+  ## Now a function to see if the linesfrom the sun will actually intersect the circle area from the magnet entrance (called coldbore) etc. ##
+
+  var vector = vec3(0.0)
+  vector = point_2 - point_1
+  var lambda1 = (center[2] - point_1[2]) / vector[2]
+  var intersect = vec3(0.0)
+  intersect = point_1 + lambda1 * vector
+  var r_xy_intersect = sqrt(intersect[0] * intersect[0] + intersect[1] * intersect[1])
+  if r_xy_intersect < radius: 
+    return true
+  else:  
+    return false
+
+ 
+
+proc lineIntersectsCylinderOnce(point_1 : Vec3, point_2 : Vec3, centerBegin : Vec3, centerEnd : Vec3, radius : float64, intersect : Vec3) : bool =
+
+  ## Also a function to know if the line intersected at least the whole magnet, and then only once, because else the axions would have just flown through ##
+
+  var vector = vec3(0.0)
+  var intersect = vec3(0.0)
+  vector = point_2 - point_1 
+  var lambda_dummy : float64
+  lambda_dummy = ( -1000.0 - point_1[2] ) / vector[2]
+  var dummy = vec3(0.0)
+  dummy = point_1 + lambda_dummy * vector
+  var vector_dummy = vec3(0.0)
+  vector_dummy = point_2 - dummy
+  var factor : float64
+  factor = (vector_dummy[0]*vector_dummy[0] + vector_dummy[1]*vector_dummy[1])
+  var p : float64
+  p = 2.0 * (dummy[0] * vector_dummy[0] + dummy[1]*vector_dummy[1]) / factor
+  var q : float64
+  q = (dummy[0]*dummy[0] + dummy[1]*dummy[1] - radius*radius) / factor
+  var lambda_1 : float64
+  var lambda_2 : float64
+  lambda_1 = -p/2.0 + sqrt( p*p/4.0 - q)
+  lambda_2 = -p/2.0 - sqrt( p*p/4.0 - q)
+  var intersect_1 = vec3(0.0)
+  intersect_1 = dummy + lambda_1 * vector_dummy
+  var intersect_2 = vec3(0.0)
+  intersect_2 = dummy + lambda_2 * vector_dummy
+  var intersect_1_valid : bool
+  var intersect_2_valid : bool
+  intersect_1_valid = (intersect_1[2] > centerBegin[2] ) and (intersect_1[2] < centerEnd[2])
+  intersect_2_valid = (intersect_2[2] > centerBegin[2] ) and (intersect_2[2] < centerEnd[2])
+    if ( (intersect_1_valid and intersect_2_valid) or (not intersect_1_valid and not intersect_2_valid) ):
+    return false
+  elif (intersect_1_valid):
+    intersect = intersect_1
+    return true
+  else:
+    intersect = intersect_2
+    return true
+
+proc getIntersectLineIntersectsCylinderOnce(point_1 : Vec3, point_2 : Vec3, centerBegin : Vec3, centerEnd : Vec3, radius : float64, intersect : Vec3) : Vec3 =
+  var vector = vec3(0.0)
+  var intersect = vec3(0.0)
+  vector = point_2 - point_1 
+  var lambda_dummy : float64
+  lambda_dummy = ( -1000.0 - point_1[2] ) / vector[2]
+  var dummy = vec3(0.0)
+  dummy = point_1 + lambda_dummy * vector
+  var vector_dummy = vec3(0.0)
+  vector_dummy = point_2 - dummy
+  var factor : float64
+  factor = (vector_dummy[0]*vector_dummy[0] + vector_dummy[1]*vector_dummy[1])
+  var p : float64
+  p = 2.0 * (dummy[0] * vector_dummy[0] + dummy[1]*vector_dummy[1]) / factor
+  var q : float64
+  q = (dummy[0]*dummy[0] + dummy[1]*dummy[1] - radius*radius) / factor
+  var lambda_1 : float64
+  var lambda_2 : float64
+  lambda_1 = -p/2.0 + sqrt( p*p/4.0 - q)
+  lambda_2 = -p/2.0 - sqrt( p*p/4.0 - q)
+  var intersect_1 = vec3(0.0)
+  intersect_1 = dummy + lambda_1 * vector_dummy
+  var intersect_2 = vec3(0.0)
+  intersect_2 = dummy + lambda_2 * vector_dummy
+  var intersect_1_valid : bool
+  var intersect_2_valid : bool
+  intersect_1_valid = (intersect_1[2] > centerBegin[2] ) and (intersect_1[2] < centerEnd[2])
+  intersect_2_valid = (intersect_2[2] > centerBegin[2] ) and (intersect_2[2] < centerEnd[2])
+  if (intersect_1_valid):
+    intersect = intersect_1
+  else:
+    intersect = intersect_2
+  result = intersect
+
+  
+  
+proc circleEdges( theR1 : seq[float]): seq[float] =
+
+  ## A function to create the coordinates of the mirrors of the telescope (they're made of glass) to substract from the overall picture, because Xrays in that range don't pass through glass ##
+
+  const 
+    sizeViewfield = 48.0 #mm
+    d = 83.0 #mm
+      
+  var 
+    circleEdge = vec3(0.0)
+    circleEdges = newSeqWith(1401, newSeq[float64](1401))
+
+  for R1 in theR1:
+    for phi in 16500 ..< 19500:
+      for dgl in 0 .. 20:
+        circleEdge[0]= (R1 + (float(dgl)*0.01)) * sin(degToRad(float(phi)*0.01)) 
+        circleEdge[1]= (R1 + (float(dgl)*0.01)) * cos(degToRad(float(phi)*0.01)) + d
+        var coord_X = floor(circleEdge[0] / (sizeViewfield/1400.0)) + 700
+        var coord_Y = floor(circleEdge[1] / (sizeViewfield/1400.0)) + 700
+        if coord_X >= 0.0:
+          if coord_Y >= 0.0:
+            if coord_X <= 1400.0:
+              if coord_Y <= 1400.0:
+                circleEdges[int(coord_X)][int(coord_Y)] = circleEdges[int(coord_X)][int(coord_Y)] + 1
+
+  result = circleEdges 
+
+proc getPixelValue(intersects : Vec3): Vec3 =
+  const sizeViewfield = 48.0 #mm
+  var intersectsPix = vec3(0.0)
+  intersectsPix[0] = floor(intersects[0] / (sizeViewfield/1400.0)) + 700
+  intersectsPix[1] = floor(intersects[1] / (sizeViewfield/1400.0)) + 700
+  result = intersectsPix
+    
+
+proc lineIntersectsCircleEdge(circleEdges : seq[seq[float64]]  ,  intersectsPix: Vec3): bool =
+  var 
+    coord_X = int(intersectsPix[0])
+    coord_Y = int(intersectsPix[1])
+  if circleEdges[coord_X][coord_Y] == 0.0 : 
+    return false
+  else: return true
+
+proc lineIntersectsArea( R1 : float64, prevR1 : float64, intersect : Vec3): bool =
+  const 
+    d = 83.0 #mm
+  var r_xy_intersect = sqrt(intersect[0] * intersect[0] + (intersect[1]+d) * (intersect[1]+d))
+  if r_xy_intersect <= R1 and r_xy_intersect >= (prevR1) :
+    return true
+  else: 
+    return false
+
+## Some functions to include files from outside like the run file and the emissionrate/energy files ##
+
+proc getXandY( h5file : string , dsetgrp1 :string, numFirstRun : int, numLastRun : int, chip : string, xOrY : string) : seq[float] =
+  
+  ## get the x and y values from the run-file to compare them to our model ##
+    
+  var
+    grp_name : string
+    run_name : string
+    valuesX : seq[float]
+    valuesY : seq[float]
+  for i in 0 .. (numLastRun-numFirstRun):
+    run_name = "/run_" & $(numFirstRun+i)
+    grp_name = dsetgrp1 & run_name & "/" & chip#& "/" & $(grp) & "/" & chip# 
+
+    # if the run file with the run number does not exist, it is thrown away in this next step
+    try:  
+      withH5( h5file, "r"):
+              # open h5 file using template
+        var
+          energy = h5f[(grp_name / "energyFromCharge"), float64]
+          centerX = h5f[(grp_name / "centerX"), float64]
+          centerY = h5f[(grp_name / "centerY"), float64]
+
+        for i in 0 .. energy.high:
+          if centerX[i] < 14.0:
+            valuesX.add(centerX[i])
+            valuesY.add(centerY[i])
+    except :
+      echo "KeyError!"
+      #else: echo @[0.0]
+  if xOrY == "X":
+    result = valuesX
+  elif xOrY == "Y": 
+    result = valuesY
+  else: return @[0.0]
+
+proc getAxionEnergy() : any =
+  var 
+    f = open("energies.txt")
+    line = ""
+    energy : seq[float]
+    energystring : string
+
+  #doAssert f.getPosition()
+  while f.readLine(line): 
+    let energystring = line
+    energy.add(parseFloat(energystring)) 
+    
+  defer: f.close()
+  return energy
+
+proc getfluxfracVec () : any =
+  var 
+    f = open("flux_fractions_with_fB.txt") # with Bose-Einstein distribution of the thermal photon bath
+    line = ""
+    fluxstring : string
+    fluxfractions : seq[float]
+
+  while f.readLine(line): 
+    let fluxstring = line
+    fluxfractions.add(parseFloat(fluxstring))
+    
+  defer: f.close()
+  return fluxfractions
+
+proc getfluxfrac (radius : float, energyVec: seq[float], iEnergy : int) : int = 
+  var
+    linenum : int
+    linenumfloat : float
+    posfluxfraction : int
+    radiusPerc : float
+
+  radiusPerc = radius / radiusSun
+  linenumfloat = ((radiusPerc - 0.0015) / 0.0005) + 1.0
+    
+  if round(linenumfloat, 1) < (floor(linenumfloat) + 0.5) :
+    linenum = int(floor(linenumfloat))
+  else:
+    linenum = int(ceil(linenumfloat))
+    
+  if linenum > 0 and linenum < 398:
+    posfluxfraction = (linenum - 1 ) * (energyVec.len ) + (iEnergy )
+  elif linenum > 397:
+    posfluxfraction = (linenum - 2 ) * (energyVec.len ) + (iEnergy )
+  elif linenum == 0: 
+    posfluxfraction = (linenum ) * (energyVec.len ) + (iEnergy )
+  elif linenum < 0:
+    posfluxfraction = (linenum + 2) * (energyVec.len ) + (iEnergy )
+
+  return posfluxfraction#linenum##posfluxfraction#
+    
+proc getEmRateVec() : seq[float] =
+  var 
+    f = open("emission_rates_Hz.txt")
+    line = ""
+    emissionstring : string
+    emissionrates : seq[float]
+  
+  while f.readLine(line): 
+    let emissionstring = line
+    emissionrates.add(parseFloat(emissionstring))
+      
+  defer: f.close()
+  return emissionrates
+
+
 ## Now some functions for the graphs later, that store the data in heatmaps and then give them out with plotly ##
 
 
@@ -364,7 +617,11 @@ proc drawgraph(diagramtitle : string, data_X : seq, data_Y: seq, energyOrRadius:
   let p = Plot[float](layout: layout, traces: @[d])
   echo p.save()
   p.show()
-                            
+
+
+############done with the functions, let's use them############        
+
+
 proc calculateFluxFractions(axionRadiationCharacteristic: string, 
   detectorWindowAperture :float64 = 14.0,
   sunMisalignmentH :float64 = 0.0, #given in arcmin(?)
@@ -390,7 +647,6 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   
   centerSun = centerSun + misalignmentSun
 
-  var radiusSun = RAYTRACER_RADIUS_SUN
   var radiusSunTwentyPecent = radiusSun * 0.2
 
   var centerEntranceCB = vec3(0.0)
@@ -408,24 +664,15 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   centerExitCB[1] = 0
   centerExitCB[2] = RAYTRACER_LENGTH_COLDBORE
 
-  var radiusCB = RAYTRACER_RADIUS_COLDBORE
-
   var centerExitPipeCBVT3 = vec3(0.0)
   centerExitPipeCBVT3[0] = 0
   centerExitPipeCBVT3[1] = 0
   centerExitPipeCBVT3[2] = RAYTRACER_LENGTH_COLDBORE + RAYTRACER_LENGTH_PIPE_CB_VT3
 
-  var radiusPipeCBVT3 = RAYTRACER_RADIUS_PIPE_CB_VT3
-
   var centerExitPipeVT3XRT = vec3(0.0)
   centerExitPipeVT3XRT[0] = 0
   centerExitPipeVT3XRT[1] = 0
   centerExitPipeVT3XRT[2] = RAYTRACER_LENGTH_COLDBORE + RAYTRACER_LENGTH_PIPE_CB_VT3 + RAYTRACER_LENGTH_PIPE_VT3_XRT
-
-  var 
-    radiusPipeVT3XRT = RAYTRACER_RADIUS_PIPE_VT3_XRT
-    distanceCBAxisXRTAxis = RAYTRACER_DISTANCE_AXIS_CB_AXIS_XRT
-
 
   var
     integralNormalisation = 0.0
@@ -439,260 +686,6 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
 
 
 
-
-  proc lineIntersectsCircle(point_1 : Vec3, point_2 : Vec3, center : Vec3, radius : float64, intersect : Vec3) : bool = # probably still some error (lambda1 -> infinity)
-
-    ## Now a function to see if the linesfrom the sun will actually intersect the circle area from the magnet entrance (called coldbore) etc. ##
-
-    var vector = vec3(0.0)
-    vector = point_2 - point_1
-    var lambda1 = (center[2] - point_1[2]) / vector[2]
-    var intersect = vec3(0.0)
-    intersect = point_1 + lambda1 * vector
-    var r_xy_intersect = sqrt(intersect[0] * intersect[0] + intersect[1] * intersect[1])
-    if r_xy_intersect < radius: 
-      return true
-    else:  
-      return false
-
- 
-
-  proc lineIntersectsCylinderOnce(point_1 : Vec3, point_2 : Vec3, centerBegin : Vec3, centerEnd : Vec3, radius : float64, intersect : Vec3) : bool =
-
-    ## Also a function to know if the line intersected at least the whole magnet, and then only once, because else the axions would have just flown through ##
-
-    var vector = vec3(0.0)
-    var intersect = vec3(0.0)
-    vector = point_2 - point_1 
-    var lambda_dummy : float64
-    lambda_dummy = ( -1000.0 - point_1[2] ) / vector[2]
-    var dummy = vec3(0.0)
-    dummy = point_1 + lambda_dummy * vector
-    var vector_dummy = vec3(0.0)
-    vector_dummy = point_2 - dummy
-    var factor : float64
-    factor = (vector_dummy[0]*vector_dummy[0] + vector_dummy[1]*vector_dummy[1])
-    var p : float64
-    p = 2.0 * (dummy[0] * vector_dummy[0] + dummy[1]*vector_dummy[1]) / factor
-    var q : float64
-    q = (dummy[0]*dummy[0] + dummy[1]*dummy[1] - radius*radius) / factor
-    var lambda_1 : float64
-    var lambda_2 : float64
-    lambda_1 = -p/2.0 + sqrt( p*p/4.0 - q)
-    lambda_2 = -p/2.0 - sqrt( p*p/4.0 - q)
-    var intersect_1 = vec3(0.0)
-    intersect_1 = dummy + lambda_1 * vector_dummy
-    var intersect_2 = vec3(0.0)
-    intersect_2 = dummy + lambda_2 * vector_dummy
-    var intersect_1_valid : bool
-    var intersect_2_valid : bool
-    intersect_1_valid = (intersect_1[2] > centerBegin[2] ) and (intersect_1[2] < centerEnd[2])
-    intersect_2_valid = (intersect_2[2] > centerBegin[2] ) and (intersect_2[2] < centerEnd[2])
-    if ( (intersect_1_valid and intersect_2_valid) or (not intersect_1_valid and not intersect_2_valid) ):
-      return false
-    elif (intersect_1_valid):
-      intersect = intersect_1
-      return true
-    else:
-      intersect = intersect_2
-      return true
-
-  proc getIntersectLineIntersectsCylinderOnce(point_1 : Vec3, point_2 : Vec3, centerBegin : Vec3, centerEnd : Vec3, radius : float64, intersect : Vec3) : Vec3 =
-    var vector = vec3(0.0)
-    var intersect = vec3(0.0)
-    vector = point_2 - point_1 
-    var lambda_dummy : float64
-    lambda_dummy = ( -1000.0 - point_1[2] ) / vector[2]
-    var dummy = vec3(0.0)
-    dummy = point_1 + lambda_dummy * vector
-    var vector_dummy = vec3(0.0)
-    vector_dummy = point_2 - dummy
-    var factor : float64
-    factor = (vector_dummy[0]*vector_dummy[0] + vector_dummy[1]*vector_dummy[1])
-    var p : float64
-    p = 2.0 * (dummy[0] * vector_dummy[0] + dummy[1]*vector_dummy[1]) / factor
-    var q : float64
-    q = (dummy[0]*dummy[0] + dummy[1]*dummy[1] - radius*radius) / factor
-    var lambda_1 : float64
-    var lambda_2 : float64
-    lambda_1 = -p/2.0 + sqrt( p*p/4.0 - q)
-    lambda_2 = -p/2.0 - sqrt( p*p/4.0 - q)
-    var intersect_1 = vec3(0.0)
-    intersect_1 = dummy + lambda_1 * vector_dummy
-    var intersect_2 = vec3(0.0)
-    intersect_2 = dummy + lambda_2 * vector_dummy
-    var intersect_1_valid : bool
-    var intersect_2_valid : bool
-    intersect_1_valid = (intersect_1[2] > centerBegin[2] ) and (intersect_1[2] < centerEnd[2])
-    intersect_2_valid = (intersect_2[2] > centerBegin[2] ) and (intersect_2[2] < centerEnd[2])
-    if (intersect_1_valid):
-      intersect = intersect_1
-    else:
-      intersect = intersect_2
-    result = intersect
-
-  
-  
-  proc circleEdges( theR1 : seq[float]): seq[float] =
-
-    ##A function to create the coordinates of the mirrors of the telescope (they're made of glass) to substract from the overall picture, because Xrays in that range don't pass through glass ##
-
-    const 
-      sizeViewfield = 48.0 #mm
-      d = 83.0 #mm
-      
-    var 
-      circleEdge = vec3(0.0)
-      circleEdges = newSeqWith(1401, newSeq[float64](1401))
-
-    for R1 in theR1:
-      for phi in 16500 ..< 19500:
-        for dgl in 0 .. 20:
-          circleEdge[0]= (R1 + (float(dgl)*0.01)) * sin(degToRad(float(phi)*0.01)) 
-          circleEdge[1]= (R1 + (float(dgl)*0.01)) * cos(degToRad(float(phi)*0.01)) + d
-          var coord_X = floor(circleEdge[0] / (sizeViewfield/1400.0)) + 700
-          var coord_Y = floor(circleEdge[1] / (sizeViewfield/1400.0)) + 700
-          if coord_X >= 0.0:
-            if coord_Y >= 0.0:
-              if coord_X <= 1400.0:
-                if coord_Y <= 1400.0:
-                    circleEdges[int(coord_X)][int(coord_Y)] = circleEdges[int(coord_X)][int(coord_Y)] + 1
-
-    result = circleEdges 
-
-  proc getPixelValue(intersects : Vec3): Vec3 =
-    const sizeViewfield = 48.0 #mm
-    var intersectsPix = vec3(0.0)
-    intersectsPix[0] = floor(intersects[0] / (sizeViewfield/1400.0)) + 700
-    intersectsPix[1] = floor(intersects[1] / (sizeViewfield/1400.0)) + 700
-    result = intersectsPix
-    
-
-  proc lineIntersectsCircleEdge(circleEdges : seq[seq[float64]]  ,  intersectsPix: Vec3): bool =
-    var 
-      coord_X = int(intersectsPix[0])
-      coord_Y = int(intersectsPix[1])
-    if circleEdges[coord_X][coord_Y] == 0.0 : 
-      return false
-    else: return true
-
-  proc lineIntersectsArea( R1 : float64, prevR1 : float64, intersect : Vec3): bool =
-    const 
-      d = 83.0 #mm
-    var r_xy_intersect = sqrt(intersect[0] * intersect[0] + (intersect[1]+d) * (intersect[1]+d))
-    if r_xy_intersect <= R1 and r_xy_intersect >= (prevR1) :
-      return true
-    else: 
-      return false
-
-  
-
-  proc getXandY( h5file : string , dsetgrp1 :string, numFirstRun : int, numLastRun : int, chip : string, xOrY : string) : seq[float] =
-  
-    ## get the x and y values from the run-file to compare them to our model ##
-    
-    var
-      grp_name : string
-      run_name : string
-      valuesX : seq[float]
-      valuesY : seq[float]
-    for i in 0 .. (numLastRun-numFirstRun):
-      run_name = "/run_" & $(numFirstRun+i)
-      grp_name = dsetgrp1 & run_name & "/" & chip#& "/" & $(grp) & "/" & chip# 
-
-      # if the run file with the run number does not exist, it is thrown away in this next step
-      try:  
-        withH5( h5file, "r"):
-              # open h5 file using template
-          var
-            energy = h5f[(grp_name / "energyFromCharge"), float64]
-            centerX = h5f[(grp_name / "centerX"), float64]
-            centerY = h5f[(grp_name / "centerY"), float64]
-
-          for i in 0 .. energy.high:
-            if centerX[i] < 14.0:
-              valuesX.add(centerX[i])
-              valuesY.add(centerY[i])
-      except :
-        echo "KeyError!"
-        #else: echo @[0.0]
-    if xOrY == "X":
-      result = valuesX
-    elif xOrY == "Y": 
-      result = valuesY
-    else: return @[0.0]
-
-  proc getAxionEnergy() : any =
-    var 
-      f = open("energies.txt")
-      line = ""
-      energy : seq[float]
-      energystring : string
-
-    #doAssert f.getPosition()
-    while f.readLine(line): 
-      let energystring = line
-      energy.add(parseFloat(energystring)) 
-    
-    defer: f.close()
-    return energy
-
-  proc getfluxfracVec () : any =
-    var 
-
-      f = open("flux_fractions_with_fB.txt") # with Bose-Einstein distribution of the thermal photon bath
-      line = ""
-      fluxstring : string
-      fluxfractions : seq[float]
-
-    while f.readLine(line): 
-      let fluxstring = line
-      fluxfractions.add(parseFloat(fluxstring))
-    
-    defer: f.close()
-    return fluxfractions
-
-  proc getfluxfrac (radius : float, energyVec: seq[float], iEnergy : int) : int = 
-    var
-      linenum : int
-      linenumfloat : float
-      posfluxfraction : int
-      radiusPerc : float
-
-    radiusPerc = radius / radiusSun
-    linenumfloat = ((radiusPerc - 0.0015) / 0.0005) + 1.0
-    
-    if round(linenumfloat, 1) < (floor(linenumfloat) + 0.5) :
-      linenum = int(floor(linenumfloat))
-    else:
-      linenum = int(ceil(linenumfloat))
-    
-    if linenum > 0 and linenum < 398:
-      posfluxfraction = (linenum - 1 ) * (energyVec.len ) + (iEnergy )
-    elif linenum > 397:
-      posfluxfraction = (linenum - 2 ) * (energyVec.len ) + (iEnergy )
-    elif linenum == 0: 
-      posfluxfraction = (linenum ) * (energyVec.len ) + (iEnergy )
-    elif linenum < 0:
-      posfluxfraction = (linenum + 2) * (energyVec.len ) + (iEnergy )
-
-    return posfluxfraction#linenum##posfluxfraction#
-    
-  proc getEmRateVec() : seq[float] =
-    var 
-      f = open("emission_rates_Hz.txt")
-      line = ""
-      emissionstring : string
-      emissionrates : seq[float]
-  
-    while f.readLine(line): 
-      let emissionstring = line
-      emissionrates.add(parseFloat(emissionstring))
-      
-    defer: f.close()
-    return emissionrates
-
-  ############done with the functions, let's use them############
   
   var 
     pointdataX : seq[float] 
