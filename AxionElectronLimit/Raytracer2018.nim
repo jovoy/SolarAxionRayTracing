@@ -1,7 +1,9 @@
 import glm/vec
 import math
 import random
-# kompilieren und ausführen: nim cpp -r aEL.nim, nim c -r --threads:on --showAllMismatches:on aEL.nim # nim cpp -r --gc:boehm --verbosity:3 Raytracer2018.nim ##hdfview likelihood_2018_2.h5  
+# kompilieren und ausführen: nim cpp -r aEL.nim, nim c -r --threads:on --showAllMismatches:on aEL.nim # nim cpp -r --gc:boehm --verbosity:3 Raytracer2018.nim ##hdfview likelihood_2018_2.h5
+# NOTE: Nein, einfach mit:
+# nim c -d:danger -d:H5_FUTURE Raytracer2018.nim
 import strutils
 import algorithm
 import plotly
@@ -24,7 +26,7 @@ import chroma
 
 ################################
 # VARIABLES from rayTracer.h
-const 
+const
   RAYTRACER_DISTANCE_SUN_EARTH =  1.5e14  #mm #ok
   radiusSun = 6.9e11 #mm #ok
   radiusCB = 21.5 #mm #ok
@@ -41,7 +43,7 @@ const
   numberOfPointsSun = 20000
 ## Chipregions#####
 
-const 
+const
   CHIPREGIONS_CHIP_X_MIN = 0.0
   CHIPREGIONS_CHIP_X_MAX = 14.0
   CHIPREGIONS_CHIP_Y_MIN = 0.0
@@ -57,30 +59,30 @@ const
 
 ################################
 
-    
-   
+
+
 var fluxFractionGold = 0.0 #dies muss eine globale var sein
 proc getFluxFractionGold(): float64 =
 
   result = fluxFractionGold
 
-var fluxFractionSilver = 0.0 
+var fluxFractionSilver = 0.0
 proc getFluxFractionSilver(): float64 =
   result = fluxFractionSilver
 
-var fluxFractionBronze = 0.0 
+var fluxFractionBronze = 0.0
 proc getFluxFractionBronze(): float64 =
   result = fluxFractionBronze
 
-var fluxFractionDetector = 0.0 
+var fluxFractionDetector = 0.0
 proc getFluxFractionDetector(): float64 =
   result = fluxFractionDetector
 
-var fluxFractionTotal = 0.0 
+var fluxFractionTotal = 0.0
 proc getFluxFractionTotal(): float64 =
   result = fluxFractionTotal
-                        
-                  
+
+
 proc getFluxFraction(chipRegionstring:string): float64 =
   case chipRegionstring
   of "region: gold":
@@ -94,17 +96,17 @@ proc getFluxFraction(chipRegionstring:string): float64 =
   of "region: goldPlusSilverPlusBronze":
     result = getFluxFractionGold() + getFluxFractionSilver() + getFluxFractionBronze()
 
-  else: echo "Error: Unknown chip region!" 
+  else: echo "Error: Unknown chip region!"
 
 ########################################### some functions we're gonna need later#################################################
 
 ## First let's get some functions for a random point on a disk, a biased random point from the solar model and a biased random energy ##
 
 proc getRandomPointOnDisk(center: Vec3, radius:float64) : Vec3 =
-    
+
   ## This function gets a random point on a disk --> in this case this would be the entrance of the coldbore ##
 
-  var 
+  var
     x = 0.0
     y = 0.0
     r = radius * sqrt(random(1.0))  #random(1.0)
@@ -114,7 +116,7 @@ proc getRandomPointOnDisk(center: Vec3, radius:float64) : Vec3 =
   y = sin(degToRad(angle)) * r
   var vector = vec3(x,y,0.0)
   vector = vector + center
-  result = vector 
+  result = vector
 
 proc getEmRatesSums(energyVec: seq[float], emissionRates: seq[float]) : seq[float] =
 
@@ -128,7 +130,7 @@ proc getEmRatesSums(energyVec: seq[float], emissionRates: seq[float]) : seq[floa
   for i in 0..<emissionRates.len:
     sumAllEmRates = sumAllEmRates + emissionRates[i]
   emRateVecSums.add(sumAllEmRates)
-  sumAllEmRates = 0.0
+
   for r in 0..396:
     for iEnergy in 0..<energyVec.len:
       sumEmRatesR = sumEmRatesR + emissionRates[iEnergy + (r * energyVec.len)]
@@ -141,7 +143,7 @@ proc getRandomPointFromSolarModel(center : Vec3, radius : float64 , emRateVecSum
 
   ## This function gives the coordinates of a random point in the sun, biased by the emissionrates (which depend on the radius and the energy) ##
 
-  var 
+  var
     x = 0.0
     y = 0.0
     z = 0.0
@@ -152,11 +154,11 @@ proc getRandomPointFromSolarModel(center : Vec3, radius : float64 , emRateVecSum
 
   for iRad in 1..<emRateVecSums.len:
     if iRad != 1 and i > emRateVecSums[iRad-1] and i <= emRateVecSums[iRad]:
-      r =  (0.0015 + (iRad-1).float * 0.0005) * radius     
+      r =  (0.0015 + (iRad-1).float * 0.0005) * radius
     elif iRad == 1 and i >= 0.0 and i <= emRateVecSums[iRad]:
       r =  (0.0015 + (iRad-1).float * 0.0005) * radius
 
-    
+
   x = cos(degToRad(angle1)) * sin(degToRad(angle2)) * r
   y = sin(degToRad(angle1)) * sin(degToRad(angle2)) * r
   z = cos(degToRad(angle2)) * r
@@ -165,11 +167,11 @@ proc getRandomPointFromSolarModel(center : Vec3, radius : float64 , emRateVecSum
 
   result = vector
 
-proc evenlyDistributedEnergies(energies :  seq[float], emissionRates : seq[float] , enOrEm: string) : seq[float] = 
+proc evenlyDistributedEnergies(energies :  seq[float], emissionRates : seq[float] , enOrEm: string) : seq[float] =
 
   ## get the energies and their emission rates as evenly distributed energies, because from the solar model we get very unevenly distributed energies and their emission rates ##
 
-  var 
+  var
     energyGl : float
     enrgiesGl: seq[float]
     emrateGl : float
@@ -197,14 +199,14 @@ proc evenlyDistributedEnergies(energies :  seq[float], emissionRates : seq[float
             elif (energyGl-energies[iEnergy2]) > 0.0:
               emrateGl = emissionRates[(iEnergy2) + (iRad * energies.len)] * (1- (x / sqrt((energies[iEnergy2]-energies[iEnergy2+1])*(energies[iEnergy2]-energies[iEnergy2+1])))) + emissionRates[(iEnergy2+1) + (iRad * energies.len)] * (1- (d_plus / sqrt((energies[iEnergy2]-energies[iEnergy2+1])*(energies[iEnergy2]-energies[iEnergy2+1]))))
               emratesGl.add(emrateGl)
-                              
+
         elif iEnergy2 == 0:
           d_plus = sqrt((energyGl-energies[iEnergy2+1])*(energyGl-energies[iEnergy2+1]))
           if x < d_plus:
             if (energyGl-energies[iEnergy2]) < 0.0:
               emrateGl = emissionRates[(iEnergy2) + (iRad * energies.len)]  * (1- (x / sqrt((energies[iEnergy2]-0.0)*(energies[iEnergy2]-0.0)))) #+ (emissionRates[(iEnergy2+1) + (iRad * energies.len)] * sqrt((energyGl-energies[iEnergy2+1])*(energyGl-energies[iEnergy2+1])))
               emratesGl.add(emrateGl)
-                
+
             elif(energyGl-energies[iEnergy2]) > 0.0:
               emrateGl = emissionRates[(iEnergy2) + (iRad * energies.len)] * (1- (x / sqrt((energies[iEnergy2]-energies[iEnergy2+1])*(energies[iEnergy2]-energies[iEnergy2+1])))) + emissionRates[(iEnergy2+1) + (iRad * energies.len)] * (1- (d_plus / sqrt((energies[iEnergy2]-energies[iEnergy2+1])*(energies[iEnergy2]-energies[iEnergy2+1]))))
               emratesGl.add(emrateGl)
@@ -234,15 +236,23 @@ proc getRandomEnergyFromSolarModel(emRateVecSums : seq[float], vectorInSun: Vec3
     emRateEnergySum : float
     emRateEnergySumPrev : float
     i : float
+    emRateEnergySumAll : float
 
   var
     indexRad = (r - 0.0015) / 0.0005
-    
+
   if indexRad - 0.5 > floor(indexRad):
     iRad = int(ceil(indexRad))
   else: iRad = int(floor(indexRad))
+
+  for iE in 0..<233:
+    emRateEnergySumAll = emRateEnergySumAll + emissionRates[(iE) + (iRad * 233)]
+  #echo emRateEnergySumAll
+
+
   if iRad != 0:
-    i = random((emRateVecSums[iRad+1] - emRateVecSums[iRad]))
+    #i = random((emRateVecSums[iRad+1] - emRateVecSums[iRad])) # no because this is not with energy Gl
+    i = random(emRateEnergySumAll)
   else:
     i = random(emRateVecSums[iRad+1])
 
@@ -251,6 +261,9 @@ proc getRandomEnergyFromSolarModel(emRateVecSums : seq[float], vectorInSun: Vec3
     emRateEnergySum = emRateEnergySumPrev + emissionRates[(iEnergy) + (iRad * 233)]#energise.len/ radii
     if i > emRateEnergySumPrev and i <= emRateEnergySum:
       energy = energies[iEnergy]
+    #if iEnergy == 232:
+      #echo "sum over all energies 2"
+      #echo emRateEnergySum
 
   result = energy
 
@@ -266,12 +279,12 @@ proc lineIntersectsCircle(point_1 : Vec3, point_2 : Vec3, center : Vec3, radius 
   var intersect = vec3(0.0)
   intersect = point_1 + lambda1 * vector
   var r_xy_intersect = sqrt(intersect[0] * intersect[0] + intersect[1] * intersect[1])
-  if r_xy_intersect < radius: 
+  if r_xy_intersect < radius:
     return true
-  else:  
+  else:
     return false
 
- 
+
 
 proc lineIntersectsCylinderOnce(point_1 : Vec3, point_2 : Vec3, centerBegin : Vec3, centerEnd : Vec3, radius : float64, intersect : Vec3) : bool =
 
@@ -279,7 +292,7 @@ proc lineIntersectsCylinderOnce(point_1 : Vec3, point_2 : Vec3, centerBegin : Ve
 
   var vector = vec3(0.0)
   var intersect = vec3(0.0)
-  vector = point_2 - point_1 
+  vector = point_2 - point_1
   var lambda_dummy : float64
   lambda_dummy = ( -1000.0 - point_1[2] ) / vector[2]
   var dummy = vec3(0.0)
@@ -304,7 +317,7 @@ proc lineIntersectsCylinderOnce(point_1 : Vec3, point_2 : Vec3, centerBegin : Ve
   var intersect_2_valid : bool
   intersect_1_valid = (intersect_1[2] > centerBegin[2] ) and (intersect_1[2] < centerEnd[2])
   intersect_2_valid = (intersect_2[2] > centerBegin[2] ) and (intersect_2[2] < centerEnd[2])
-    if ( (intersect_1_valid and intersect_2_valid) or (not intersect_1_valid and not intersect_2_valid) ):
+  if ( (intersect_1_valid and intersect_2_valid) or (not intersect_1_valid and not intersect_2_valid) ):
     return false
   elif (intersect_1_valid):
     intersect = intersect_1
@@ -316,7 +329,7 @@ proc lineIntersectsCylinderOnce(point_1 : Vec3, point_2 : Vec3, centerBegin : Ve
 proc getIntersectLineIntersectsCylinderOnce(point_1 : Vec3, point_2 : Vec3, centerBegin : Vec3, centerEnd : Vec3, radius : float64, intersect : Vec3) : Vec3 =
   var vector = vec3(0.0)
   var intersect = vec3(0.0)
-  vector = point_2 - point_1 
+  vector = point_2 - point_1
   var lambda_dummy : float64
   lambda_dummy = ( -1000.0 - point_1[2] ) / vector[2]
   var dummy = vec3(0.0)
@@ -347,25 +360,25 @@ proc getIntersectLineIntersectsCylinderOnce(point_1 : Vec3, point_2 : Vec3, cent
     intersect = intersect_2
   result = intersect
 
-  
-  
-proc circleEdges( theR1 : seq[float]): seq[float] =
+
+
+proc circleEdges( theR1 : seq[float]): seq[seq[float]] =
 
   ## A function to create the coordinates of the mirrors of the telescope (they're made of glass) to substract from the overall picture, because Xrays in that range don't pass through glass ##
 
-  const 
+  const
     sizeViewfield = 48.0 #mm
     d = 83.0 #mm
-      
-  var 
+
+  var
     circleEdge = vec3(0.0)
     circleEdges = newSeqWith(1401, newSeq[float64](1401))
 
   for R1 in theR1:
-    for phi in 16500 ..< 19500:
+    for phi in 34500 ..< 37500:
       for dgl in 0 .. 20:
-        circleEdge[0]= (R1 + (float(dgl)*0.01)) * sin(degToRad(float(phi)*0.01)) 
-        circleEdge[1]= (R1 + (float(dgl)*0.01)) * cos(degToRad(float(phi)*0.01)) + d
+        circleEdge[1]= (R1 + (float(dgl)*0.01)) * sin(degToRad(float(phi)*0.01))
+        circleEdge[0]= (R1 + (float(dgl)*0.01)) * cos(degToRad(float(phi)*0.01)) - d
         var coord_X = floor(circleEdge[0] / (sizeViewfield/1400.0)) + 700
         var coord_Y = floor(circleEdge[1] / (sizeViewfield/1400.0)) + 700
         if coord_X >= 0.0:
@@ -374,7 +387,7 @@ proc circleEdges( theR1 : seq[float]): seq[float] =
               if coord_Y <= 1400.0:
                 circleEdges[int(coord_X)][int(coord_Y)] = circleEdges[int(coord_X)][int(coord_Y)] + 1
 
-  result = circleEdges 
+  result = circleEdges
 
 proc getPixelValue(intersects : Vec3): Vec3 =
   const sizeViewfield = 48.0 #mm
@@ -382,92 +395,75 @@ proc getPixelValue(intersects : Vec3): Vec3 =
   intersectsPix[0] = floor(intersects[0] / (sizeViewfield/1400.0)) + 700
   intersectsPix[1] = floor(intersects[1] / (sizeViewfield/1400.0)) + 700
   result = intersectsPix
-    
+
 
 proc lineIntersectsCircleEdge(circleEdges : seq[seq[float64]]  ,  intersectsPix: Vec3): bool =
-  var 
+  var
     coord_X = int(intersectsPix[0])
     coord_Y = int(intersectsPix[1])
-  if circleEdges[coord_X][coord_Y] == 0.0 : 
+  if circleEdges[coord_X][coord_Y] == 0.0 :
     return false
   else: return true
 
 proc lineIntersectsArea( R1 : float64, prevR1 : float64, intersect : Vec3): bool =
-  const 
+  const
     d = 83.0 #mm
-  var r_xy_intersect = sqrt(intersect[0] * intersect[0] + (intersect[1]+d) * (intersect[1]+d))
+  var r_xy_intersect = sqrt(intersect[1] * intersect[1] + (intersect[0]+d) * (intersect[0]+d))
   if r_xy_intersect <= R1 and r_xy_intersect >= (prevR1) :
     return true
-  else: 
+  else:
     return false
 
 ## Some functions to include files from outside like the run file and the emissionrate/energy files ##
 
 proc getXandY( h5file : string , dsetgrp1 :string, numFirstRun : int, numLastRun : int, chip : string, xOrY : string) : seq[float] =
-  
   ## get the x and y values from the run-file to compare them to our model ##
-    
+  echo fileExists(h5file)
+  var h5f = H5file(h5file, "r")
+  for grp in items(h5f, start_path = dsetgrp1):
+    if grp.name / chip in h5f:
+      echo grp
+      #var energy = h5f[(grp.name / chip / "energyFromCharge"), float64]
+      if xOrY == "X":
+        result.add h5f[(grp.name / chip / "centerX"), float64]
+      else:
+        result.add h5f[(grp.name / chip / "centerY"), float64]
+  #if xOrY == "X":
+  #  result = valuesX
+  #elif xOrY == "Y":
+  #  result = valuesY
+  #else: return @[0.0]
+
+proc getAxionEnergy(): seq[float] =
   var
-    grp_name : string
-    run_name : string
-    valuesX : seq[float]
-    valuesY : seq[float]
-  for i in 0 .. (numLastRun-numFirstRun):
-    run_name = "/run_" & $(numFirstRun+i)
-    grp_name = dsetgrp1 & run_name & "/" & chip#& "/" & $(grp) & "/" & chip# 
-
-    # if the run file with the run number does not exist, it is thrown away in this next step
-    try:  
-      withH5( h5file, "r"):
-              # open h5 file using template
-        var
-          energy = h5f[(grp_name / "energyFromCharge"), float64]
-          centerX = h5f[(grp_name / "centerX"), float64]
-          centerY = h5f[(grp_name / "centerY"), float64]
-
-        for i in 0 .. energy.high:
-          if centerX[i] < 14.0:
-            valuesX.add(centerX[i])
-            valuesY.add(centerY[i])
-    except :
-      echo "KeyError!"
-      #else: echo @[0.0]
-  if xOrY == "X":
-    result = valuesX
-  elif xOrY == "Y": 
-    result = valuesY
-  else: return @[0.0]
-
-proc getAxionEnergy() : any =
-  var 
     f = open("energies.txt")
     line = ""
     energy : seq[float]
     energystring : string
 
   #doAssert f.getPosition()
-  while f.readLine(line): 
+  while f.readLine(line):
     let energystring = line
-    energy.add(parseFloat(energystring)) 
-    
+    energy.add(parseFloat(energystring))
+
   defer: f.close()
   return energy
 
-proc getfluxfracVec () : any =
-  var 
+proc getfluxfracVec () : seq[float] =
+  var
     f = open("flux_fractions_with_fB.txt") # with Bose-Einstein distribution of the thermal photon bath
     line = ""
     fluxstring : string
     fluxfractions : seq[float]
 
-  while f.readLine(line): 
+  while f.readLine(line):
     let fluxstring = line
     fluxfractions.add(parseFloat(fluxstring))
-    
+
   defer: f.close()
   return fluxfractions
 
-proc getfluxfrac (radius : float, energyVec: seq[float], iEnergy : int) : int = 
+proc getfluxfrac (radius : float, energyVec: seq[float], iEnergy : int) : int =
   var
     linenum : int
     linenumfloat : float
@@ -476,50 +472,74 @@ proc getfluxfrac (radius : float, energyVec: seq[float], iEnergy : int) : int =
 
   radiusPerc = radius / radiusSun
   linenumfloat = ((radiusPerc - 0.0015) / 0.0005) + 1.0
-    
+
   if round(linenumfloat, 1) < (floor(linenumfloat) + 0.5) :
     linenum = int(floor(linenumfloat))
   else:
     linenum = int(ceil(linenumfloat))
-    
+
   if linenum > 0 and linenum < 398:
     posfluxfraction = (linenum - 1 ) * (energyVec.len ) + (iEnergy )
   elif linenum > 397:
     posfluxfraction = (linenum - 2 ) * (energyVec.len ) + (iEnergy )
-  elif linenum == 0: 
+  elif linenum == 0:
     posfluxfraction = (linenum ) * (energyVec.len ) + (iEnergy )
   elif linenum < 0:
     posfluxfraction = (linenum + 2) * (energyVec.len ) + (iEnergy )
 
   return posfluxfraction#linenum##posfluxfraction#
-    
+
 proc getEmRateVec() : seq[float] =
-  var 
+  var
     f = open("emission_rates_Hz.txt")
     line = ""
     emissionstring : string
     emissionrates : seq[float]
-  
-  while f.readLine(line): 
+
+  while f.readLine(line):
     let emissionstring = line
     emissionrates.add(parseFloat(emissionstring))
-      
+
   defer: f.close()
   return emissionrates
+
+proc findPosXRT(pointXRT : Vec3, pointCB : Vec3, r1 : float, angle : float) : float =
+
+  ##this is to find the position the raz hits the mirror shell of r1. it is after transforming the raz into a czlindrical coordinate szstem, that has the middle and the beginning of the mirror "cylinders" as its origin and is in czlindrical coordinates
+
+  var
+    point = pointCB
+    direc = pointXRT - pointCB
+    s : float
+    term : float
+
+  for i in 0..1000:
+    s = i.float / 100.0
+    term =  (point[0] + s * direc[0]) *  (point[0] + s * direc[0]) + (cos(angle) * (point[1] + s * direc[1]) + sin(angle) * (point[2] + s * direc[2])) *  (cos(angle) * (point[1] + s * direc[1]) + sin(angle) * (point[2] + s * direc[2]))
+    if r1 * r1 < term + 0.01 and r1 * r1 > term - 0.01:
+      result = s
+      echo "what"
+
+  #result = (0.5 * sqrt((- 2.0 * ))) / ( cos(angle) * cos(angle) * direc[1] * direc[1] + 2.0 * cos(angle)
+
+
 
 
 ## Now some functions for the graphs later, that store the data in heatmaps and then give them out with plotly ##
 
 
-proc prepareheatmap( numberofrows : int, numberofcolumns : int, start_x : float, stop_x : float, start_y : float, stop_y : float, data_X :seq, data_Y : seq, weight1 : seq, norm : float64) : any =
-    
+proc prepareheatmap(numberofrows : int, numberofcolumns : int,
+                    start_x : float, stop_x : float, start_y : float,
+                    stop_y : float,
+                    data_X : seq[float], data_Y : seq[float], weight1 : seq[float],
+                    norm : float64): seq[seq[float]] =
   ## This function prepares a heatmap out of given X and Y values with the z value (the number of entries in a certain pixel) as the weight of the event of the X and Y value ##
-    
+
   var stepsize_X = 0.0  # number of colums is the number of entries in the array in the seq and number of rows is the number of arrays in the seq
-  stepsize_X = (stop_x - start_x)/float(numberofrows) 
+  stepsize_X = (stop_x - start_x)/float(numberofrows)
   var stepsize_Y = 0.0
   stepsize_Y = (stop_y - start_y)/float(numberofcolumns)
-  #[ 
+  #[
     |-------|-------|-------|
     |-------|-------|-------|
     |-------|-------|-------|
@@ -534,10 +554,10 @@ proc prepareheatmap( numberofrows : int, numberofcolumns : int, start_x : float,
       if coord_Y >= 0:
         if coord_X <= float(numberofrows):
           if coord_Y <= float(numberofcolumns):
-            heatmaptable[int(coord_X)][int(coord_Y)] = heatmaptable[int(coord_X)][int(coord_Y)] + 1*weight1[i]/norm 
+            heatmaptable[int(coord_Y)][int(coord_X)] = heatmaptable[int(coord_Y)][int(coord_X)] + 1*weight1[i]/norm
   result = heatmaptable
 
-proc getMaxVal(table : any, numberofrows : int) : float =
+proc getMaxVal(table : seq[seq[float]], numberofrows : int) : float =
   var maxVals : seq[float]
   var maxVal : float64
   for i in 0 ..< numberofrows:
@@ -545,7 +565,7 @@ proc getMaxVal(table : any, numberofrows : int) : float =
   maxVal = max(maxVals)
   result = maxVal
 
-proc getLenght(table : any, numberofrows : int) : int =
+proc getLenght(table : seq[seq[float]], numberofrows : int) : int =
   var lengths : seq[float]
   var length : int
   for i in 0 ..< numberofrows:
@@ -553,15 +573,15 @@ proc getLenght(table : any, numberofrows : int) : int =
   length = lengths.len
   result = length
 
-proc drawfancydiagrams(diagramtitle : string, objectstodraw : any, width : int) : float =
-    
+proc drawfancydiagrams(diagramtitle : string, objectstodraw : seq[seq[float]], width : int) : float =
+
   ## this function draws a hdiagram out a given heatmap ##
-    
+
   let
     # The GL heatmap is also supported as HeatMapGL
     d = Trace[float32](mode: PlotMode.Lines, `type`: PlotType.HeatMap)
-    
-  d.colormap = ColorMap.Viridis    
+
+  d.colormap = ColorMap.Viridis
   d.zs = newSeqWith(width, newSeq[float32](width))
   for x in 0 ..< width:
     for y in 0 ..< width:
@@ -569,15 +589,15 @@ proc drawfancydiagrams(diagramtitle : string, objectstodraw : any, width : int) 
         if y < width:
           if x > 0:
             if y > 0:
-              d.zs[x][y] = objectstodraw[x][y] 
+              d.zs[y][x] = objectstodraw[y][x]
 
-  const 
+  const
     y = @[float32(CHIPREGIONS_GOLD_Y_MIN * 3500.0 / 14.0), float32(CHIPREGIONS_GOLD_Y_MIN * 3500.0 / 14.0),float32(CHIPREGIONS_GOLD_Y_MAX * 3500.0 / 14.0),float32(CHIPREGIONS_GOLD_Y_MAX * 3500.0 / 14.0),float32(CHIPREGIONS_GOLD_Y_MIN * 3500.0 / 14.0)]
     x = @[float32(CHIPREGIONS_GOLD_X_MIN * 3500.0 / 14.0),float32(CHIPREGIONS_GOLD_X_MAX * 3500.0 / 14.0),float32(CHIPREGIONS_GOLD_X_MAX * 3500.0 / 14.0), float32(CHIPREGIONS_GOLD_X_MIN * 3500.0 / 14.0), float32(CHIPREGIONS_GOLD_X_MIN * 3500.0 / 14.0)]
   let
-    d4 = Trace[float32](mode: PlotMode.LinesMarkers, `type`: PlotType.ScatterGL, ys: y, xs : x) 
-      
-                     
+    d4 = Trace[float32](mode: PlotMode.LinesMarkers, `type`: PlotType.ScatterGL, ys: y, xs : x)
+
+
   let
     layout = Layout(title: diagramtitle, width: 800, height: 800,
                     xaxis: Axis(title: "x-axis [mm]"),#,  range: (0.0, 14.0)),
@@ -587,7 +607,7 @@ proc drawfancydiagrams(diagramtitle : string, objectstodraw : any, width : int) 
   p.show()
 
 
-proc drawgraph(diagramtitle : string, data_X : seq, data_Y: seq, energyOrRadius: string) : float = 
+proc drawgraph(diagramtitle : string, data_X : seq[float], data_Y: seq[float], energyOrRadius: string) : float =
 
   ## This function draws a graph out of given x and y values ##
 
@@ -601,16 +621,16 @@ proc drawgraph(diagramtitle : string, data_X : seq, data_Y: seq, energyOrRadius:
   #for i in 0..<data_X.len:
     #sizes[i] = (10.0)
     #colors[i] = Color(r: 0.9, g: 0.1, b: 0.1, a: 1.0)#0xFAF0E6)#
-    
+
   let d = Trace[float64](mode: PlotMode.Markers, `type`: PlotType.ScatterGL,
                              xs: data_X, ys: data_Y)
   #d.marker = Marker[float64](size: size, color: color)
-  if energyOrRadius == "energy" :  
+  if energyOrRadius == "energy" :
     layout = Layout(title: diagramtitle, width: 800, height: 800,
                       xaxis: Axis(title: "Energy [keV]"),
                       yaxis: Axis(title: "Fluxfraction [10^20 m^-2 year^-1 keV^-1]"), autosize: false)
 
-  elif energyOrRadius == "radius" :        
+  elif energyOrRadius == "radius" :
     layout = Layout(title: diagramtitle, width: 800, height: 800,
                       xaxis: Axis(title: "Radius [% of the radius of the sun]"),
                       yaxis: Axis(title: "Fluxfraction [10^20 m^-2 year^-1 keV^-1]"), autosize: false)
@@ -619,22 +639,22 @@ proc drawgraph(diagramtitle : string, data_X : seq, data_Y: seq, energyOrRadius:
   p.show()
 
 
-############done with the functions, let's use them############        
+############done with the functions, let's use them############
 
 
-proc calculateFluxFractions(axionRadiationCharacteristic: string, 
+proc calculateFluxFractions(axionRadiationCharacteristic: string,
   detectorWindowAperture :float64 = 14.0,
   sunMisalignmentH :float64 = 0.0, #given in arcmin(?)
-  sunMisalignmentV:float64 = 0.0, 
-  detectorMisalignmentX:float64 = 0.0, 
-  detectorMisalignmentY:float64 = 0.0, 
+  sunMisalignmentV:float64 = 0.0,
+  detectorMisalignmentX:float64 = 0.0,
+  detectorMisalignmentY:float64 = 0.0,
   coldboreBlockedLength:float64 = 0.0) : int =
 
   var misalignmentSun = vec3(0.0) #works, but maybe bad package?
   misalignmentSun[2] = 0
   misalignmentSun[0] = tan(degToRad(sunMisalignmentH / 60)) * RAYTRACER_DISTANCE_SUN_EARTH
   misalignmentSun[1] = tan(degToRad(sunMisalignmentV / 60)) * RAYTRACER_DISTANCE_SUN_EARTH
-  
+
   var misalignmentDetector = vec3(0.0)
   misalignmentDetector[0] = detectorMisalignmentX
   misalignmentDetector[1] = detectorMisalignmentY
@@ -644,7 +664,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   centerSun[0] = 0
   centerSun[1] = 0
   centerSun[2] = RAYTRACER_DISTANCE_SUN_EARTH
-  
+
   centerSun = centerSun + misalignmentSun
 
   var radiusSunTwentyPecent = radiusSun * 0.2
@@ -686,28 +706,29 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
 
 
 
-  
-  var 
-    pointdataX : seq[float] 
+
+  var
+    pointdataX : seq[float]
     pointdataY : seq[float]
-    pointdataXBefore : seq[float] 
+    pointdataXBefore : seq[float]
     pointdataYBefore : seq[float]
-    weights : seq[float]  
-    pixvalsX : seq[float] 
+    weights : seq[float]
+    pixvalsX : seq[float]
     pixvalsY : seq[float]
-  const 
-    allR1 = @[60.7095, 63.006 , 65.606 , 68.305 , 71.105 , 74.011 , 77.027 , 80.157 , 83.405 , 86.775 , 90.272 , 93.902 , 97.668 , 101.576 , 105.632]
+  const
+    allR1 = @[60.7095, 63.006 , 65.606 , 68.305 , 71.105 , 74.011 , 77.027 , 80.157 , 83.405 , 86.775 , 90.272 , 93.902 , 97.668 , 101.576 , 105.632]  ## the radii of the shells
+    allAngles = @[0.0, 0.579, 0.603, 0.628, 0.654, 0.680, 0.708, 0.737, 0.767, 0.798, 0.830, 0.863, 0.898, 0.933, 0.970] ## the angles of the mirror shells coresponding to the radii above
     circleX = circleEdges( allR1)
     circleY = circleEdges( allR1)
     circleTotal = circleEdges( allR1)
     d = 83.0 #mm
-  let 
+  let
     energy = getAxionEnergy()
     fluxfracs = getfluxfracVec()
     emrates = getEmRateVec()
     emratesSums = getEmRatesSums(energy, emrates)
-  
-  var 
+
+  var
     fluxfractionrad : seq[float]
     fluxfractionen : seq[float]
     radii : seq[float]
@@ -717,14 +738,14 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   let
     energiesGl = evenlyDistributedEnergies(energy, emrates ,"energies")
     emratesGl = evenlyDistributedEnergies(energy, emrates ,"emrates")
-  
+
 
   #for iRad in 0..396:
     #var
       #r= 0.0015 + (iRad.float * 0.0005)
-        
+
       #fluxfr = fluxfracs[getfluxfrac(r, energy, iEnergy)]
-      
+
     #fluxfracint = fluxfracint + (fluxfr * r)
     #var vecSun = getRandomPointFromSolarModel(centerSun,radiusSun,emratesSums)
     #radii.add(getRandomEnergyFromSolarModel(emratesSums, vecSun,centerSun, radiusSun,energy, emrates))
@@ -734,9 +755,9 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
 
     #fluxfracints.add(fluxfracint)
     #energies.add(energyAx)
-    
 
-      
+
+
   for iSun in 1..numberOfPointsSun:
     integralNormalisation = integralNormalisation + 1
     var pointInSun = vec3(0.0)
@@ -752,98 +773,113 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     pointExitCBMagneticField = getRandomPointOnDisk(centerExitCBMagneticField, radiusCB)
     var radiusInSun = sqrt(pointInSun[0] * pointInSun[0] + pointInSun[1] * pointInSun[1])
 
-          
+
     var vecSun = getRandomPointFromSolarModel(centerSun,radiusSun,emratesSums)
-    echo getRandomEnergyFromSolarModel(emratesSums, vecSun,centerSun, radiusSun,energiesGl, emratesGl)
+    var energyAx = getRandomEnergyFromSolarModel(emratesSums, vecSun,centerSun, radiusSun,energiesGl, emratesGl)
     var intersect = vec3(0.0)
     var pathCB : float64
     var intersectsEntranceCB : bool
     intersectsEntranceCB = lineIntersectsCircle(pointInSun, pointExitCBMagneticField, centerEntranceCB, radiusCB, intersect)
     var intersectsCB = false
-        
+    #echo energyAx
+
     if (not intersectsEntranceCB):
       intersectsCB = lineIntersectsCylinderOnce(pointInSun,pointExitCBMagneticField,centerEntranceCB,centerExitCBMagneticField,radiusCB,intersect)
-          
+
     if (not intersectsEntranceCB and not intersectsCB): continue
 
     if (not intersectsEntranceCB): #generates problems with the weight because the weight is multiplied with the difference of the leght of the path of the particle and the legth of the coldbore
       intersect = getIntersectLineIntersectsCylinderOnce(pointInSun,pointExitCBMagneticField,centerEntranceCB,centerExitCBMagneticField,radiusCB,intersect)#pointInSun + ((centerEntranceCB[2] - pointInSun[2]) / (pointExitCBMagneticField - pointInSun)[2]) * (pointExitCBMagneticField - pointInSun)
     #if (not intersectsCB):
-      #intersect = pointInSun + ((centerEntranceCB[2] - pointInSun[2]) / (pointExitCBMagneticField - pointInSun)[2]) * (pointExitCBMagneticField - pointInSun) 
+      #intersect = pointInSun + ((centerEntranceCB[2] - pointInSun[2]) / (pointExitCBMagneticField - pointInSun)[2]) * (pointExitCBMagneticField - pointInSun)
     pathCB = pointExitCBMagneticField[2] - intersect[2]
     var pointExitCB = vec3(0.0)
-        
+
     if (not lineIntersectsCircle(pointInSun,pointExitCBMagneticField,centerExitCB,radiusCB,pointExitCB)): continue
-        
+
     pointExitCB = pointInSun + ((centerExitCB[2] - pointInSun[2]) / (pointExitCBMagneticField - pointInSun)[2]) * (pointExitCBMagneticField - pointInSun)
-      
+
     var pointExitPipeCBVT3 =vec3(0.0)
-        
+
     if (not lineIntersectsCircle(pointExitCBMagneticField,pointExitCB,centerExitPipeCBVT3,radiusPipeCBVT3,pointExitPipeCBVT3)) : continue
-        
+
     pointExitPipeCBVT3 = pointExitCBMagneticField + ((centerExitPipeCBVT3[2] - pointExitCBMagneticField[2]) / (pointExitCB - pointExitCBMagneticField)[2]) * (pointExitCB - pointExitCBMagneticField)
     var pointExitPipeVT3XRT = vec3(0.0)#seq[float]
-        
+
     if (not lineIntersectsCircle(pointExitCB,pointExitPipeCBVT3,centerExitPipeVT3XRT,radiusPipeVT3XRT,pointExitPipeVT3XRT)) : continue
 
     pointExitPipeVT3XRT = pointExitCB + ((centerExitPipeVT3XRT[2] - pointExitCB[2]) / (pointExitPipeCBVT3 - pointExitCB)[2]) * (pointExitPipeCBVT3 - pointExitCB)
-        
-    #pointExitPipeVT3XRT = pointInSun - pointExitCBMagneticField 
+
+    #pointExitPipeVT3XRT = pointInSun - pointExitCBMagneticField
     #pointExitPipeVT3XRT = pointExitPipeVT3XRT/ sqrt(pointExitPipeVT3XRT[0]*pointExitPipeVT3XRT[0] + pointExitPipeVT3XRT[1]*pointExitPipeVT3XRT[1] + pointExitPipeVT3XRT[2]*pointExitPipeVT3XRT[2])
     #pointExitPipeVT3XRT = pointExitCBMagneticField + pointExitPipeVT3XRT * (RAYTRACER_LENGTH_COLDBORE + RAYTRACER_LENGTH_PIPE_CB_VT3 + RAYTRACER_LENGTH_PIPE_VT3_XRT)
 
     var vectorBeforeXRT = vec3(0.0)
     vectorBeforeXRT = pointExitPipeVT3XRT - pointExitCB
 
-      
-      
-        
+
+
+
+
+
     ###################von CB (coldbore(pipe in Magnet)) zum XRT (XrayTelescope)#######################
 
     var pointEntranceXRT = vec3(0.0)
     pointEntranceXRT[0] = pointExitPipeVT3XRT[0] #- distanceCBAxisXRTAxis
-    pointEntranceXRT[1] = pointExitPipeVT3XRT[1] 
+    pointEntranceXRT[1] = pointExitPipeVT3XRT[1]
     pointEntranceXRT[2] = pointExitPipeVT3XRT[2]
-         
+
     if (getPixelValue(pointEntranceXRT)[0] > 1400.0 or getPixelValue(pointEntranceXRT)[1] > 1400.0): continue
     if lineIntersectsCircleEdge(circleTotal, getPixelValue(pointEntranceXRT)): continue
-        
+
     #echo getPixelValue(pointEntranceXRT)
     #echo lineIntersectsCircleEdge(circleTotal, getPixelValue(pointEntranceXRT))
     # x and y is interchanged from this point on since it somehow is interchanged in the picture
-    if  pointEntranceXRT[0] <= 1.0 and pointEntranceXRT[0] >= -1.0: continue #there is a 2mm wide graphit block between each glass mirror, to seperate them in the middle of the x-Ray telescope
-      
-    var 
+    if  pointEntranceXRT[1] <= 1.0 and pointEntranceXRT[1] >= -1.0: continue #there is a 2mm wide graphit block between each glass mirror, to seperate them in the middle of the x-Ray telescope
+
+    var
       vectorAfterXRTCircular = vec3(0.0)
-      radius1 = sqrt(pointEntranceXRT[0] * pointEntranceXRT[0] + (pointEntranceXRT[1]+d) * (pointEntranceXRT[1]+d))
-      phi_radius = arctan2(pointEntranceXRT[0],(pointEntranceXRT[1]+d)) #arccos((pointEntranceXRT[1]+d) / radius1)
+      radius1 = sqrt((pointEntranceXRT[0]+d) * (pointEntranceXRT[0]+d) + (pointEntranceXRT[1]) * (pointEntranceXRT[1]))
+      phi_radius = arctan2(-pointEntranceXRT[1],(pointEntranceXRT[0]+d)) #arccos((pointEntranceXRT[1]+d) / radius1)
       alpha = arctan(radius1 / RAYTRACER_FOCAL_LENGTH_XRT)
     vectorAfterXRTCircular[0] = radius1
     vectorAfterXRTCircular[1] = phi_radius
     vectorAfterXRTCircular[2] = alpha
 
-      
+    var prev = 0.0
+    var r1 = 0.0
+    var beta = 0.0 ## in degree
+    for j in 0..<allR1.len:
+      if vectorAfterXRTCircular[0] - allR1[j] > prev and vectorAfterXRTCircular[0] - allR1[j] > 0.0:
+        r1 = allR1[j]
+        beta = allAngles[j]
+    echo r1
+    echo pointExitCB
+    echo pointEntranceXRT
+    echo (pointEntranceXRT-pointExitCB)
+
+    echo findPosXRT(pointExitCB, pointEntranceXRT, r1, beta)
     #for i in 1 .. < allR1.len:
       #echo lineIntersectsArea( (allR1[i] + 0.2), allR1[i], pointEntranceXRT)
       #if lineIntersectsArea( (allR1[i] + 0.2), allR1[i], pointEntranceXRT):continue
-      
 
+    #echo pointEntranceXRT
     var valuesPix = getPixelValue(pointEntranceXRT)
     pointdataXBefore.add(pointEntranceXRT[0])
     pointdataYBefore.add(pointEntranceXRT[1])
     pixvalsX.add(valuesPix[0])
     pixvalsY.add(valuesPix[1])
 
-        ## Old XRT stuff ##
-        #[var 
+    ## Old XRT stuff ##
+        #[var
           angle = (arccos(vectorBeforeXRT[2]/sqrt(vectorBeforeXRT[0]*vectorBeforeXRT[0]+vectorBeforeXRT[1]*vectorBeforeXRT[1]+vectorBeforeXRT[2]*vectorBeforeXRT[2])))  # Here we want to adress theta, the polar angle, which should be the second entrance of the vector
           r_x = pointEntranceXRT[0]
           r_y = pointEntranceXRT[1]
           theta_x = vectorBeforeXRT[0] / vectorBeforeXRT[2]
           theta_y = vectorBeforeXRT[1] / vectorBeforeXRT[2]
-          theta_x_prime = theta_x - ( r_x / RAYTRACER_FOCAL_LENGTH_XRT) 
+          theta_x_prime = theta_x - ( r_x / RAYTRACER_FOCAL_LENGTH_XRT)
           theta_y_prime = theta_y - ( r_y / RAYTRACER_FOCAL_LENGTH_XRT)]#
-       
+
         #[var vectorAfterXRT = vec3(0.0)
         vectorAfterXRT[0] = vectorBeforeXRT[0] #sin(theta_x_prime) * 100.0 # theta_x_prime seemes to be in rad, since sin in c++ also does calculate from rad
         vectorAfterXRT[1] = vectorBeforeXRT[1] #sin(theta_y_prime) * 100.0
@@ -858,17 +894,18 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     pointDetectorWindowCircle[1] = vectorAfterXRTCircular[1]
     pointDetectorWindowCircle[2] = vectorAfterXRTCircular[2]
     var pointDetectorWindow = vec3(0.0)
-    pointDetectorWindow[0] = pointDetectorWindowCircle[0] * sin(pointDetectorWindowCircle[1])
-    pointDetectorWindow[1] = pointDetectorWindowCircle[0] * cos(pointDetectorWindowCircle[1])
+    pointDetectorWindow[1] = pointDetectorWindowCircle[0] * sin(pointDetectorWindowCircle[1])
+    pointDetectorWindow[0] = pointDetectorWindowCircle[0] * cos(pointDetectorWindowCircle[1])
     pointDetectorWindow[2] = 0.0
-      
+
 
         #[var lambda_0 = ( centerDetectorWindow[2] - pointEntranceXRT[2] ) / vectorAfterXRT[2]
-      
+
         pointDetectorWindow = pointEntranceXRT + lambda_0 * vectorAfterXRT
         pointDetectorWindow = pointDetectorWindow - misalignmentDetector]#
-      
-        
+
+    vectorBeforeXRT = - vectorBeforeXRT # because we have to get the angles from the perspective of the XRT
+
     var vectorBeforeXRTPolar = vec3(0.0)  #(r,theta,phi)
     vectorBeforeXRTPolar[0] = sqrt(vectorBeforeXRT[0]*vectorBeforeXRT[0]+vectorBeforeXRT[1]*vectorBeforeXRT[1]+vectorBeforeXRT[2]*vectorBeforeXRT[2])
     vectorBeforeXRTPolar[1] = radToDeg(arccos(vectorBeforeXRT[0]/vectorBeforeXRTPolar[0]))
@@ -878,14 +915,13 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     var p = vectorBeforeXRTPolar[1]
     vectorBeforeXRTPolar[2] = 90.0 - vectorBeforeXRTPolar[2] #this is the yaw angle, floor to roof
     var ya = vectorBeforeXRTPolar[2]
-    var 
+    var
       transmissionTelescopePitch = (0.0008*p*p*p*p + 1e-04*p*p*p - 0.4489*p*p - 0.3116*p + 96.787) / 100.0
       transmissionTelescopeYaw = (-0.0316*ya*ya + 0.0421*ya + 99.771) / 100.0
       probConversionMagnet = 0.025 * 9.0 * 1e-24 * (1 / (1.44 * 1.2398)) * (1 / (1.44 * 1.2398)) * (pathCB * 1e-3) * (pathCB * 1e-3)
       transmissionMagnet = cos(ya) * probConversionMagnet#1.0 # this is the transformation probability of an axion into a photon, if an axion flying straight through the magnet had one of 100%, angular dependency of the primakoff effect
       transmissionTelescopeEnergy : float
-        
-    var energyAx = 2.0
+
 
     if energyAx < 2.0:
       transmissionTelescopeEnergy = (-0.013086145 * energyAx * energyAx * energyAx * energyAx + 0.250552655 * energyAx * energyAx * energyAx - 1.541426299 * energyAx * energyAx + 2.064933639 * energyAx + 7.625254445) / 14.38338 #total eff area of telescope = 1438.338mm² = 14.38338cm²
@@ -893,15 +929,15 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
       transmissionTelescopeEnergy = (0.0084904 * energyAx * energyAx * energyAx * energyAx * energyAx * energyAx - 0.199553 * energyAx * energyAx * energyAx * energyAx * energyAx + 1.75302 * energyAx * energyAx * energyAx * energyAx - 7.05939 * energyAx * energyAx * energyAx + 12.6706 * energyAx * energyAx - 9.23947 * energyAx + 9.96953) / 14.38338
     else:
       transmissionTelescopeEnergy = 0.0
-          
+
 
     if transmissionTelescopeEnergy < 0.0 :
       transmissionTelescopeEnergy = 0.0
-        
+
     var prob = ((43/2) * (43/2) * 3.1415) / (4 * 3.1415 * centersun[2] * centersun[2])
-        
+
     var weight = ( transmissionTelescopeEnergy* transmissionTelescopePitch*transmissionTelescopeYaw* transmissionMagnet * (pathCB * pathCB / RAYTRACER_LENGTH_COLDBORE_9T / RAYTRACER_LENGTH_COLDBORE_9T) ) #* prob # prob too small#transmission probabilities times time the axion spend in the magnet
-    
+
     integralTotal = integralTotal + weight
     ###detector COS has (0/0) at the bottom left corner of the chip
 
@@ -912,8 +948,8 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     pointdataY.add(pointDetectorWindow[1])
     weights.add(weight)
 
-    
-    var 
+
+    var
       gold = ( (pointDetectorWindow[0] >= CHIPREGIONS_GOLD_X_MIN) and (pointDetectorWindow[0] <= CHIPREGIONS_GOLD_X_MAX) and (pointDetectorWindow[1] >= CHIPREGIONS_GOLD_Y_MIN) and (pointDetectorWindow[1] <= CHIPREGIONS_GOLD_Y_MAX) )
       r_xy = sqrt( ( (pointDetectorWindow[0] - CHIPREGIONS_CHIP_CENTER_X) * (pointDetectorWindow[0] - CHIPREGIONS_CHIP_CENTER_X) ) + ( (pointDetectorWindow[1] - CHIPREGIONS_CHIP_CENTER_Y) * (pointDetectorWindow[1] - CHIPREGIONS_CHIP_CENTER_Y) ) )
       silver = (r_xy <= CHIPREGIONS_SILVER_RADIUS_MAX ) and not gold
@@ -925,15 +961,16 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     if(silver and withinWindow): integralSilver = integralSilver + weight
     if(bronze and withinWindow): integralBronze = integralBronze + weight
     if(detector and withinWindow): integralDetector = integralDetector + weight
-        
-    
+
+
     #fluxfractionen.add(fluxfractionAll)
-    #energies.add(energyAx)
+    energies.add(energyAx)
+    fluxfractionen.add(1.0 + (iSun.float * 0.001))
 
 
   ## get the heatmaps out of the sequences of data X and data Y, first for the amount of data in one pixel ##
   ## compared to the overall amount and then the data in one pixel compared to the maximal amount of data in any pixel ##
-  var 
+  var
     beginX = 0.0 #- distanceCBAxisXRTAxis * 0.01
     endX = 14.0 #- distanceCBAxisXRTAxis * 0.01
     beginY = 0.0 #- distanceCBAxisXRTAxis * 0.01
@@ -947,27 +984,32 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   echo (heatmaptable3[53][84]) * 100.0  #echo heatmaptable3[x][y]
 
   echo getMaxVal(heatmaptable2, 3500)
-  #echo drawfancydiagrams("AxionModelFluxfraction", heatmaptable2, 3500) 
+  echo drawfancydiagrams("AxionModelFluxfraction", heatmaptable2, 3500)
   #echo drawfancydiagrams("AxionModelProbability", heatmaptable3, 3500) #Probabilities, that a photon, that hits a certain pixel could originate from an Axion, if the highest is 100%
   echo integralNormalisation # number of hits before the setup
   echo pointdataX.len # number of hits after the setup
 
-  # get the heatmap of the data of a run for comparison 
+  # get the heatmap of the data of a run for comparison
   echo "here"
   echo weights.len
 
 
-  var FILE = "likelihood_2018_2_all.h5"
-  var dataValuesX = getXandY( FILE,"likelihood",240, 306, "chip_3","X")
-  var dataValuesY = getXandY( FILE,"likelihood",240, 306,"chip_3","Y")
-  
+  #let FILE = "likelihood_2018_2_all.h5"
+  let h5file = "likelihood_2018_2.h5"
+  var
+    dataValuesX: seq[float]
+    dataValuesY: seq[float]
+  if fileExists(h5file):
+    dataValuesX = getXandY(h5file,"likelihood",240, 306, "chip_3","X")
+    dataValuesY = getXandY(h5file,"likelihood",240, 306, "chip_3","Y")
+
   var weightData : seq[float]
-  
+
   var weightProb : seq[float]
   echo getLenght(heatmaptable3, 3500)
   #echo dataValuesX.len
   for i in 0 ..< dataValuesX.len:
-    weightData.add(1.0) 
+    weightData.add(1.0)
     var X = int(floor(dataValuesX[i]*100.0))
     var Y = int(floor(dataValuesY[i]*100.0))
     #echo heatmaptable3[X][Y] * 10.0
@@ -976,7 +1018,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   #echo dataValuesX
   #echo dataValuesY
   var heatmaptable4 = prepareheatmap(3500,3500,0.0,14.0,0.0,14.0,dataValuesX,dataValuesY,weightData,1.0)
-  #echo drawfancydiagrams("AxionModelDataRaw", heatmaptable4, 3500) # the normal data of a run of chip 3 
+  #echo drawfancydiagrams("AxionModelDataRaw", heatmaptable4, 3500) # the normal data of a run of chip 3
   var heatmaptable5 = prepareheatmap(3500,3500,0.0,14.0,0.0,14.0,dataValuesX,dataValuesY,weightProb,1.0)
   #echo drawfancydiagrams("AxionModelProbability in %", heatmaptable5, 3500) #the probability distribution of being an axion of the data of a run of chip 3
   #[var weightData1 : seq[float]
@@ -993,21 +1035,21 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   #var heatmaptable7 = prepareheatmap(1400,1400,0.0,1400.0,0.0,1400.0,pixvalsX,pixvalsY,weightData2,1.0)
   #echo drawfancydiagrams("Mirrors", heatmaptable7, 1400)
   #echo drawfancydiagrams("Mirrors",circleTotal , 1400)
-  
+
   ##################################  Graphs  #######################################################
 
   #echo drawgraph("Energy142", radii, fluxfractionrad, "radius")
-  #echo drawgraph("Radius0%", energies, fluxfractionen, "energy")
+  #echo drawgraph("Radius0%", energies, fluxfractionen, "energy") #Biased random energy distribution
   #echo drawgraph("RadiusInt", energies, fluxfracints, "energy")
 
   #echo drawgraph("EmissionsRates",emrates, emratesGl, "energy")
-  echo drawgraph("EmissionsRates",energiesGl, emratesGl, "energy")
+  ##echo drawgraph("EmissionsRates",energiesGl, emratesGl, "energy")
   #echo drawgraph("EmissionsRates",energies, emrates, "energy")
 
-  #### now let's get the fluxfraction of the gold region by getting the weight of each event (probability of transition, dependend on the XRay-telescope transmission and the lenth of the 
+  #### now let's get the fluxfraction of the gold region by getting the weight of each event (probability of transition, dependend on the XRay-telescope transmission and the lenth of the
   # path the particle would have traveled through the magnet) and divide it through the number of all events
 
-  
+
   fluxFractionTotal    = integralTotal    / integralNormalisation
   fluxFractionDetector = integralDetector / integralNormalisation
   fluxFractionBronze   = integralBronze   / integralNormalisation
@@ -1023,9 +1065,9 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
 
 var radiationCharacteristic : string ##axionRadiation::characteristic radiationCharacteristic(axionRadiation::characteristic::sar);
 radiationCharacteristic = "axionRadiation::characteristic::sar"
-var coldboreBlockedLength : float64 
+var coldboreBlockedLength : float64
 coldboreBlockedLength = 0.0
-var detectorWindowAperture : float64 
+var detectorWindowAperture : float64
 detectorWindowAperture = 14.0 #mm
 
 echo calculateFluxFractions(radiationCharacteristic, detectorWindowAperture, 0.0, 0.0, 0.0, 0.0, coldboreBlockedLength) # radiationCharacteristic = "axionRadiation::characteristic::sar"
@@ -1033,7 +1075,7 @@ echo calculateFluxFractions(radiationCharacteristic, detectorWindowAperture, 0.0
 #type
 #    vector3 = ref object of Vec3
 
-## things changed## 
+## things changed##
 
 # weight (telescopetransmission)
 # VT4 -> VT3
