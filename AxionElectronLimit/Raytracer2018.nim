@@ -503,7 +503,7 @@ proc getEmRateVec() : seq[float] =
   defer: f.close()
   return emissionrates
 
-proc findPosXRT(pointXRT : Vec3, pointCB : Vec3, r1 : float, angle : float) : float =
+proc findPosXRT(pointXRT : Vec3, pointCB : Vec3, r1 : float, angledeg : float, za : float, d : float) : float =
 
   ##this is to find the position the raz hits the mirror shell of r1. it is after transforming the raz into a czlindrical coordinate szstem, that has the middle and the beginning of the mirror "cylinders" as its origin and is in czlindrical coordinates
 
@@ -512,17 +512,24 @@ proc findPosXRT(pointXRT : Vec3, pointCB : Vec3, r1 : float, angle : float) : fl
     direc = pointXRT - pointCB
     s : float
     term : float
+    angle = angledeg
+    dZyl = d * cos(angle)
 
-  for i in 0..1000:
-    s = i.float / 100.0
-    term =  (point[0] + s * direc[0]) *  (point[0] + s * direc[0]) + (cos(angle) * (point[1] + s * direc[1]) + sin(angle) * (point[2] + s * direc[2])) *  (cos(angle) * (point[1] + s * direc[1]) + sin(angle) * (point[2] + s * direc[2]))
-    if r1 * r1 < term + 0.01 and r1 * r1 > term - 0.01:
-      result = s
+  for i in 0..3000:
+    s = i.float / 1000.0
+    term =  (point[1] + s * direc[1]) *  (point[1] + s * direc[1]) + ((cos(angle) * (point[0] + s * direc[0]) + sin(angle) * (point[2] + s * direc[2])) + dZyl - sin(angle) * za) *  ((cos(angle) * (point[1] + s * direc[1]) + sin(angle) * (point[2] + s * direc[2])) + dZyl - sin(angle) * za)
+    if r1 * r1 < term + 0.1 and r1 * r1 > term - 0.1:
+      #result = s
       echo "what"
+  #echo sin(angle) * za
+  s = 1.0
+  term =  sqrt((point[1] + s * direc[1]) *  (point[1] + s * direc[1]) + ((cos(angle) * (point[0] + s * direc[0]) + sin(angle) * (point[2] + s * direc[2])) + dZyl - sin(angle) * za) *  ((cos(angle) * (point[0] + s * direc[0]) + sin(angle) * (point[2] + s * direc[2])) + dZyl - sin(angle) * za))
 
+  result = term
+  # pointXRT = (point + s * direc)
   #result = (0.5 * sqrt((- 2.0 * ))) / ( cos(angle) * cos(angle) * direc[1] * direc[1] + 2.0 * cos(angle)
-
-
+  ## sqrt(pointEntranceXRT[1] * pointEntranceXRT[1] + ((cos(beta) * pointEntranceXRT[0] + sin(beta) * pointEntranceXRT[2]) + d - sin(beta) * centerExitPipeVT3XRT[2]) *  ((cos(beta) * pointEntranceXRT[0] + sin(beta) * pointEntranceXRT[2]) + d - sin(beta) * centerExitPipeVT3XRT[2]))
+  #  sqrt(pointEntranceXRT[1] * pointEntranceXRT[1] + ((cos(beta) * pointEntranceXRT[0] + sin(beta) * pointEntranceXRT[2]) + d - sin(beta) * centerExitPipeVT3XRT[2]) *  ((cos(beta) * pointEntranceXRT[0] + sin(beta) * pointEntranceXRT[2]) + d - sin(beta) * centerExitPipeVT3XRT[2]))
 
 
 ## Now some functions for the graphs later, that store the data in heatmaps and then give them out with plotly ##
@@ -721,7 +728,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     circleX = circleEdges( allR1)
     circleY = circleEdges( allR1)
     circleTotal = circleEdges( allR1)
-    d = 83.0 #mm
+    d = 83.0 #mm ## distance between center of colbore at XRT and center of XRT (where the focal point is on the minus x axis)
   let
     energy = getAxionEnergy()
     fluxfracs = getfluxfracVec()
@@ -846,19 +853,40 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     vectorAfterXRTCircular[1] = phi_radius
     vectorAfterXRTCircular[2] = alpha
 
-    var prev = 0.0
+    var dist : seq[float]
     var r1 = 0.0
     var beta = 0.0 ## in degree
+    var r1Zyl = 0.0
+    var radnew = sqrt(pointEntranceXRT[1] * pointEntranceXRT[1] + ((cos(beta) * pointEntranceXRT[0] + sin(beta) * pointEntranceXRT[2]) + d - sin(beta) * centerExitPipeVT3XRT[2]) *  ((cos(beta) * pointEntranceXRT[0] + sin(beta) * pointEntranceXRT[2]) + d - sin(beta) * centerExitPipeVT3XRT[2])) ## the radius in the new coordinate system with the Xraz shells as cylinders and cylindrical coordinates with the middle of the clinders as center
     for j in 0..<allR1.len:
-      if vectorAfterXRTCircular[0] - allR1[j] > prev and vectorAfterXRTCircular[0] - allR1[j] > 0.0:
+      if allR1[j] - vectorAfterXRTCircular[0] > 0.0:
+        dist.add(allR1[j] - vectorAfterXRTCircular[0])
+    for j in 0..<allR1.len:
+      if min(dist) == allR1[j] - vectorAfterXRTCircular[0]:
         r1 = allR1[j]
-        beta = allAngles[j]
-    echo r1
-    echo pointExitCB
-    echo pointEntranceXRT
-    echo (pointEntranceXRT-pointExitCB)
+        beta = degToRad(allAngles[j])
 
-    echo findPosXRT(pointExitCB, pointEntranceXRT, r1, beta)
+    r1Zyl = r1 * cos(beta)
+    echo "now"
+    echo r1
+    #[for k in 1..<allAngles.len:
+      echo (sqrt(pointEntranceXRT[1] * pointEntranceXRT[1] + ((cos(allAngles[k]) * pointEntranceXRT[0] + sin(allAngles[k]) * pointEntranceXRT[2]) + d - sin(allAngles[k]) * centerExitPipeVT3XRT[2]) *  ((cos(allAngles[k]) * pointEntranceXRT[0] + sin(allAngles[k]) * pointEntranceXRT[2]) + d - sin(allAngles[k]) * centerExitPipeVT3XRT[2]))) #]#
+
+    #echo pointExitCB
+    #echo pointEntranceXRT
+    #echo (pointEntranceXRT-pointExitCB)
+    #echo vectorAfterXRTCircular[0]
+    echo radnew
+    if r1Zyl < findPosXRT(pointEntranceXRT, pointExitCB, r1Zyl, beta,  centerExitPipeVT3XRT[2], d):
+
+      echo r1
+      echo r1Zyl
+      echo "point"
+      echo vectorAfterXRTCircular[0]
+    echo vectorAfterXRTCircular[0] * cos(beta)
+    echo "weeeeeeeeeeeeeeeeeeeeeeeeel"
+    echo  sqrt(pointEntranceXRT[1] * pointEntranceXRT[1] + ((cos(beta) * pointEntranceXRT[0] + sin(beta) * pointEntranceXRT[2]) + d * cos(beta) - sin(beta) * centerExitPipeVT3XRT[2]) *  ((cos(beta) * pointEntranceXRT[0] + sin(beta) * pointEntranceXRT[2]) + d * cos(beta) - sin(beta) * centerExitPipeVT3XRT[2]))
+    echo findPosXRT(pointEntranceXRT, pointExitCB, r1Zyl, beta,  centerExitPipeVT3XRT[2], d) ##poinExitPipeVT3 = pointEntranceXRT
     #for i in 1 .. < allR1.len:
       #echo lineIntersectsArea( (allR1[i] + 0.2), allR1[i], pointEntranceXRT)
       #if lineIntersectsArea( (allR1[i] + 0.2), allR1[i], pointEntranceXRT):continue
@@ -984,7 +1012,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   echo (heatmaptable3[53][84]) * 100.0  #echo heatmaptable3[x][y]
 
   echo getMaxVal(heatmaptable2, 3500)
-  echo drawfancydiagrams("AxionModelFluxfraction", heatmaptable2, 3500)
+  #echo drawfancydiagrams("AxionModelFluxfraction", heatmaptable2, 3500)
   #echo drawfancydiagrams("AxionModelProbability", heatmaptable3, 3500) #Probabilities, that a photon, that hits a certain pixel could originate from an Axion, if the highest is 100%
   echo integralNormalisation # number of hits before the setup
   echo pointdataX.len # number of hits after the setup
