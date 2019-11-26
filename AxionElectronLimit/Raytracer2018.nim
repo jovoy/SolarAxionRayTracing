@@ -936,23 +936,23 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     echo radToDeg(beta)
     echo radToDeg(alphaMirror1) ## almost beta: should be correct (in the end its beta + p: very good)
 
-
+    vectorAxis1 = vectorAxis1 / (sqrt((vectorAxis1[0] * vectorAxis1[0] + vectorAxis1[1] * vectorAxis1[1] + vectorAxis1[2] * vectorAxis1[2])))
+    vectorMirror1ZylKartRight = vectorMirror1ZylKartRight / (sqrt((vectorMirror1ZylKartRight[0] * vectorMirror1ZylKartRight[0] + vectorMirror1ZylKartRight[1] * vectorMirror1ZylKartRight[1] + vectorMirror1ZylKartRight[2] * vectorMirror1ZylKartRight[2])))
     var vectorAfterMirror1 = vec3(0.0)
-    vectorAfterMirror1[0] = vectorMirror1ZylKartRight[0] * cos(2.0 * alphaMirror1) - (vectorMirror1ZylKartRight[1] * vectorAxis1[2] - vectorMirror1ZylKartRight[2] * vectorAxis1[1]) * sin( 2.0 * alphaMirror1)
+    vectorAfterMirror1[0] =  vectorMirror1ZylKartRight[0] * cos(2.0 * alphaMirror1) - (vectorMirror1ZylKartRight[1] * vectorAxis1[2] - vectorMirror1ZylKartRight[2] * vectorAxis1[1]) * sin( 2.0 * alphaMirror1)
     vectorAfterMirror1[1] = vectorMirror1ZylKartRight[1] * cos(2.0 * alphaMirror1) - (vectorMirror1ZylKartRight[2] * vectorAxis1[0] - vectorMirror1ZylKartRight[0] * vectorAxis1[2]) * sin( 2.0 * alphaMirror1)
     vectorAfterMirror1[2] = vectorMirror1ZylKartRight[2] * cos(2.0 * alphaMirror1) - (vectorMirror1ZylKartRight[0] * vectorAxis1[1] - vectorMirror1ZylKartRight[1] * vectorAxis1[0]) * sin( 2.0 * alphaMirror1)
     echo "veeeeeeeeeeeeeecs"
     echo vectorAxis1 / (sqrt((vectorAxis1[0] * vectorAxis1[0] + vectorAxis1[1] * vectorAxis1[1] + vectorAxis1[2] * vectorAxis1[2])))
     echo vectorMirror1ZylKartRight / (sqrt((vectorMirror1ZylKartRight[0] * vectorMirror1ZylKartRight[0] + vectorMirror1ZylKartRight[1] * vectorMirror1ZylKartRight[1] + vectorMirror1ZylKartRight[2] * vectorMirror1ZylKartRight[2])))
     echo vectorAfterMirror1 / (sqrt((vectorAfterMirror1[0] * vectorAfterMirror1[0] + vectorAfterMirror1[1] * vectorAfterMirror1[1] + vectorAfterMirror1[2] * vectorAfterMirror1[2])))
-    echo (vectorMirror1ZylKartRight[1] * vectorAxis1[2] - vectorMirror1ZylKartRight[2] * vectorAxis1[1]) * sin(2.0 * alphaMirror1)
-    echo (vectorMirror1ZylKartRight[2] * vectorAxis1[0] - vectorMirror1ZylKartRight[0] * vectorAxis1[2]) * sin(2.0 * alphaMirror1)
-    echo (vectorMirror1ZylKartRight[0] * vectorAxis1[1] - vectorMirror1ZylKartRight[1] * vectorAxis1[0]) * sin(2.0 * alphaMirror1)
+    #echo (vectorMirror1ZylKartRight[1] * vectorAxis1[2] - vectorMirror1ZylKartRight[2] * vectorAxis1[1]) * sin(2.0 * alphaMirror1)
+    #echo (vectorMirror1ZylKartRight[2] * vectorAxis1[0] - vectorMirror1ZylKartRight[0] * vectorAxis1[2]) * sin(2.0 * alphaMirror1)
+    #echo (vectorMirror1ZylKartRight[0] * vectorAxis1[1] - vectorMirror1ZylKartRight[1] * vectorAxis1[0]) * sin(2.0 * alphaMirror1)
 
 
-
-    var alphaTest = arcsin((abs(vectorAfterMirror1[0] * vectorMirror1ZylKartRight[0] + vectorAfterMirror1[1] * vectorMirror1ZylKartRight[1] + vectorAfterMirror1[2] * vectorMirror1ZylKartRight[2])) / (sqrt((vectorAfterMirror1[0] * vectorAfterMirror1[0] + vectorAfterMirror1[1] * vectorAfterMirror1[1] + vectorAfterMirror1[2] * vectorAfterMirror1[2])) * sqrt((vectorMirror1ZylKartRight[0] * vectorMirror1ZylKartRight[0] + vectorMirror1ZylKartRight[1] * vectorMirror1ZylKartRight[1] + vectorMirror1ZylKartRight[2] * vectorMirror1ZylKartRight[2]))))
-    echo radToDeg(alphaTest)
+    var alphaTest = arccos((abs(vectorAfterMirror1[0] * vectorMirror1ZylKartRight[0] + vectorAfterMirror1[1] * vectorMirror1ZylKartRight[1] + vectorAfterMirror1[2] * vectorMirror1ZylKartRight[2])) / (sqrt((vectorAfterMirror1[0] * vectorAfterMirror1[0] + vectorAfterMirror1[1] * vectorAfterMirror1[1] + vectorAfterMirror1[2] * vectorAfterMirror1[2])) * sqrt((vectorMirror1ZylKartRight[0] * vectorMirror1ZylKartRight[0] + vectorMirror1ZylKartRight[1] * vectorMirror1ZylKartRight[1] + vectorMirror1ZylKartRight[2] * vectorMirror1ZylKartRight[2]))))
+    echo radToDeg(alphaTest) / 2.0 ## awesome: the same angle as alpha Mirror 1
 
     #for i in 1 .. < allR1.len:
       #echo lineIntersectsArea( (allR1[i] + 0.2), allR1[i], pointEntranceXRT)
