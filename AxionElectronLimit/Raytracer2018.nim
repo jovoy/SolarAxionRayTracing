@@ -40,7 +40,7 @@ const
   distanceCBAxisXRTAxis = 0.0#62.1#58.44 #mm from XRT drawing #there is no difference in the axis even though the picture gets transfered 62,1mm down, but in the detector center
   RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW = 20.0 #mm #no change, because don't know # is actually -10.0 mm
   numberOfPointsEndOfCB = 200
-  numberOfPointsSun = 20000
+  numberOfPointsSun = 20000 #100000
 ## Chipregions#####
 
 const
@@ -503,26 +503,32 @@ proc getEmRateVec() : seq[float] =
   defer: f.close()
   return emissionrates
 
-proc findPosXRT(pointXRT : Vec3, pointCB : Vec3, r1 : float, angledeg : float, za : float, d : float) : float =
+proc findPosXRT(pointXRT : Vec3, pointCB : Vec3, r1 : float, r2 : float, angle : float, za : float, d : float, lMirror : float, distMirr : float, uncer : float, sMin : float, sMax : float) : float =
 
   ##this is to find the position the raz hits the mirror shell of r1. it is after transforming the raz into a czlindrical coordinate szstem, that has the middle and the beginning of the mirror "cylinders" as its origin and is in czlindrical coordinates
 
   var
     point = pointCB
-    direc = pointXRT - pointCB
     s : float
     term : float
-    angle = angledeg
     dZyl = d * cos(angle)
+    sMinHigh = (sMin * 1000000.0).int
+    sMaxHigh = (sMax * 1000000.0).int
+  let direc = pointXRT - pointCB
 
-  for i in 1000000..1100000:
+  
+  for i in sMinHigh..sMaxHigh:
     s = i.float / 1000000.0
-    term =  (point[1] + s * direc[1]) *  (point[1] + s * direc[1]) + ((cos(angle) * (point[0] + s * direc[0]) + sin(angle) * (point[2] + s * direc[2])) + dZyl - sin(angle) * za) *  ((cos(angle) * (point[0] + s * direc[0]) + sin(angle) * (point[2] + s * direc[2])) + dZyl - sin(angle) * za)
-    if r1 * r1 < term + 0.005 and r1 * r1 > term - 0.005:
+    term = sqrt((point[0] + s * direc[0]) * (point[0] + s * direc[0]) + (point[1] + s * direc[1]) *  (point[1] + s * direc[1])) - ((r2 - r1) * (point[2] + s * direc[2] - distMirr) / (cos(angle) * lMirror))
+    #term =  (point[1] + s * direc[1]) *  (point[1] + s * direc[1]) + ((cos(angle) * (point[0] + s * direc[0]) + sin(angle) * (point[2] + s * direc[2])) + dZyl - sin(angle) * za) *  ((cos(angle) * (point[0] + s * direc[0]) + sin(angle) * (point[2] + s * direc[2])) + dZyl - sin(angle) * za)
+
+    if r1 < term + uncer and r1 > term - uncer:
       result = s ## sometimes there are 3 different s for which this works, in that case the one with the highest value is taken
+
+  
   #echo sin(angle) * za
-  s = 1.0
-  term =  ((point[1] + s * direc[1]) *  (point[1] + s * direc[1]) + ((cos(angle) * (point[0] + s * direc[0]) + sin(angle) * (point[2] + s * direc[2])) + dZyl - sin(angle) * za) *  ((cos(angle) * (point[0] + s * direc[0]) + sin(angle) * (point[2] + s * direc[2])) + dZyl - sin(angle) * za))
+  #s = 1.0
+  #term =  ((point[1] + s * direc[1]) *  (point[1] + s * direc[1]) + ((cos(angle) * (point[0] + s * direc[0]) + sin(angle) * (point[2] + s * direc[2])) + dZyl - sin(angle) * za) *  ((cos(angle) * (point[0] + s * direc[0]) + sin(angle) * (point[2] + s * direc[2])) + dZyl - sin(angle) * za))
 
   #result = term
   # pointXRT = (point + s * direc)
@@ -597,8 +603,8 @@ proc drawfancydiagrams(diagramtitle : string, objectstodraw : seq[seq[float]], w
               d.zs[y][x] = objectstodraw[y][x]
 
   const
-    y = @[float32(CHIPREGIONS_GOLD_Y_MIN * 3500.0 / 14.0), float32(CHIPREGIONS_GOLD_Y_MIN * 3500.0 / 14.0),float32(CHIPREGIONS_GOLD_Y_MAX * 3500.0 / 14.0),float32(CHIPREGIONS_GOLD_Y_MAX * 3500.0 / 14.0),float32(CHIPREGIONS_GOLD_Y_MIN * 3500.0 / 14.0)]
-    x = @[float32(CHIPREGIONS_GOLD_X_MIN * 3500.0 / 14.0),float32(CHIPREGIONS_GOLD_X_MAX * 3500.0 / 14.0),float32(CHIPREGIONS_GOLD_X_MAX * 3500.0 / 14.0), float32(CHIPREGIONS_GOLD_X_MIN * 3500.0 / 14.0), float32(CHIPREGIONS_GOLD_X_MIN * 3500.0 / 14.0)]
+    y = @[float32(CHIPREGIONS_GOLD_Y_MIN * 3000.0 / 14.0), float32(CHIPREGIONS_GOLD_Y_MIN * 3000.0 / 14.0),float32(CHIPREGIONS_GOLD_Y_MAX * 3000.0 / 14.0),float32(CHIPREGIONS_GOLD_Y_MAX * 3000.0 / 14.0),float32(CHIPREGIONS_GOLD_Y_MIN * 3000.0 / 14.0)]
+    x = @[float32(CHIPREGIONS_GOLD_X_MIN * 3000.0 / 14.0),float32(CHIPREGIONS_GOLD_X_MAX * 3000.0 / 14.0),float32(CHIPREGIONS_GOLD_X_MAX * 3000.0 / 14.0), float32(CHIPREGIONS_GOLD_X_MIN * 3000.0 / 14.0), float32(CHIPREGIONS_GOLD_X_MIN * 3000.0 / 14.0)]
   let
     d4 = Trace[float32](mode: PlotMode.LinesMarkers, `type`: PlotType.ScatterGL, ys: y, xs : x)
 
@@ -633,7 +639,7 @@ proc drawgraph(diagramtitle : string, data_X : seq[float], data_Y: seq[float], e
   if energyOrRadius == "energy" :
     layout = Layout(title: diagramtitle, width: 800, height: 800,
                       xaxis: Axis(title: "Energy [keV]"),
-                      yaxis: Axis(title: "Fluxfraction [10^20 m^-2 year^-1 keV^-1]"), autosize: false)
+                      yaxis: Axis(title: "Emission Rate"), autosize: false) #Fluxfraction [10^20 m^-2 year^-1 keV^-1]
 
   elif energyOrRadius == "radius" :
     layout = Layout(title: diagramtitle, width: 800, height: 800,
@@ -722,7 +728,10 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     pixvalsY : seq[float]
   const
     allR1 = @[60.7095, 63.006 , 65.606 , 68.305 , 71.105 , 74.011 , 77.027 , 80.157 , 83.405 , 86.775 , 90.272 , 93.902 , 97.668 , 101.576 , 105.632]  ## the radii of the shells
+    allXsep = @[4.0, 4.171, 4.140, 4.221, 4.190, 4.228, 4.245, 4.288, 4.284, 4.306, 4.324, 4.373, 4.387, 4.403, 4.481]
+    #allR2 = @[0.0, 60.731, 63.237, 65.838, 68.538, 71.339, 74.246, 77.263, 80.394, 83.642]
     allAngles = @[0.0, 0.579, 0.603, 0.628, 0.654, 0.680, 0.708, 0.737, 0.767, 0.798, 0.830, 0.863, 0.898, 0.933, 0.970] ## the angles of the mirror shells coresponding to the radii above
+    lMirror = 225.0 #mm Mirror length
     circleX = circleEdges( allR1)
     circleY = circleEdges( allR1)
     circleTotal = circleEdges( allR1)
@@ -760,7 +769,13 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
 
     #fluxfracints.add(fluxfracint)
     #energies.add(energyAx)
-
+  for iRad in 0..2:
+    var 
+      r = 396.0 * iRad.float / 2.0
+      i = r.int
+    for iEnergy in 0..<energy.len:
+      energies.add(energy[iEnergy])
+      fluxfractionen.add(emrates[(iEnergy) + (i * 233)])
 
 
   for iSun in 1..numberOfPointsSun:
@@ -851,21 +866,32 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     vectorAfterXRTCircular[1] = phi_radius
     vectorAfterXRTCircular[2] = alpha
 
-    var dist : seq[float]
-    var r1 = 0.0
-    var beta = 0.0 ## in degree
-    var r1Zyl = 0.0
+    var 
+      dist : seq[float]
+      r1 = 0.0
+      r2 = 0.0
+      r3 = 0.0
+      r4 = 0.0
+      r5 = 0.0
+      beta = 0.0 ## in degree
+      r1Zyl = 0.0
+      xSep = 0.0
     #var radnew = sqrt(pointEntranceXRT[1] * pointEntranceXRT[1] + ((cos(beta) * pointEntranceXRT[0] + sin(beta) * pointEntranceXRT[2]) + d - sin(beta) * centerExitPipeVT3XRT[2]) *  ((cos(beta) * pointEntranceXRT[0] + sin(beta) * pointEntranceXRT[2]) + d - sin(beta) * centerExitPipeVT3XRT[2])) ## the radius in the new coordinate system with the Xraz shells as cylinders and cylindrical coordinates with the middle of the clinders as center
     for j in 0..<allR1.len:
       if allR1[j] - vectorAfterXRTCircular[0] > 0.0:
         dist.add(allR1[j] - vectorAfterXRTCircular[0])
-    for j in 0..<allR1.len:
-      if min(dist) == allR1[j] - vectorAfterXRTCircular[0]:
-        r1 = allR1[j]
-        beta = degToRad(allAngles[j])
-
+    for k in 0..<allR1.len:
+      if min(dist) == allR1[k] - vectorAfterXRTCircular[0]:
+        r1 = allR1[k]
+        beta = degToRad(allAngles[k])
+        xSep = allXsep[k]
+        r2 = r1 - lMirror * sin(beta) #225mm is the length of the mirrors
+        r3 = r2 - 0.5 * xSep * tan(beta)
+        r4 = r3 - 0.5 * xSep * tan(3.0 * beta)
+        r5 = r4 - lMirror * sin(3.0 * beta)
+    
     r1Zyl = r1 * cos(beta)
-    echo "now"
+    #echo "now"
     #echo r1Zyl
     #[for k in 1..<allAngles.len:
       echo (sqrt(pointEntranceXRT[1] * pointEntranceXRT[1] + ((cos(allAngles[k]) * pointEntranceXRT[0] + sin(allAngles[k]) * pointEntranceXRT[2]) + d - sin(allAngles[k]) * centerExitPipeVT3XRT[2]) *  ((cos(allAngles[k]) * pointEntranceXRT[0] + sin(allAngles[k]) * pointEntranceXRT[2]) + d - sin(allAngles[k]) * centerExitPipeVT3XRT[2]))) #]#
@@ -878,63 +904,73 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
       #echo r1
       #echo r1Zyl
     #echo vectorAfterXRTCircular[0] * cos(beta)
-    #echo "weeeeeeeeeeeeeeeeeeeeeeeeel"
+    #echo "weeeeeeeeeeeeeeeeeeeeeeeeel
     #echo  sqrt(pointEntranceXRT[1] * pointEntranceXRT[1] + ((cos(beta) * pointEntranceXRT[0] + sin(beta) * pointEntranceXRT[2]) + d * cos(beta) - sin(beta) * centerExitPipeVT3XRT[2]) *  ((cos(beta) * pointEntranceXRT[0] + sin(beta) * pointEntranceXRT[2]) + d * cos(beta) - sin(beta) * centerExitPipeVT3XRT[2]))
-    echo r1Zyl * r1Zyl
-    var s = findPosXRT(pointEntranceXRT, pointExitCB, r1Zyl, beta,  centerExitPipeVT3XRT[2], d) ##poinExitPipeVT3 = pointEntranceXRT
+    #echo r1Zyl * r1Zyl    
+    var pointEntranceXRTZylKart = vec3(0.0)
+    pointEntranceXRTZylKart[0] = pointEntranceXRT[0] + d #((cos(beta) * pointEntranceXRT[0] + sin(beta) * pointEntranceXRT[2]) + d * cos(beta) - sin(beta) * centerExitPipeVT3XRT[2])
+    pointEntranceXRTZylKart[1] = pointEntranceXRT[1]
+    pointEntranceXRTZylKart[2] = pointEntranceXRT[2] - centerExitPipeVT3XRT[2] #((cos(beta) * pointEntranceXRT[2] - sin(beta) * pointEntranceXRT[0]) - cos(beta) * centerExitPipeVT3XRT[2])
+
+    var pointExitCBZylKart = vec3(0.0)
+    pointExitCBZylKart[0] = pointExitCB[0] + d 
+    pointExitCBZylKart[1] = pointExitCB[1]
+    pointExitCBZylKart[2] = pointExitCB[2] - centerExitPipeVT3XRT[2] 
+    var vectorMirror1ZylKartRight =  pointEntranceXRTZylKart - pointExitCBZylKart
+
+    var s = findPosXRT(pointEntranceXRTZylKart, pointExitCBZylKart, r1, r2, beta, 0.0, 0.0, lMirror, 0.0,  0.0001, 1.0, 1.1) ##poinExitPipeVT3 = pointEntranceXRT
+    echo "s"
+    echo s
     var pointMirror1 = pointExitCB + s * (pointEntranceXRT - pointExitCB) ## point where ray meets first mirror layer!!!
     var pointMirror1Zyl = vec3(0.0)
     pointMirror1Zyl[0] = sqrt(pointMirror1[1] * pointMirror1[1] + ((cos(beta) * pointMirror1[0] + sin(beta) * pointMirror1[2]) + d * cos(beta) - sin(beta) * centerExitPipeVT3XRT[2]) *  ((cos(beta) * pointMirror1[0] + sin(beta) * pointMirror1[2]) + d * cos(beta) - sin(beta) * centerExitPipeVT3XRT[2])) ## radius
     pointMirror1Zyl[1] = radToDeg(arccos(pointMirror1[1] / pointMirror1Zyl[0]))
     pointMirror1Zyl[2] = ((cos(beta) * pointMirror1[2] - sin(beta) * pointMirror1[0]) - cos(beta) * centerExitPipeVT3XRT[2])
-    #echo pointMirror1Zyl
+    if s == 0.0: continue
+
 
     var pointMirror1ZylKart = vec3(0.0)
-    pointMirror1ZylKart[0] = pointMirror1Zyl[0] * sin(degToRad(pointMirror1Zyl[1]))
-    pointMirror1ZylKart[1] = pointMirror1Zyl[0] * cos(degToRad(pointMirror1Zyl[1]))
-    pointMirror1ZylKart[2] = pointMirror1Zyl[2]
-    echo "point"
-    echo pointMirror1ZylKart
+    pointMirror1ZylKart[0] = pointMirror1[0] + d #* sin(degToRad(pointMirror1Zyl[1]))
+    pointMirror1ZylKart[1] = pointMirror1[1] #* cos(degToRad(pointMirror1Zyl[1]))
+    pointMirror1ZylKart[2] = pointMirror1[2] - centerExitPipeVT3XRT[2]
+    #echo "point"
+    #echo pointMirror1ZylKart
 
-    var vectorMirror1 =  (pointEntranceXRT - pointExitCB)
-    var vectorMirror1Zyl = vec3(0.0)
-    vectorMirror1Zyl[0] = sqrt(vectorMirror1[1] * vectorMirror1[1] + ((cos(beta) * vectorMirror1[0] + sin(beta) * vectorMirror1[2]) + d * cos(beta) - sin(beta) * centerExitPipeVT3XRT[2]) *  ((cos(beta) * vectorMirror1[0] + sin(beta) * vectorMirror1[2]) + d * cos(beta) - sin(beta) * centerExitPipeVT3XRT[2])) ## radius
-    vectorMirror1Zyl[1] = radToDeg(arccos(vectorMirror1[1] / vectorMirror1Zyl[0]))
-    vectorMirror1Zyl[2] = ((cos(beta) * vectorMirror1[2] - sin(beta) * vectorMirror1[0]) - cos(beta) * centerExitPipeVT3XRT[2])
+    #var vectorMirror1 =  (pointEntranceXRT - pointExitCB)
+    #var vectorMirror1Zyl = vec3(0.0)
+    #vectorMirror1Zyl[0] = sqrt(vectorMirror1[1] * vectorMirror1[1] + ((cos(beta) * vectorMirror1[0] + sin(beta) * vectorMirror1[2]) + d * cos(beta) - sin(beta) * centerExitPipeVT3XRT[2]) *  ((cos(beta) * vectorMirror1[0] + sin(beta) * vectorMirror1[2]) + d * cos(beta) - sin(beta) * centerExitPipeVT3XRT[2])) ## radius
+    #vectorMirror1Zyl[1] = radToDeg(arccos(vectorMirror1[1] / vectorMirror1Zyl[0]))
+    #vectorMirror1Zyl[2] = ((cos(beta) * vectorMirror1[2] - sin(beta) * vectorMirror1[0]) - cos(beta) * centerExitPipeVT3XRT[2])
     #echo vectorMirror1Zyl
 
-    var vectorMirror1ZylKart = vec3(0.0)
-    vectorMirror1ZylKart[0] = vectorMirror1Zyl[0] * sin(degToRad(vectorMirror1Zyl[1]))
-    vectorMirror1ZylKart[1] = vectorMirror1Zyl[0] * cos(degToRad(vectorMirror1Zyl[1]))
-    vectorMirror1ZylKart[2] = vectorMirror1Zyl[2]
-    echo "vector"
-    echo vectorMirror1ZylKart
+    #var vectorMirror1ZylKart = vec3(0.0)
+    #vectorMirror1ZylKart[0] = vectorMirror1Zyl[0] * sin(degToRad(vectorMirror1Zyl[1]))
+    #vectorMirror1ZylKart[1] = vectorMirror1Zyl[0] * cos(degToRad(vectorMirror1Zyl[1]))
+    #vectorMirror1ZylKart[2] = vectorMirror1Zyl[2]
+    #echo "vector"
+    #echo vectorMirror1ZylKart
 
-    var pointEntranceXRTZylKart = vec3(0.0)
-    pointEntranceXRTZylKart[0] = ((cos(beta) * pointEntranceXRT[0] + sin(beta) * pointEntranceXRT[2]) + d * cos(beta) - sin(beta) * centerExitPipeVT3XRT[2])
-    pointEntranceXRTZylKart[1] = pointEntranceXRT[1]
-    pointEntranceXRTZylKart[2] =((cos(beta) * pointEntranceXRT[2] - sin(beta) * pointEntranceXRT[0]) - cos(beta) * centerExitPipeVT3XRT[2])
 
-    var pointExitCBZylKart = vec3(0.0)
-    pointExitCBZylKart[0] = ((cos(beta) * pointExitCB[0] + sin(beta) * pointExitCB[2]) + d * cos(beta) - sin(beta) * centerExitPipeVT3XRT[2])
-    pointExitCBZylKart[1] = pointExitCB[1]
-    pointExitCBZylKart[2] =((cos(beta) * pointExitCB[2] - sin(beta) * pointExitCB[0]) - cos(beta) * centerExitPipeVT3XRT[2])
-    var vectorMirror1ZylKartRight =  pointEntranceXRTZylKart - pointExitCBZylKart
+    
+    var normalVec = vec3(0.0)
+    normalVec[0] = pointMirror1ZylKart[0]
+    normalVec[1] = pointMirror1ZylKart[1]
+    normalVec[2] = tan(beta) * sqrt(pointMirror1ZylKart[0] * pointMirror1ZylKart[0] + pointMirror1ZylKart[1] * pointMirror1ZylKart[1])
 
     var vectorAxis1 = vec3(0.0) ## this is the vector product of the normal vector on pointMirror pointing in the direction of the radius of the cylinder and the vector of the ray
-    vectorAxis1[0] = pointMirror1ZylKart[1] * vectorMirror1ZylKartRight[2] #+ pointMirror1ZylKart[0]
-    vectorAxis1[1] = - pointMirror1ZylKart[0] * vectorMirror1ZylKartRight[2] #+ pointMirror1ZylKart[1]
-    vectorAxis1[2] = pointMirror1ZylKart[0] * vectorMirror1ZylKartRight[1] - pointMirror1ZylKart[1] * vectorMirror1ZylKartRight[0] #+ pointMirror1ZylKart[2]
-    echo pointEntranceXRTZylKart - pointExitCBZylKart
-    echo vectorAxis1
-    echo vectorAxis1[0] * vectorMirror1ZylKartRight[0] + vectorAxis1[1] * vectorMirror1ZylKartRight[1] + vectorAxis1[2] * vectorMirror1ZylKartRight[2]
-    echo vectorAxis1[0] * pointMirror1ZylKart[0] + vectorAxis1[1] * pointMirror1ZylKart[1] #+ vectorAxis1[2] * pointMirror1ZylKart[2]
+    vectorAxis1[0] = normalVec[0] * vectorMirror1ZylKartRight[2] #+ pointMirror1ZylKart[0]
+    vectorAxis1[1] = - normalVec[0] * vectorMirror1ZylKartRight[2] #+ pointMirror1ZylKart[1]
+    vectorAxis1[2] = normalVec[0] * vectorMirror1ZylKartRight[1] - normalVec[1] * vectorMirror1ZylKartRight[0] #+ pointMirror1ZylKart[2]
+    #echo pointEntranceXRTZylKart - pointExitCBZylKart
+    #echo vectorAxis1
+    #echo vectorAxis1[0] * vectorMirror1ZylKartRight[0] + vectorAxis1[1] * vectorMirror1ZylKartRight[1] + vectorAxis1[2] * vectorMirror1ZylKartRight[2]
+    #echo vectorAxis1[0] * pointMirror1ZylKart[0] + vectorAxis1[1] * pointMirror1ZylKart[1] #+ vectorAxis1[2] * pointMirror1ZylKart[2]
 
     ## get the angle between the area of reflection and the vector:
 
-    var alphaMirror1 = arcsin(abs(pointMirror1ZylKart[0] * vectorMirror1ZylKartRight[0] + pointMirror1ZylKart[1] * vectorMirror1ZylKartRight[1]) / (sqrt((pointMirror1ZylKart[0] * pointMirror1ZylKart[0] + pointMirror1ZylKart[1] * pointMirror1ZylKart[1])) * sqrt((vectorMirror1ZylKartRight[0] * vectorMirror1ZylKartRight[0] + vectorMirror1ZylKartRight[1] * vectorMirror1ZylKartRight[1] + vectorMirror1ZylKartRight[2] * vectorMirror1ZylKartRight[2]))))
-    echo radToDeg(beta)
-    echo radToDeg(alphaMirror1) ## almost beta: should be correct (in the end its beta + p: very good)
+    var alphaMirror1 = arcsin(abs(normalVec[0] * vectorMirror1ZylKartRight[0] + normalVec[1] * vectorMirror1ZylKartRight[1] + normalVec[2] * vectorMirror1ZylKartRight[2]) / (sqrt((normalVec[0] * normalVec[0] + normalVec[1] * normalVec[1] + normalVec[2] * normalVec[2])) * sqrt((vectorMirror1ZylKartRight[0] * vectorMirror1ZylKartRight[0] + vectorMirror1ZylKartRight[1] * vectorMirror1ZylKartRight[1] + vectorMirror1ZylKartRight[2] * vectorMirror1ZylKartRight[2]))))
+    #echo radToDeg(beta)
+    #echo radToDeg(alphaMirror1) ## almost beta: should be correct (in the end its beta + p: very good)
 
     vectorAxis1 = vectorAxis1 / (sqrt((vectorAxis1[0] * vectorAxis1[0] + vectorAxis1[1] * vectorAxis1[1] + vectorAxis1[2] * vectorAxis1[2])))
     vectorMirror1ZylKartRight = vectorMirror1ZylKartRight / (sqrt((vectorMirror1ZylKartRight[0] * vectorMirror1ZylKartRight[0] + vectorMirror1ZylKartRight[1] * vectorMirror1ZylKartRight[1] + vectorMirror1ZylKartRight[2] * vectorMirror1ZylKartRight[2])))
@@ -942,17 +978,81 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     vectorAfterMirror1[0] =  vectorMirror1ZylKartRight[0] * cos(2.0 * alphaMirror1) - (vectorMirror1ZylKartRight[1] * vectorAxis1[2] - vectorMirror1ZylKartRight[2] * vectorAxis1[1]) * sin( 2.0 * alphaMirror1)
     vectorAfterMirror1[1] = vectorMirror1ZylKartRight[1] * cos(2.0 * alphaMirror1) - (vectorMirror1ZylKartRight[2] * vectorAxis1[0] - vectorMirror1ZylKartRight[0] * vectorAxis1[2]) * sin( 2.0 * alphaMirror1)
     vectorAfterMirror1[2] = vectorMirror1ZylKartRight[2] * cos(2.0 * alphaMirror1) - (vectorMirror1ZylKartRight[0] * vectorAxis1[1] - vectorMirror1ZylKartRight[1] * vectorAxis1[0]) * sin( 2.0 * alphaMirror1)
-    echo "veeeeeeeeeeeeeecs"
-    echo vectorAxis1 / (sqrt((vectorAxis1[0] * vectorAxis1[0] + vectorAxis1[1] * vectorAxis1[1] + vectorAxis1[2] * vectorAxis1[2])))
-    echo vectorMirror1ZylKartRight / (sqrt((vectorMirror1ZylKartRight[0] * vectorMirror1ZylKartRight[0] + vectorMirror1ZylKartRight[1] * vectorMirror1ZylKartRight[1] + vectorMirror1ZylKartRight[2] * vectorMirror1ZylKartRight[2])))
-    echo vectorAfterMirror1 / (sqrt((vectorAfterMirror1[0] * vectorAfterMirror1[0] + vectorAfterMirror1[1] * vectorAfterMirror1[1] + vectorAfterMirror1[2] * vectorAfterMirror1[2])))
+    #echo "veeeeeeeeeeeeeecs"
+    #echo vectorAxis1 / (sqrt((vectorAxis1[0] * vectorAxis1[0] + vectorAxis1[1] * vectorAxis1[1] + vectorAxis1[2] * vectorAxis1[2])))
+    #echo vectorMirror1ZylKartRight / (sqrt((vectorMirror1ZylKartRight[0] * vectorMirror1ZylKartRight[0] + vectorMirror1ZylKartRight[1] * vectorMirror1ZylKartRight[1] + vectorMirror1ZylKartRight[2] * vectorMirror1ZylKartRight[2])))
+    #echo vectorAfterMirror1 / (sqrt((vectorAfterMirror1[0] * vectorAfterMirror1[0] + vectorAfterMirror1[1] * vectorAfterMirror1[1] + vectorAfterMirror1[2] * vectorAfterMirror1[2])))
     #echo (vectorMirror1ZylKartRight[1] * vectorAxis1[2] - vectorMirror1ZylKartRight[2] * vectorAxis1[1]) * sin(2.0 * alphaMirror1)
     #echo (vectorMirror1ZylKartRight[2] * vectorAxis1[0] - vectorMirror1ZylKartRight[0] * vectorAxis1[2]) * sin(2.0 * alphaMirror1)
     #echo (vectorMirror1ZylKartRight[0] * vectorAxis1[1] - vectorMirror1ZylKartRight[1] * vectorAxis1[0]) * sin(2.0 * alphaMirror1)
 
 
     var alphaTest = arccos((abs(vectorAfterMirror1[0] * vectorMirror1ZylKartRight[0] + vectorAfterMirror1[1] * vectorMirror1ZylKartRight[1] + vectorAfterMirror1[2] * vectorMirror1ZylKartRight[2])) / (sqrt((vectorAfterMirror1[0] * vectorAfterMirror1[0] + vectorAfterMirror1[1] * vectorAfterMirror1[1] + vectorAfterMirror1[2] * vectorAfterMirror1[2])) * sqrt((vectorMirror1ZylKartRight[0] * vectorMirror1ZylKartRight[0] + vectorMirror1ZylKartRight[1] * vectorMirror1ZylKartRight[1] + vectorMirror1ZylKartRight[2] * vectorMirror1ZylKartRight[2]))))
-    echo radToDeg(alphaTest) / 2.0 ## awesome: the same angle as alpha Mirror 1
+    #echo radToDeg(alphaTest) / 2.0 ## awesome: the same angle as alpha Mirror 1
+    var beta3 = 3.0 * beta
+    var pointAfterMirror1 = pointMirror1ZylKart + 200.0 * vectorAfterMirror1
+    echo vectorAfterMirror1
+    echo pointAfterMirror1
+    var distanceMirrors = cos(beta3) * (xSep + lMirror)
+
+    var t = findPosXRT(pointAfterMirror1, pointMirror1ZylKart, r4, r5, beta3, 0.0, 0.0, lMirror, distanceMirrors, 0.001, 0.0, 2.0)
+    #echo r4
+    #echo sqrt(pointAfterMirror1[0] * pointAfterMirror1[0] + pointAfterMirror1[1] * pointAfterMirror1[1])
+    #echo r5
+    echo t
+    var pointMirror2ZylKart = pointMirror1ZylKart + t * (pointAfterMirror1 - pointMirror1ZylKart)
+    #echo pointMirror1ZylKart
+    #
+    echo "point"
+    echo pointMirror2ZylKart
+    var normalVec2 = vec3(0.0)
+    normalVec2[0] = pointMirror2ZylKart[0]
+    normalVec2[1] = pointMirror2ZylKart[1]
+    normalVec2[2] = tan(beta3) * sqrt(pointMirror2ZylKart[0] * pointMirror2ZylKart[0] + pointMirror2ZylKart[1] * pointMirror2ZylKart[1])
+    var ff = vec3(0.0)
+    ff[0] = pointMirror2ZylKart[0] / sqrt(pointMirror2ZylKart[0] * pointMirror2ZylKart[0] + pointMirror2ZylKart[1] * pointMirror2ZylKart[1]) * r4 
+    ff[1] = pointMirror2ZylKart[1] / sqrt(pointMirror2ZylKart[0] * pointMirror2ZylKart[0] + pointMirror2ZylKart[1] * pointMirror2ZylKart[1]) * r4 
+    ff[2] = distanceMirrors
+    ff = pointMirror2ZylKart - ff
+    echo radToDeg(arccos(abs(normalVec2[0] * ff[0] + normalVec2[1] * ff[1] + normalVec2[2] * ff[2]) / (sqrt((normalVec2[0] * normalVec2[0] + normalVec2[1] * normalVec2[1] + normalVec2[2] * normalVec2[2])) * sqrt((ff[0] * ff[0] + ff[1] * ff[1] + ff[2] * ff[2])))))
+    
+    var vectorMirror2ZylKartRight = vectorAfterMirror1#= pointMirror2ZylKart - pointMirror1ZylKart
+    vectorMirror2ZylKartRight = vectorMirror2ZylKartRight / (sqrt((vectorMirror2ZylKartRight[0] * vectorMirror2ZylKartRight[0] + vectorMirror2ZylKartRight[1] * vectorMirror2ZylKartRight[1] + vectorMirror2ZylKartRight[2] * vectorMirror2ZylKartRight[2])))
+    normalVec2 = normalVec2 / (sqrt((normalVec2[0] * normalVec2[0] + normalVec2[1] * normalVec2[1] + normalVec2[2] * normalVec2[2])))
+    var vectorAxis2 = vec3(0.0) ## this is the vector product of the normal vector on pointMirror pointing in the direction of the radius of the cylinder and the vector of the ray
+    vectorAxis2[0] = normalVec2[0] * vectorMirror2ZylKartRight[2] #+ pointMirror1ZylKart[0]
+    vectorAxis2[1] = - normalVec2[0] * vectorMirror2ZylKartRight[2] #+ pointMirror1ZylKart[1]
+    vectorAxis2[2] = normalVec2[0] * vectorMirror2ZylKartRight[1] - normalVec2[1] * vectorMirror2ZylKartRight[0] #+ pointMirror1ZylKart[2]
+    echo vectorMirror2ZylKartRight
+
+    
+    vectorAxis2 = vectorAxis2 / (sqrt((vectorAxis2[0] * vectorAxis2[0] + vectorAxis2[1] * vectorAxis2[1] + vectorAxis2[2] * vectorAxis2[2])))
+    
+    var alphaMirror2 = arcsin(abs(normalVec2[0] * vectorMirror2ZylKartRight[0] + normalVec2[1] * vectorMirror2ZylKartRight[1] + normalVec2[2] * vectorMirror2ZylKartRight[2]) / (sqrt((normalVec2[0] * normalVec2[0] + normalVec2[1] * normalVec2[1] + normalVec2[2] * normalVec2[2])) * sqrt((vectorMirror2ZylKartRight[0] * vectorMirror2ZylKartRight[0] + vectorMirror2ZylKartRight[1] * vectorMirror2ZylKartRight[1] + vectorMirror2ZylKartRight[2] * vectorMirror2ZylKartRight[2]))))
+    var vectorAfterMirror2 = vec3(0.0)
+    vectorAfterMirror2[0] =  vectorMirror2ZylKartRight[0] * cos(2.0 * alphaMirror2) - (vectorMirror2ZylKartRight[1] * vectorAxis2[2] - vectorMirror2ZylKartRight[2] * vectorAxis2[1]) * sin( 2.0 * alphaMirror2)
+    vectorAfterMirror2[1] = vectorMirror2ZylKartRight[1] * cos(2.0 * alphaMirror2) - (vectorMirror2ZylKartRight[2] * vectorAxis2[0] - vectorMirror2ZylKartRight[0] * vectorAxis2[2]) * sin( 2.0 * alphaMirror2)
+    vectorAfterMirror2[2] = vectorMirror2ZylKartRight[2] * cos(2.0 * alphaMirror2) - (vectorMirror2ZylKartRight[0] * vectorAxis2[1] - vectorMirror2ZylKartRight[1] * vectorAxis2[0]) * sin( 2.0 * alphaMirror2)
+    
+    var alphaTest2 = arccos((abs(vectorAfterMirror2[0] * vectorMirror2ZylKartRight[0] + vectorAfterMirror2[1] * vectorMirror2ZylKartRight[1] + vectorAfterMirror2[2] * vectorMirror2ZylKartRight[2])) / (sqrt((vectorAfterMirror2[0] * vectorAfterMirror2[0] + vectorAfterMirror2[1] * vectorAfterMirror2[1] + vectorAfterMirror2[2] * vectorAfterMirror2[2])) * sqrt((vectorMirror2ZylKartRight[0] * vectorMirror2ZylKartRight[0] + vectorMirror2ZylKartRight[1] * vectorMirror2ZylKartRight[1] + vectorMirror2ZylKartRight[2] * vectorMirror2ZylKartRight[2]))))
+    #echo "axis"
+    #echo normalVec2
+    #echo pointMirror1ZylKart
+    #echo pointMirror2ZylKart
+    
+    #echo vectorMirror2ZylKartRight
+    #echo vectorMirror1ZylKartRight
+    #echo vectorAxis1
+    #echo vectorAxis2
+
+    
+    #echo radToDeg(beta)
+    #echo radToDeg(alphaMirror1)
+    echo 2.0 * radToDeg(beta) - radToDeg(alphaMirror1)
+    echo radToDeg(alphaMirror2)
+    #echo radToDeg(alphaTest2) / 2.0
+
+    ############################################# Mirrors end #################################################
 
     #for i in 1 .. < allR1.len:
       #echo lineIntersectsArea( (allR1[i] + 0.2), allR1[i], pointEntranceXRT)
@@ -1016,7 +1116,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
       probConversionMagnet = 0.025 * 9.0 * 1e-24 * (1 / (1.44 * 1.2398)) * (1 / (1.44 * 1.2398)) * (pathCB * 1e-3) * (pathCB * 1e-3)
       transmissionMagnet = cos(ya) * probConversionMagnet#1.0 # this is the transformation probability of an axion into a photon, if an axion flying straight through the magnet had one of 100%, angular dependency of the primakoff effect
       transmissionTelescopeEnergy : float
-    echo p
+    #echo p
 
 
     if energyAx < 2.0:
@@ -1060,8 +1160,8 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
 
 
     #fluxfractionen.add(fluxfractionAll)
-    energies.add(energyAx)
-    fluxfractionen.add(1.0 + (iSun.float * 0.001))
+    #energies.add(energyAx)
+    #fluxfractionen.add(1.0 + (iSun.float * 0.001))
 
 
   ## get the heatmaps out of the sequences of data X and data Y, first for the amount of data in one pixel ##
@@ -1071,17 +1171,17 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     endX = 14.0 #- distanceCBAxisXRTAxis * 0.01
     beginY = 0.0 #- distanceCBAxisXRTAxis * 0.01
     endY = 14.0 #- distanceCBAxisXRTAxis * 0.01
-  var heatmaptable1 = prepareheatmap(3500,3500,beginX,endX,beginY,endY,pointdataX,pointdataY,weights,integralNormalisation)#colour scale is now the number of points in one pixel divided by the the number of all events
-  var heatmaptable2 = prepareheatmap(3500,3500,beginX,endX,beginY,endY,pointdataX,pointdataY,weights,1.0)
+  var heatmaptable1 = prepareheatmap(3000,3000,beginX,endX,beginY,endY,pointdataX,pointdataY,weights,integralNormalisation)#colour scale is now the number of points in one pixel divided by the the number of all events
+  var heatmaptable2 = prepareheatmap(3000,3000,beginX,endX,beginY,endY,pointdataX,pointdataY,weights,1.0)
   #echo heatmaptable2 #= 5417.0
-  echo getMaxVal(heatmaptable2, 3500)
-  var heatmaptable3 = prepareheatmap(3500,3500,beginX,endX,beginY,endY,pointdataX,pointdataY,weights,getMaxVal(heatmaptable2, 3500)) # if change number of rows: has to be in the maxVal as well
+  echo getMaxVal(heatmaptable2, 3000)
+  var heatmaptable3 = prepareheatmap(3000,3000,beginX,endX,beginY,endY,pointdataX,pointdataY,weights,getMaxVal(heatmaptable2, 3000)) # if change number of rows: has to be in the maxVal as well
   echo "Probability of it originating from an axion if a photon hits at x = 5,3mm and y = 8,4mm (in this model):"
   echo (heatmaptable3[53][84]) * 100.0  #echo heatmaptable3[x][y]
 
-  echo getMaxVal(heatmaptable2, 3500)
-  #echo drawfancydiagrams("AxionModelFluxfraction", heatmaptable2, 3500)
-  #echo drawfancydiagrams("AxionModelProbability", heatmaptable3, 3500) #Probabilities, that a photon, that hits a certain pixel could originate from an Axion, if the highest is 100%
+  echo getMaxVal(heatmaptable2, 3000)
+  #echo drawfancydiagrams("AxionModelFluxfraction", heatmaptable2, 3000)
+  #echo drawfancydiagrams("AxionModelProbability", heatmaptable3, 3000) #Probabilities, that a photon, that hits a certain pixel could originate from an Axion, if the highest is 100%
   echo integralNormalisation # number of hits before the setup
   echo pointdataX.len # number of hits after the setup
 
@@ -1102,7 +1202,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   var weightData : seq[float]
 
   var weightProb : seq[float]
-  echo getLenght(heatmaptable3, 3500)
+  echo getLenght(heatmaptable3, 3000)
   #echo dataValuesX.len
   for i in 0 ..< dataValuesX.len:
     weightData.add(1.0)
@@ -1113,10 +1213,10 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
 
   #echo dataValuesX
   #echo dataValuesY
-  var heatmaptable4 = prepareheatmap(3500,3500,0.0,14.0,0.0,14.0,dataValuesX,dataValuesY,weightData,1.0)
-  #echo drawfancydiagrams("AxionModelDataRaw", heatmaptable4, 3500) # the normal data of a run of chip 3
-  var heatmaptable5 = prepareheatmap(3500,3500,0.0,14.0,0.0,14.0,dataValuesX,dataValuesY,weightProb,1.0)
-  #echo drawfancydiagrams("AxionModelProbability in %", heatmaptable5, 3500) #the probability distribution of being an axion of the data of a run of chip 3
+  var heatmaptable4 = prepareheatmap(3000,3000,0.0,14.0,0.0,14.0,dataValuesX,dataValuesY,weightData,1.0)
+  #echo drawfancydiagrams("AxionModelDataRaw", heatmaptable4, 3000) # the normal data of a run of chip 3
+  var heatmaptable5 = prepareheatmap(3000,3000,0.0,14.0,0.0,14.0,dataValuesX,dataValuesY,weightProb,1.0)
+  #echo drawfancydiagrams("AxionModelProbability in %", heatmaptable5, 3000) #the probability distribution of being an axion of the data of a run of chip 3
   #[var weightData1 : seq[float]
   for i in 0 ..< circleX.len:
     weightData1.add(1.0)
@@ -1135,7 +1235,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   ##################################  Graphs  #######################################################
 
   #echo drawgraph("Energy142", radii, fluxfractionrad, "radius")
-  #echo drawgraph("Radius0%", energies, fluxfractionen, "energy") #Biased random energy distribution
+  #echo drawgraph("Radius 0%, 10% and 20%", energies, fluxfractionen, "energy") #Biased random energy distribution
   #echo drawgraph("RadiusInt", energies, fluxfracints, "energy")
 
   #echo drawgraph("EmissionsRates",emrates, emratesGl, "energy")
