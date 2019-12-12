@@ -7,10 +7,11 @@ import math
 import strutils
 import algorithm
 import sequtils, os, strutils
+include raytracer2018
 
 
 
-proc findPosXRT(pointXRT : Vec3, pointCB : Vec3, r1 : float, r2 : float, angle : float, lMirror : float, distMirr : float, uncer : float, sMin : float, sMax : float, pointOrAngle : string) : Vec3 =
+#[proc findPosXRT(pointXRT : Vec3, pointCB : Vec3, r1 : float, r2 : float, angle : float, lMirror : float, distMirr : float, uncer : float, sMin : float, sMax : float, pointOrAngle : string) : Vec3 =
 
   ##this is to find the position the ray hits the mirror shell of r1. it is after transforming the ray into a cylindrical coordinate system, that has the middle and the beginning of the mirror "cylinders" as its origin and is in cylindrical coordinates
   
@@ -66,16 +67,16 @@ proc findPosXRT(pointXRT : Vec3, pointCB : Vec3, r1 : float, r2 : float, angle :
   of "pointAfter":
     result = pointAfterMirror
   of "vectorAfter":
-    result = vectorAfterMirror
+    result = vectorAfterMirror]#
 
  
 
 
-const
+#[const
   RAYTRACER_LENGTH_COLDBORE = 9756.0
   RAYTRACER_LENGTH_PIPE_CB_VT3 = 2571.5
-  RAYTRACER_LENGTH_PIPE_VT3_XRT = 150.0
-  centerExitPipeVT3XRT = RAYTRACER_LENGTH_COLDBORE + RAYTRACER_LENGTH_PIPE_CB_VT3 + RAYTRACER_LENGTH_PIPE_VT3_XRT
+  RAYTRACER_LENGTH_PIPE_VT3_XRT = 150.0]#
+var centerExitPipeVT3XRT = RAYTRACER_LENGTH_COLDBORE + RAYTRACER_LENGTH_PIPE_CB_VT3 + RAYTRACER_LENGTH_PIPE_VT3_XRT
 suite "Tests":
   test "Mirrors":
     let 
@@ -107,11 +108,14 @@ suite "Tests":
     pointExitCBZylKart[2] = pointExitCB[2] - centerExitPipeVT3XRT
 
 
-    var s = findPosXRT(pointEntranceXRTZylKart, pointExitCBZylKart, r1, r2, beta, lMirror, 0.0,  0.01, 1.0, 1.1, "angle") ##poinExitPipeVT3 = pointEntranceXRT
-    echo s[0]
-    var pointMirror1 = findPosXRT(pointEntranceXRTZylKart, pointExitCBZylKart, r1, r2, beta, lMirror, 0.0,  0.01, 1.0, 1.1, "pointMirror")
-    var pointAfterMirror1 = findPosXRT(pointEntranceXRTZylKart, pointExitCBZylKart, r1, r2, beta, lMirror, 0.0,  0.01, 1.0, 1.1, "pointAfter")
-    var t = findPosXRT(pointAfterMirror1, pointMirror1, r4, r5, beta3, lMirror, distanceMirrors, 0.1, 0.0, 2.0, "angle")
-    echo findPosXRT(pointAfterMirror1, pointMirror1, r4, r5, beta3, lMirror, distanceMirrors, 0.1, 0.0, 2.0, "pointAfter")
-    echo findPosXRT(pointAfterMirror1, pointMirror1, r4, r5, beta3, lMirror, distanceMirrors, 0.1, 0.0, 2.0, "vectorAfter")
-    check 2.0 * radToDeg(beta) - s[0] <= t[0] + 0.001 and 2.0 * radToDeg(beta) - s[0] >= t[0] - 0.001
+    var pointMirror1 = findPosXRT(pointEntranceXRTZylKart, pointExitCBZylKart, r1, r2, beta, lMirror, 0.0,  0.001, 1.0, 1.1)
+    
+    
+    var s = getVectoraAfterMirror(pointEntranceXRTZylKart, pointExitCBZylKart, pointMirror1, beta, "angle") ##poinExitPipeVT3 = pointEntranceXRT
+    
+    
+    var vectorAfterMirror1 = getVectoraAfterMirror(pointEntranceXRTZylKart, pointExitCBZylKart, pointMirror1, beta, "vectorAfter")
+    var pointAfterMirror1 = pointMirror1 + 200.0 * vectorAfterMirror1
+    var pointMirror2 = findPosXRT(pointAfterMirror1, pointMirror1, r4, r5, beta3, lMirror, distanceMirrors, 0.01, 0.0, 2.5)
+    var t = getVectoraAfterMirror(pointAfterMirror1, pointMirror1, pointMirror2, beta3, "angle")
+    check 2.0 * radToDeg(beta) - 0.5 * s[0] <= 0.5 * t[0] + 0.001 and 2.0 * radToDeg(beta) - 0.5 * s[0] >= 0.5 * t[0] - 0.001

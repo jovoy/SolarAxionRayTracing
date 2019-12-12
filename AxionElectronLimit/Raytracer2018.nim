@@ -35,11 +35,11 @@ const
   radiusPipeCBVT3 = 39.64 #30.0 #mm smallest aperture between end of CB and VT4 # 43 mm but only 85% of area: 39,64mm #ok
   RAYTRACER_LENGTH_PIPE_VT3_XRT = 150.0 #mm from drawings #198.2 #mm from XRT drawing #ok
   radiusPipeVT3XRT = 35.0#25.0 #mm from drawing #35.0 #m irrelevant, large enough to not loose anything # needs to be mm #ok
-  RAYTRACER_FOCAL_LENGTH_XRT = 1485.0 #mm is from llnl XRT https://iopscience.iop.org/article/10.1088/1475-7516/2015/12/008/pdf #1600.0 #mm was the Telescope of 2014 (MPE XRT) also: Aperatur changed #ok
+  RAYTRACER_FOCAL_LENGTH_XRT = 1500.0#1485.0 #mm is from llnl XRT https://iopscience.iop.org/article/10.1088/1475-7516/2015/12/008/pdf #1600.0 #mm was the Telescope of 2014 (MPE XRT) also: Aperatur changed #ok
   distanceCBAxisXRTAxis = 0.0#62.1#58.44 #mm from XRT drawing #there is no difference in the axis even though the picture gets transfered 62,1mm down, but in the detector center
-  RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW = 20.0 #mm #no change, because don't know # is actually -10.0 mm
+  RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW = 0.0 #mm #no change, because don't know # is actually -10.0 mm
   numberOfPointsEndOfCB = 200
-  numberOfPointsSun = 20000 #100000
+  numberOfPointsSun = 100000 #100000
 ## Chipregions#####
 
 const
@@ -503,7 +503,7 @@ proc getEmRateVec() : seq[float] =
   return emissionrates
 
 
-proc findPosXRT(pointXRT : Vec3, pointCB : Vec3, r1 : float, r2 : float, angle : float, lMirror : float, distMirr : float, uncer : float, sMin : float, sMax : float) : Vec3 =
+proc findPosXRT*(pointXRT : Vec3, pointCB : Vec3, r1 : float, r2 : float, angle : float, lMirror : float, distMirr : float, uncer : float, sMin : float, sMax : float) : Vec3 =
 
   ##this is to find the position the ray hits the mirror shell of r1. it is after transforming the ray into a cylindrical coordinate system, that has the middle and the beginning of the mirror "cylinders" as its origin and is in cylindrical coordinates
     
@@ -511,14 +511,14 @@ proc findPosXRT(pointXRT : Vec3, pointCB : Vec3, r1 : float, r2 : float, angle :
     point = pointCB
     s : float
     term : float
-    sMinHigh = (sMin * 1000000.0).int
-    sMaxHigh = (sMax * 1000000.0).int
+    sMinHigh = (sMin * 100000.0).int
+    sMaxHigh = (sMax * 100000.0).int
     pointMirror = vec3(0.0)
   let direc = pointXRT - pointCB
     
       
   for i in sMinHigh..sMaxHigh:
-    s = i.float / 1000000.0
+    s = i.float / 100000.0
     term = sqrt((point[0] + s * direc[0]) * (point[0] + s * direc[0]) + (point[1] + s * direc[1]) *  (point[1] + s * direc[1])) - ((r2 - r1) * (point[2] + s * direc[2] - distMirr) / (cos(angle) * lMirror))
         
     if r1 < term + uncer and r1 > term - uncer:
@@ -526,26 +526,9 @@ proc findPosXRT(pointXRT : Vec3, pointCB : Vec3, r1 : float, r2 : float, angle :
       result = pointMirror
 
 
-proc getVectoraAfterMirror(pointXRT : Vec3, pointCB : Vec3, r1 : float, r2 : float, angle : float, lMirror : float, distMirr : float, uncer : float, sMin : float, sMax : float, pointOrAngle : string) : Vec3 =
+proc getVectoraAfterMirror*(pointXRT : Vec3, pointCB : Vec3, pointMirror : Vec3, angle : float, pointOrAngle : string) : Vec3 =
 
-  ##this is to find the position the ray hits the mirror shell of r1. it is after transforming the ray into a cylindrical coordinate system, that has the middle and the beginning of the mirror "cylinders" as its origin and is in cylindrical coordinates
-        
-  var
-    point = pointCB
-    s : float
-    term : float
-    sMinHigh = (sMin * 1000000.0).int
-    sMaxHigh = (sMax * 1000000.0).int
-    pointMirror = vec3(0.0)
-  let direc = pointXRT - pointCB
-        
-          
-  for i in sMinHigh..sMaxHigh:
-    s = i.float / 1000000.0
-    term = sqrt((point[0] + s * direc[0]) * (point[0] + s * direc[0]) + (point[1] + s * direc[1]) *  (point[1] + s * direc[1])) - ((r2 - r1) * (point[2] + s * direc[2] - distMirr) / (cos(angle) * lMirror))
-            
-    if r1 < term + uncer and r1 > term - uncer:
-      pointMirror = point + s * direc ## sometimes there are 3 different s for which this works, in that case the one with the highest value is taken
+  ## this is to find the vector after the reflection on the respective mirror
       
   var normalVec = vec3(0.0)
   normalVec[0] = pointMirror[0]
@@ -553,9 +536,9 @@ proc getVectoraAfterMirror(pointXRT : Vec3, pointCB : Vec3, r1 : float, r2 : flo
   normalVec[2] = tan(angle) * sqrt(pointMirror[0] * pointMirror[0] + pointMirror[1] * pointMirror[1])
   var vectorBeforeMirror =  pointXRT - pointCB
   var vectorAxis = vec3(0.0) ## this is the vector product of the normal vector on pointMirror pointing in the direction of the radius of the cylinder and the vector of the ray
-  vectorAxis[0] = normalVec[1] * vectorBeforeMirror[2] - normalVec[2] * vectorBeforeMirror[1] #+ pointMirror1ZylKart[0]
-  vectorAxis[1] = normalVec[2] * vectorBeforeMirror[0] - normalVec[0] * vectorBeforeMirror[2] #+ pointMirror1ZylKart[1]
-  vectorAxis[2] = normalVec[0] * vectorBeforeMirror[1] - normalVec[1] * vectorBeforeMirror[0] #+ pointMirror1ZylKart[2]
+  vectorAxis[0] = normalVec[1] * vectorBeforeMirror[2] - normalVec[2] * vectorBeforeMirror[1] 
+  vectorAxis[1] = normalVec[2] * vectorBeforeMirror[0] - normalVec[0] * vectorBeforeMirror[2] 
+  vectorAxis[2] = normalVec[0] * vectorBeforeMirror[1] - normalVec[1] * vectorBeforeMirror[0] 
       
   var alphaMirror = arcsin(abs(normalVec[0] * vectorBeforeMirror[0] + normalVec[1] * vectorBeforeMirror[1] + normalVec[2] * vectorBeforeMirror[2]) / (sqrt((normalVec[0] * normalVec[0] + normalVec[1] * normalVec[1] + normalVec[2] * normalVec[2])) * sqrt((vectorBeforeMirror[0] * vectorBeforeMirror[0] + vectorBeforeMirror[1] * vectorBeforeMirror[1] + vectorBeforeMirror[2] * vectorBeforeMirror[2]))))
       
@@ -921,6 +904,8 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
       xSep = 0.0
     
     for j in 0..<allR1.len:
+      if vectorAfterXRTCircular[0] > allR1[j] and vectorAfterXRTCircular[0] < allR1[j] + 0.2:
+        continue
       if allR1[j] - vectorAfterXRTCircular[0] > 0.0:
         dist.add(allR1[j] - vectorAfterXRTCircular[0])
     for k in 0..<allR1.len:
@@ -932,7 +917,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
         r3 = r2 - 0.5 * xSep * tan(beta)
         r4 = r3 - 0.5 * xSep * tan(3.0 * beta)
         r5 = r4 - lMirror * sin(3.0 * beta)
-    
+    if r1 == allR1[0]: continue
 
     var pointEntranceXRTZylKart = vec3(0.0)
     pointEntranceXRTZylKart[0] = pointEntranceXRT[0] + d 
@@ -946,31 +931,44 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
 
     var beta3 = 3.0 * beta
     var distanceMirrors = cos(beta3) * (xSep + lMirror)
-    var s = getVectoraAfterMirror(pointEntranceXRTZylKart, pointExitCBZylKart, r1, r2, beta, lMirror, 0.0,  0.0001, 1.0, 1.1, "angle") ##poinExitPipeVT3 = pointEntranceXRT
-    var pointMirror1 = findPosXRT(pointEntranceXRTZylKart, pointExitCBZylKart, r1, r2, beta, lMirror, 0.0,  0.0001, 1.0, 1.1)
+    var pointMirror1 = findPosXRT(pointEntranceXRTZylKart, pointExitCBZylKart, r1, r2, beta, lMirror, 0.0,  0.001, 1.0, 1.1)
     
-    var vectorAfterMirror1 = getVectoraAfterMirror(pointEntranceXRTZylKart, pointExitCBZylKart, r1, r2, beta, lMirror, 0.0,  0.0001, 1.0, 1.1, "vectorAfter")
+    
+    var s = getVectoraAfterMirror(pointEntranceXRTZylKart, pointExitCBZylKart, pointMirror1, beta, "angle") ##poinExitPipeVT3 = pointEntranceXRT
+    
+    
+    var vectorAfterMirror1 = getVectoraAfterMirror(pointEntranceXRTZylKart, pointExitCBZylKart, pointMirror1, beta, "vectorAfter")
     var pointAfterMirror1 = pointMirror1 + 200.0 * vectorAfterMirror1
-    var t = getVectoraAfterMirror(pointAfterMirror1, pointMirror1, r4, r5, beta3, lMirror, distanceMirrors, 0.001, 0.0, 3.0, "angle")
+    var pointMirror2 = findPosXRT(pointAfterMirror1, pointMirror1, r4, r5, beta3, lMirror, distanceMirrors, 0.01, 0.0, 2.5)
+    var t = getVectoraAfterMirror(pointAfterMirror1, pointMirror1, pointMirror2, beta3, "angle")
+    if pointMirror2[0] == 0.0 and pointMirror2[1] == 0.0 and pointMirror2[2] == 0.0: continue ## with more uncertainty, 10% of the 0.1% we loose here can be recovered, but it gets more uncertain
     
     
   
-    var vectorAfterMirrors = getVectoraAfterMirror(pointAfterMirror1, pointMirror1, r4, r5, beta3, lMirror, distanceMirrors, 0.001, 0.0, 3.0, "vectorAfter")
-    var pointMirror2 = findPosXRT(pointAfterMirror1, pointMirror1, r4, r5, beta3, lMirror, distanceMirrors, 0.001, 0.0, 3.0)
+    var vectorAfterMirrors = getVectoraAfterMirror(pointAfterMirror1, pointMirror1, pointMirror2, beta3, "vectorAfter")
+    
 
     
-    if not isDigit(intToStr(t[0].int)):
+    #if not isDigit(intToStr(t[0].int)):
       #echo 2.0 * radToDeg(beta) - s[0]
       #echo t[0]  ## those two are the same!!! it works!!!
       #echo pointMirror1
       #echo vectorAfterMirror1
       #echo pointMirror2
       #echo vectorAfterMirrors
-      ffff.add(1.1)
-
-
+      #echo pointMirror1
+      #ffff.add(1.1)
 
     ############################################# Mirrors end #################################################
+    ## now get the points in the focal / detector plane
+    var distDet = distanceMirrors - 0.5 * xSep * cos(beta) + RAYTRACER_FOCAL_LENGTH_XRT - RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW
+    var n = (distDet - pointMirror2[2]) / vectorAfterMirrors[2]
+
+    # echo n
+    var pointDetectorWindow = pointMirror2 + n * vectorAfterMirrors
+    #echo pointDetectorWindow
+
+
 
     #for i in 1 .. < allR1.len:
       #echo lineIntersectsArea( (allR1[i] + 0.2), allR1[i], pointEntranceXRT)
@@ -1006,10 +1004,10 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     pointDetectorWindowCircle[0] = tan(vectorAfterXRTCircular[2]) * RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW
     pointDetectorWindowCircle[1] = vectorAfterXRTCircular[1]
     pointDetectorWindowCircle[2] = vectorAfterXRTCircular[2]
-    var pointDetectorWindow = vec3(0.0)
-    pointDetectorWindow[1] = pointDetectorWindowCircle[0] * sin(pointDetectorWindowCircle[1])
-    pointDetectorWindow[0] = pointDetectorWindowCircle[0] * cos(pointDetectorWindowCircle[1])
-    pointDetectorWindow[2] = 0.0
+    var pointDetectorWindow2 = vec3(0.0)
+    pointDetectorWindow2[1] = pointDetectorWindowCircle[0] * sin(pointDetectorWindowCircle[1])
+    pointDetectorWindow2[0] = pointDetectorWindowCircle[0] * cos(pointDetectorWindowCircle[1])
+    pointDetectorWindow2[2] = 0.0
 
 
         #[var lambda_0 = ( centerDetectorWindow[2] - pointEntranceXRT[2] ) / vectorAfterXRT[2]
@@ -1098,7 +1096,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   echo (heatmaptable3[53][84]) * 100.0  #echo heatmaptable3[x][y]
 
   echo getMaxVal(heatmaptable2, 3000)
-  #echo drawfancydiagrams("AxionModelFluxfraction", heatmaptable2, 3000)
+  echo drawfancydiagrams("AxionModelFluxfraction", heatmaptable2, 3000)
   #echo drawfancydiagrams("AxionModelProbability", heatmaptable3, 3000) #Probabilities, that a photon, that hits a certain pixel could originate from an Axion, if the highest is 100%
   echo integralNormalisation # number of hits before the setup
   echo pointdataX.len # number of hits after the setup
