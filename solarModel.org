@@ -1,0 +1,31 @@
+* AGSS09 Solar Model
+
+The AGSS09 solar model file found in
+[[file:ReadSolarModel/resources/AGSS09_solar_model_stripped.dat]] has been
+stripped of additional header and footer information. The full header
+is:
+#+BEGIN_SRC 
+# Standard Solar Model AGSS09 
+
+# Serenelli et al. 2009 - arxiv:0909.2668
+
+# Columns in the Standard Model table (below) represent:
+
+# 1)  Mass fraction in units of the solar mass
+# 2)  Radius of the zone in units of one solar radius
+# 3)  Temperature in units of deg (K)
+# 4)  Density in units of g/cm^3
+# 5)  Pressure in units of dyn/cm^2
+# 6)  Luminosity fraction in units of the solar luminosity
+# 7-35) Mass fractions of hydrogen, He4, He3, etc.
+
+# #(t1,f9.7,tr2,f7.5,tr2,3(e9.3,tr2),3(f7.5,tr2),27(e9.3,tr1))
+
+# The Table begins here.
+#+END_SRC
+
+And the footer:
+#+BEGIN_SRC 
+#Lsun= 3.8418E+33
+#Rsun= 6.9598E+10
+#+END_SRC
