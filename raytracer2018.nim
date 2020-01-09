@@ -12,6 +12,9 @@ import nimhdf5
 import chroma
 #import ingrid/[tos_helpers, likelihood, ingrid_types]
 
+import numericalnim, ggplotnim
+import strscans
+
 
 
 
@@ -98,6 +101,9 @@ proc getFluxFraction(chipRegionstring:string): float64 =
   else: echo "Error: Unknown chip region!"
 
 ########################################### some functions we're gonna need later#################################################
+
+proc readSolarModel(fname: string): DataFrame =
+  result = toDf(readCsv(fname, sep = ' '))
 
 ## First let's get some functions for a random point on a disk, a biased random point from the solar model and a biased random energy ##
 
@@ -805,6 +811,9 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
       energies.add(energy[iEnergy])
       fluxfractionen.add(emrates[(iEnergy) + (i * 233)])
 
+  let df = readSolarModel("AGSS09_solar_model.dat")
+  echo df["Radius"]
+
 
   for iSun in 1..numberOfPointsSun:
     integralNormalisation = integralNormalisation + 1
@@ -966,7 +975,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     ## because the detector is tuned in regards to the coldbore because it follows the direction of the telescope, set the origin to the detector window and turn the coordinate syste, to the detector
     var distDet = distanceMirrors - 0.5 * allXsep[8] * cos(beta) + RAYTRACER_FOCAL_LENGTH_XRT - RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW
     var epsilon = arctan(d / distDet)
-    echo epsilon
+    #echo epsilon
     
     var n = (distDet - pointMirror2[2]) / vectorAfterMirrors[2]
 
