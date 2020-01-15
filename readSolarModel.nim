@@ -1,6 +1,6 @@
 import ggplotnim
 
-proc readSolarModel(fname: string): DataFrame =
+proc readSolarModel*(fname: string): DataFrame =
   ## first of all parses the given AGSS09 solar model and returns it as a
   ## ggplotnim DataFrame. For efficiency's sake it might be a good idea and
   ## later use a `Table[string, seq[float]]` instead of the dataframe!

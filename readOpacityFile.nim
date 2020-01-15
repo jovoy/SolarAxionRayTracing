@@ -2,6 +2,8 @@ import strscans, streams, strutils, math, os, tables, sequtils, strformat
 
 import numericalnim, ggplotnim
 
+import readSolarModel
+
 type
   HeaderLine = enum
     H1, H2
@@ -166,3 +168,71 @@ ggplot(dfFiltered, aes("energy", "opacity", color = "densityStr")) +
 #  ggtitle("Energy dependency of opacity at different densities") +
 #  scale_y_log10() +
 #  ggsave("energy_opacity_density_log.pdf")
+
+
+
+## First lets access the solar model and calculate some necessary values
+const solarModel = "./ReadSolarModel/resources/AGSS09_solar_model_stripped.dat"
+
+var df = readSolarModelDf(solarModel)
+df = df.filter(f{"Radius" <= 0.2})
+echo df.pretty(precision = 10)
+
+# to read a single column, e.g. radius:
+#echo df1["Rho"].len
+
+# now let's plot radius against temperature colored by density
+ggplot(df, aes("Radius", "Temp", color = "Rho")) +
+  geom_line() +
+  ggtitle("Radius versus temperature of solar mode, colored by density") +
+  ggsave("radius_temp_density.pdf")
+
+var n_Z = newSeqWith(df["Rho"].len, newSeq[float](29)) #29 elements
+var n_e : seq[float]
+var distTemp : float
+var temperature : int
+var temperatures : seq[int]
+let atomicMass = [1.0078,4.0026,3.0160,12.0000,13.0033,14.0030,15.0001,15.9949,16.9991,17.9991,20.1797,22.9897,24.3055,26.9815,28.085,30.9737,32.0675,35.4515,39.8775,39.0983,40.078,44.9559,47.867,50.9415,51.9961,54.9380,55.845,58.9331,58.6934] #all the 29 elements from the solar model file
+let elements = ["H1", "He4","He3", "C12", "C13", "N14", "N15", "O16", "O17", "O18", "Ne", "Na", "Mg", "Al", "Si", "P", "S", "Cl", "Ar", "K", "Ca", "Sc", "Ti", "V", "Cr", "Mn", "Fe", "Co", "Ni"]
+# var solarTable = readSolarModel(solarModel)
+let amu = 1.6605e-24 #grams
+echo df["Mass"][6]
+for iRadius in 0..< df["Rho"].len:
+  n_Z[iRadius][1] = (df[elements[0]][iRadius].toFloat / atomicMass[0]) * (df["Rho"][iRadius].toFloat / amu) # Hydrogen
+  for iZmult in 1..3:
+    n_Z[iRadius][iZmult * 2] = ((df[elements[iZmult * 2 - 1]][iRadius].toFloat + df[elements[iZmult * 2]][iRadius].toFloat) / ((atomicMass[iZmult * 2 - 1] * df[elements[iZmult * 2 - 1]][iRadius].toFloat / (df[elements[iZmult * 2 - 1]][iRadius].toFloat + df[elements[iZmult * 2]][iRadius].toFloat)) + (atomicMass[iZmult * 2] * df[elements[iZmult * 2]][iRadius].toFloat / (df[elements[iZmult * 2 - 1]][iRadius].toFloat + df[elements[iZmult * 2]][iRadius].toFloat)))) * (df["Rho"][iRadius].toFloat / amu)
+    n_Z[iRadius][8] = ((df[elements[7]][iRadius].toFloat + df[elements[8]][iRadius].toFloat + df[elements[9]][iRadius].toFloat) / ((atomicMass[7] * df[elements[7]][iRadius].toFloat / (df[elements[7]][iRadius].toFloat + df[elements[8]][iRadius].toFloat + df[elements[9]][iRadius].toFloat)) + (atomicMass[8] * df[elements[8]][iRadius].toFloat / (df[elements[7]][iRadius].toFloat + df[elements[8]][iRadius].toFloat + df[elements[9]][iRadius].toFloat)) + (atomicMass[9] * df[elements[9]][iRadius].toFloat / (df[elements[7]][iRadius].toFloat + df[elements[8]][iRadius].toFloat + df[elements[9]][iRadius].toFloat)))) * (df["Rho"][iRadius].toFloat / amu)
+  for iZ in 10..<29:
+    n_Z[iRadius][iZ] = (df[elements[iZ]][iRadius].toFloat / atomicMass[iZ]) * (df["Rho"][iRadius].toFloat / amu) # The rest
+  n_e.add((df["Rho"][iRadius].toFloat/amu) * (1 + df[elements[0]][iRadius].toFloat/2))
+  #echo log(parseFloat(solarTable["Temp"][iRadius]), 10.0) / 0.025
+  for iTemp in 0..90:
+    distTemp = log(df["Temp"][iRadius].toFloat, 10.0) / 0.025 - float(140 + 2 * iTemp)
+    if abs(distTemp) <= 1.0: 
+      temperature = 140 + 2 * iTemp
+      #echo distTemp
+  temperatures.add(temperature)
+echo temperatures
+
+
+
+echo n_e
+echo n_Z
+
+
+
+var opElements: array[ElementKind, seq[OpacityFile]]
+
+proc getOpacity(opH: seq[OpacityFile], T, n_e, E: float): float =
+    # angenommen T ist die Form die in OpacityFile enthalten
+    let opF = opH.filterIt(it.temp == T)
+    let dOp = opF.denstiyTab[n_e]
+    result = dOp.interp(E)
+
+let energies = linspace(0.0, 10.0, 1000)
+for E in energies:
+    var sum = 0.0
+    for R, T, n_e in tab:
+        for Z in elements:
+            let opH = opElements[Z]
+            sum += opH.getOpacity(T, n_e, E) * n_z
