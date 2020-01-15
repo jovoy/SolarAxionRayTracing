@@ -221,18 +221,19 @@ echo n_Z
 
 
 
-var opElements: array[ElementKind, seq[OpacityFile]]
+when false:
+  var opElements: array[ElementKind, seq[OpacityFile]]
 
-proc getOpacity(opH: seq[OpacityFile], T, n_e, E: float): float =
+  proc getOpacity(opH: seq[OpacityFile], T, n_e, E: float): float =
     # angenommen T ist die Form die in OpacityFile enthalten
     let opF = opH.filterIt(it.temp == T)
     let dOp = opF.denstiyTab[n_e]
     result = dOp.interp(E)
 
-let energies = linspace(0.0, 10.0, 1000)
-for E in energies:
+  let energies = linspace(0.0, 10.0, 1000)
+  for E in energies:
     var sum = 0.0
     for R, T, n_e in tab:
-        for Z in elements:
-            let opH = opElements[Z]
-            sum += opH.getOpacity(T, n_e, E) * n_z
+      for Z in elements:
+        let opH = opElements[Z]
+        sum += opH.getOpacity(T, n_e, E) * n_z
