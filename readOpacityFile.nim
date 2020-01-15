@@ -86,6 +86,8 @@ proc parseOpacityFile(path: string): OpacityFile =
   ## - then read table header (3 lines)
   ## - then num lines
   let ds = newFileStream(path)
+  if ds.isNil:
+    raise newException(IOError, "Could not open file " & $path)
   var buf = newString(200)
   var idx = 0
   let fname = path.extractFilename
@@ -174,7 +176,7 @@ ggplot(dfFiltered, aes("energy", "opacity", color = "densityStr")) +
 ## First lets access the solar model and calculate some necessary values
 const solarModel = "./ReadSolarModel/resources/AGSS09_solar_model_stripped.dat"
 
-var df = readSolarModelDf(solarModel)
+var df = readSolarModel(solarModel)
 df = df.filter(f{"Radius" <= 0.2})
 echo df.pretty(precision = 10)
 
@@ -219,8 +221,13 @@ echo temperatures
 echo n_e
 echo n_Z
 
-
-
+var opFiles: seq[OpacityFile]
+for temp in temperatures:
+  for Z in elements:
+    let testF = &"./OPCD/OPCD_3.3/mono/fm{Z:02}.{temp}"
+    echo testF
+    #let opFile = parseOpacityFile(testF)
+ 
 when false:
   var opElements: array[ElementKind, seq[OpacityFile]]
 
