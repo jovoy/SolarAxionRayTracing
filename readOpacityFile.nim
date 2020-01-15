@@ -56,7 +56,11 @@ type
 proc parseTableLine(energy, opacity: var float, line: string) {.inline.} =
   ## parses the energy and opacity float values from `line` into `energy`
   ## (1st col) and `opacity` (2nd col) using `scanf`
-  if not line.scanf("$s$f$s$f", energy, opacity):
+  if line.scanf("$s$f$s$f", energy, opacity):
+    discard
+  elif line.scanf("$s$f", opacity):
+    discard
+  else:
     raise newException(ValueError, "Parsing opacity table in line " & $line & " failed!")
 
 proc parseTableHeader(line: string, hKind: HeaderLine): OpTableHeader =
@@ -115,6 +119,9 @@ proc parseOpacityFile(path: string): OpacityFile =
     for j in 0 ..< tableCount:
       discard ds.readLine(buf)
       parseTableLine(energy, opac, buf)
+      if tableCount == 10000:
+        # set energy manually to `j`, since we simply have 1 eV steps
+        energy = float j + 1
       densityOpacity.energies[j] = energy
       densityOpacity.opacities[j] = opac
       inc idx
