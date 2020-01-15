@@ -7,13 +7,14 @@ import strutils
 import algorithm
 import plotly
 import random
-import sequtils, os, strutils
+import sequtils, os
 import nimhdf5
 import chroma
 #import ingrid/[tos_helpers, likelihood, ingrid_types]
 
-import numericalnim, ggplotnim
+import numericalnim, ggplotnim, strformat
 import strscans
+import streams, tables
 
 
 
@@ -42,7 +43,7 @@ const
   distanceCBAxisXRTAxis = 0.0#62.1#58.44 #mm from XRT drawing #there is no difference in the axis even though the picture gets transfered 62,1mm down, but in the detector center
   RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW = 0.0 #mm #no change, because don't know # is actually -10.0 mm
   numberOfPointsEndOfCB = 200
-  numberOfPointsSun = 100000 #100000
+  numberOfPointsSun = 20000 #100000
 ## Chipregions#####
 
 const
@@ -101,11 +102,7 @@ proc getFluxFraction(chipRegionstring:string): float64 =
   else: echo "Error: Unknown chip region!"
 
 ########################################### some functions we're gonna need later#################################################
-
-proc readSolarModel(fname: string): DataFrame =
-  result = toDf(readCsv(fname, sep = ' '))
-
-## First let's get some functions for a random point on a disk, a biased random point from the solar model and a biased random energy ##
+# Now let's get some functions for a random point on a disk, a biased random point from the solar model and a biased random energy ##
 
 proc getRandomPointOnDisk(center: Vec3, radius:float64) : Vec3 =
 
@@ -811,8 +808,11 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
       energies.add(energy[iEnergy])
       fluxfractionen.add(emrates[(iEnergy) + (i * 233)])
 
-  let df = readSolarModel("AGSS09_solar_model.dat")
-  echo df["Radius"]
+
+
+
+
+
 
 
   for iSun in 1..numberOfPointsSun:
@@ -1111,7 +1111,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   echo (heatmaptable3[53][84]) * 100.0  #echo heatmaptable3[x][y]
 
   echo getMaxVal(heatmaptable2, 3000)
-  echo drawfancydiagrams("AxionModelFluxfraction", heatmaptable2, 3000)
+  #echo drawfancydiagrams("AxionModelFluxfraction", heatmaptable2, 3000)
   #echo drawfancydiagrams("AxionModelProbability", heatmaptable3, 3000) #Probabilities, that a photon, that hits a certain pixel could originate from an Axion, if the highest is 100%
   echo integralNormalisation # number of hits before the setup
   echo pointdataX.len # number of hits after the setup
