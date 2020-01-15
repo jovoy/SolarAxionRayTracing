@@ -52,7 +52,7 @@ type
   OpacityFile = object
     fname: string
     element: ElementKind
-    temp: float
+    temp: int
     densityTab: Table[int, DensityOpacity]
 
 proc parseTableLine(energy, opacity: var float, line: string) {.inline.} =
@@ -93,7 +93,7 @@ proc parseOpacityFile(path: string): OpacityFile =
   let fname = path.extractFilename
   result = OpacityFile(fname: fname,
                        element: ElementKind(fname[2 .. 3].parseInt),
-                       temp: pow(10.0, parseFloat(fname[5 .. ^1]) / 40.0))
+                       temp: parseInt(fname[5 .. ^1])) #pow(10.0, parseFloat(fname[5 .. ^1]) / 40.0))
   echo result
   var
     energy: float
@@ -161,7 +161,7 @@ let dfFiltered = dfSpline.filter(f{"opacity" < 1.0}).mutate(f{"densityStr" ~ str
 ggplot(dfFiltered, aes("energy", "opacity", color = "densityStr")) +
   geom_line() +
   legendPosition(x = 0.8, y = 0.0) +
-  ggtitle(&"E / Opacity for T = {opFile.temp:.2e} K, element: {opFile.element}") +
+  ggtitle(&"E / Opacity for T = {opFile.temp} K, element: {opFile.element}") +
   ggsave("energy_opacity_density.pdf")
 
 # alternatively plot all data in a log y plot
