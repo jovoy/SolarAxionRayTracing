@@ -1,4 +1,4 @@
-import strscans, streams, strutils, math, os, tables, sequtils, strformat
+import strscans, streams, strutils, math, os, tables, sequtils, strformat, hashes
 
 import numericalnim, ggplotnim
 
@@ -221,15 +221,30 @@ echo temperatures
 echo n_e
 echo n_Z
 
-var opFiles: seq[OpacityFile]
-for temp in temperatures:
-  for Z in elements:
-    let testF = &"./OPCD/OPCD_3.3/mono/fm{Z:02}.{temp}"
+proc hash(x: ElementKind): Hash = 
+  var h: Hash = 0
+  result = h !& int(x)
+  result = !$result
+
+var densities: HashSet[int]
+# var opElements: array[ElementKind, seq[OpacityFile]]
+var opElements: Table[ElementKind, Table[int, OpacityFile]]
+# allows for: opElements[Z][temp].densityTab[n_e].interp(E)
+for temp in toSet(temperatures):
+  for Z in ElementKind:
+    let testF = &"./OPCD_3.3/mono/fm{int(Z):02}.{temp}"
     echo testF
-    #let opFile = parseOpacityFile(testF)
+    if existsFile(testF):
+      let opFile = parseOpacityFile(testF)
+      for k in keys(opFile.densityTab):
+        densities.incl k
+      if Z notin opElements:
+        opElements[Z] = initTable[int, OpacityFile]()
+      opElements[Z][temp] = opFile
+
+echo densities
  
 when false:
-  var opElements: array[ElementKind, seq[OpacityFile]]
 
   proc getOpacity(opH: seq[OpacityFile], T, n_e, E: float): float =
     # angenommen T ist die Form die in OpacityFile enthalten
