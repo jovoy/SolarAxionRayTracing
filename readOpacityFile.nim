@@ -143,9 +143,11 @@ for d, op in pairs(opFile.densityTab):
     dfSpline.add df
 
 # filter out all opacities > 1.0 so that we can see the lines
-let dfFiltered = dfSpline.filter(f{"opacity" < 1.0})
+proc str(i: Value): Value = %~ $i
+let dfFiltered = dfSpline.filter(f{"opacity" < 1.0}).mutate(f{"densityStr" ~ str("density")})
 # and plot all interpolated density opacities
-ggplot(dfFiltered, aes("energy", "opacity", color = "density")) +
+
+ggplot(dfFiltered, aes("energy", "opacity", color = "densityStr")) +
   geom_line() +
   legendPosition(x = 0.8, y = 0.0) +
   ggtitle(&"E / Opacity for T = {opFile.temp:.2e} K, element: {opFile.element}") +
