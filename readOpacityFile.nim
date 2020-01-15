@@ -136,7 +136,7 @@ proc parseOpacityFile(path: string): OpacityFile =
     inc idx
   ds.close()
 
-const testF = "./OPCD/OPCD_3.3/mono/fm06.240"
+const testF = "./OPCD_3.3/mono/fm06.240"
 let opFile = parseOpacityFile(testF)
 
 # let's check whether the calculation worked by plotting the opacity for this file
