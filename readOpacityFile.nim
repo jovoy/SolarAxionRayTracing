@@ -8,7 +8,7 @@ type
 
   OpTableHeader = object
     case kind: HeaderLine
-    of H1: density: float
+    of H1: density: int
     of H2: discard
 
   ElementKind = enum
@@ -51,7 +51,7 @@ type
     fname: string
     element: ElementKind
     temp: float
-    densityTab: Table[string, DensityOpacity]
+    densityTab: Table[int, DensityOpacity]
 
 proc parseTableLine(energy, opacity: var float, line: string) {.inline.} =
   ## parses the energy and opacity float values from `line` into `energy`
@@ -66,9 +66,9 @@ proc parseTableHeader(line: string, hKind: HeaderLine): OpTableHeader =
   of H1:
     # do stuff for line 1, if we need something from here
     result = OpTableHeader(kind: H1)
-    if line.scanf("$s$f", result.density):
-      # TODO: please check this! And merge into a proc together with the `temp` calc below!
-      result.density = pow(10.0, result.density / 4.0) # apparently that's the calculation ??
+    if line.scanf("$s$i", result.density):
+      # NOTE: we use the density directly as `int` for simplicity reason!
+      discard
     else: raise newException(ValueError, "Could not parse header line 1: " & $line)
   of H2:
     # do stuff for line 2, if we need something from here
@@ -121,7 +121,7 @@ proc parseOpacityFile(path: string): OpacityFile =
     # finalize densityOpacity by creating spline and adding to result
     densityOpacity.interp = newCubicSpline(densityOpacity.energies,
                                            densityOpacity.opacities)
-    result.densityTab[$h1.density] = densityOpacity
+    result.densityTab[h1.density] = densityOpacity
     inc idx
   ds.close()
 
