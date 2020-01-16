@@ -226,18 +226,18 @@ for iRadius in 0..< df["Rho"].len:
       n_eInt = 74 + iNe * 2
   n_es.add(n_eInt)
   echo df["Temp"][iRadius].toFloat
-echo temperatures
+#echo temperatures
 
 
 
-echo n_es
-#echo n_Z
-
+#echo n_es
+echo n_Z
+var opacities = newSeqWith(df["Rho"].len, newSeq[float](29)) #29 elements
 proc hash(x: ElementKind): Hash = 
   var h: Hash = 0
   result = h !& int(x)
   result = !$result
-
+let energies = linspace(1.0, 10000.0, 1000)
 var densities: HashSet[int]
 # var opElements: array[ElementKind, seq[OpacityFile]]
 var opElements: Table[ElementKind, Table[int, OpacityFile]]
@@ -245,7 +245,8 @@ var opElements: Table[ElementKind, Table[int, OpacityFile]]
 for temp in toSet(temperatures):
   for Z in ElementKind:
     let testF = &"./OPCD_3.3/mono/fm{int(Z):02}.{temp}"
-    echo testF
+    echo Z
+    echo existsFile(testF)
     if existsFile(testF):
       let opFile = parseOpacityFile(testF)
       for k in keys(opFile.densityTab):
@@ -253,10 +254,38 @@ for temp in toSet(temperatures):
       if Z notin opElements:
         opElements[Z] = initTable[int, OpacityFile]()
       opElements[Z][temp] = opFile
+      #[for iE in energies:
+        for R in 0..< df["Rho"].len:
+          if temp == temperatures[R]:
+            n_eInt = n_es[R]  
+            var opacity = opFile.densityTab[n_eInt].interp.eval(iE)]#
 
-echo densities
+      
+
+#echo densities
+
+var sum = 0.0
+
+for R in 0..< df["Rho"].len:
+  n_eInt = n_es[R]
+  temperature = temperatures[R]
+  for iE in energies:
+    
+    for Z in ElementKind:
+      if int(Z) == 3 or int(Z) == 4 or int(Z) == 5 or int(Z) == 9: # Problem: Phosphorus and some other elements also don't exist in opacity files Z=15, etc.
+        continue
+      #let opH = opElements[Z]
+      echo "start"
  
+      let whatever = opElements[Z][temperature].densityTab[n_eInt]#.interp(iE)
+      echo whatever.interp.eval(iE)
+      #sum += opElements[iiZ][temperature].densityTab[n_eInt].interp(iE) * n_Z[iRadius][Z] #opH.getOpacity(T, n_e, E)
 when false:
+
+
+
+
+
 
   proc getOpacity(opH: seq[OpacityFile], T, n_e, E: float): float =
     # angenommen T ist die Form die in OpacityFile enthalten
@@ -264,10 +293,4 @@ when false:
     let dOp = opF.denstiyTab[n_e]
     result = dOp.interp(E)
 
-  let energies = linspace(0.0, 10.0, 1000)
-  for E in energies:
-    var sum = 0.0
-    for R, T, n_e in tab:
-      for Z in elements:
-        let opH = opElements[Z]
-        sum += opH.getOpacity(T, n_e, E) * n_z #opElements[Z][temp].densityTab[n_e].interp(E)
+  
