@@ -231,6 +231,7 @@ for iRadius in 0..< df["Rho"].len:
 
 
 #echo n_es
+
 echo n_Z
 var opacities = newSeqWith(df["Rho"].len, newSeq[float](29)) #29 elements
 proc hash(x: ElementKind): Hash = 
@@ -262,17 +263,18 @@ for temp in toSet(temperatures):
 
       
 
+
 #echo densities
 
 var sum = 0.0
-
+let noElement = @[3, 4, 5, 9, 15, 17, 19, 21, 22, 23, 27]
 for R in 0..< df["Rho"].len:
   n_eInt = n_es[R]
   temperature = temperatures[R]
   for iE in energies:
     
     for Z in ElementKind:
-      if int(Z) == 3 or int(Z) == 4 or int(Z) == 5 or int(Z) == 9: # Problem: Phosphorus and some other elements also don't exist in opacity files Z=15, etc.
+      if int(Z) in noElement: #Phosphorus and some other elements also don't exist in opacity files Z=15, etc.
         continue
       #let opH = opElements[Z]
       echo "start"
@@ -281,9 +283,6 @@ for R in 0..< df["Rho"].len:
       echo whatever.interp.eval(iE)
       #sum += opElements[iiZ][temperature].densityTab[n_eInt].interp(iE) * n_Z[iRadius][Z] #opH.getOpacity(T, n_e, E)
 when false:
-
-
-
 
 
 
