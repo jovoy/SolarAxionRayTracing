@@ -198,6 +198,10 @@ var
   distTemp : float
   temperature : int
   temperatures : seq[int]
+const
+  alpha = 1.0 / 137.0
+  g_ae = 1e-13
+  m_e_keV = 510.998
 let atomicMass = [1.0078,4.0026,3.0160,12.0000,13.0033,14.0030,15.0001,15.9949,16.9991,17.9991,20.1797,22.9897,24.3055,26.9815,28.085,30.9737,32.0675,35.4515,39.8775,39.0983,40.078,44.9559,47.867,50.9415,51.9961,54.9380,55.845,58.9331,58.6934] #all the 29 elements from the solar model file
 let elements = ["H1", "He4","He3", "C12", "C13", "N14", "N15", "O16", "O17", "O18", "Ne", "Na", "Mg", "Al", "Si", "P", "S", "Cl", "Ar", "K", "Ca", "Sc", "Ti", "V", "Cr", "Mn", "Fe", "Co", "Ni"]
 # var solarTable = readSolarModel(solarModel)
@@ -266,6 +270,7 @@ for temp in toSet(temperatures):
 
 let energies = linspace(1.0, 10000.0, 1112)
 var absCoeff = newSeqWith(df["Rho"].len, newSeq[float](1112)) #29 elements
+
 echo df["Rho"].len
 let noElement = @[3, 4, 5, 9, 15, 17, 19, 21, 22, 23, 27]
 for R in 0..<df["Rho"].len:
@@ -283,7 +288,19 @@ for R in 0..<df["Rho"].len:
     #iE is in eV 
     # if want to have absorbtion coefficient of a radius and energy: R = (r (in % of sunR) - 0.0015) / 0.0005
     # energy = energies[iEindex]
-echo absCoeff
+    
+    ## Now it's left to calculate the emission rates and for that the compton emission rate will be calculated first
+    var n_e_keV = pow(10.0, (n_es[R].toFloat * 0.25)) * 7.683e-24
+    var temp_keV = pow(10.0, (temperatures[R].toFloat * 0.025)) * 8.617e-8
+    var compton_emrate = (alpha * g_ae * g_ae * iE * 0.001 * iE * 0.001 * n_e_keV) / (3.0 * m_e_keV * m_e_keV * (exp(iE * 0.001 / temp_keV) - 1.0))
+    echo compton_emrate
+
+#echo absCoeff
+
+
+
+
+
  
 when false:
 
