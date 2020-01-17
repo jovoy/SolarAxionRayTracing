@@ -136,6 +136,12 @@ proc parseOpacityFile(path: string): OpacityFile =
     inc idx
   ds.close()
 
+proc F(w : float, y : float) : float =
+  let N = 5
+  var 
+    res_coef : seq[float]
+    lcoef = newSeqWith(N + 1, newSeq[float](N + 1))
+
 const testF = "./OPCD_3.3/mono/fm06.240"
 let opFile = parseOpacityFile(testF)
 
@@ -211,12 +217,12 @@ for iRadius in 0..< df["Rho"].len:
   n_Z[iRadius][1] = (df[elements[0]][iRadius].toFloat / atomicMass[0]) * (df["Rho"][iRadius].toFloat / amu) # Hydrogen
   for iZmult in 1..3:
     if iZmult == 1:
-    n_Z[iRadius][iZmult * 2] = ((df[elements[iZmult * 2 - 1]][iRadius].toFloat + df[elements[iZmult * 2]][iRadius].toFloat) / ((atomicMass[iZmult * 2 - 1] * df[elements[iZmult * 2 - 1]][iRadius].toFloat / (df[elements[iZmult * 2 - 1]][iRadius].toFloat + df[elements[iZmult * 2]][iRadius].toFloat)) + (atomicMass[iZmult * 2] * df[elements[iZmult * 2]][iRadius].toFloat / (df[elements[iZmult * 2 - 1]][iRadius].toFloat + df[elements[iZmult * 2]][iRadius].toFloat)))) * (df["Rho"][iRadius].toFloat / amu)
+      n_Z[iRadius][iZmult * 2] = ((df[elements[iZmult * 2 - 1]][iRadius].toFloat + df[elements[iZmult * 2]][iRadius].toFloat) / ((atomicMass[iZmult * 2 - 1] * df[elements[iZmult * 2 - 1]][iRadius].toFloat / (df[elements[iZmult * 2 - 1]][iRadius].toFloat + df[elements[iZmult * 2]][iRadius].toFloat)) + (atomicMass[iZmult * 2] * df[elements[iZmult * 2]][iRadius].toFloat / (df[elements[iZmult * 2 - 1]][iRadius].toFloat + df[elements[iZmult * 2]][iRadius].toFloat)))) * (df["Rho"][iRadius].toFloat / amu)
     else: n_Z[iRadius][iZmult + 4] = ((df[elements[iZmult * 2 - 1]][iRadius].toFloat + df[elements[iZmult * 2]][iRadius].toFloat) / ((atomicMass[iZmult * 2 - 1] * df[elements[iZmult * 2 - 1]][iRadius].toFloat / (df[elements[iZmult * 2 - 1]][iRadius].toFloat + df[elements[iZmult * 2]][iRadius].toFloat)) + (atomicMass[iZmult * 2] * df[elements[iZmult * 2]][iRadius].toFloat / (df[elements[iZmult * 2 - 1]][iRadius].toFloat + df[elements[iZmult * 2]][iRadius].toFloat)))) * (df["Rho"][iRadius].toFloat / amu) 
-    n_Z[iRadius][8] = ((df[elements[7]][iRadius].toFloat + df[elements[8]][iRadius].toFloat + df[elements[9]][iRadius].toFloat) / ((atomicMass[7] * df[elements[7]][iRadius].toFloat / (df[elements[7]][iRadius].toFloat + df[elements[8]][iRadius].toFloat + df[elements[9]][iRadius].toFloat)) + (atomicMass[8] * df[elements[8]][iRadius].toFloat / (df[elements[7]][iRadius].toFloat + df[elements[8]][iRadius].toFloat + df[elements[9]][iRadius].toFloat)) + (atomicMass[9] * df[elements[9]][iRadius].toFloat / (df[elements[7]][iRadius].toFloat + df[elements[8]][iRadius].toFloat + df[elements[9]][iRadius].toFloat)))) * (df["Rho"][iRadius].toFloat / amu)
+  n_Z[iRadius][8] = ((df[elements[7]][iRadius].toFloat + df[elements[8]][iRadius].toFloat + df[elements[9]][iRadius].toFloat) / ((atomicMass[7] * df[elements[7]][iRadius].toFloat / (df[elements[7]][iRadius].toFloat + df[elements[8]][iRadius].toFloat + df[elements[9]][iRadius].toFloat)) + (atomicMass[8] * df[elements[8]][iRadius].toFloat / (df[elements[7]][iRadius].toFloat + df[elements[8]][iRadius].toFloat + df[elements[9]][iRadius].toFloat)) + (atomicMass[9] * df[elements[9]][iRadius].toFloat / (df[elements[7]][iRadius].toFloat + df[elements[8]][iRadius].toFloat + df[elements[9]][iRadius].toFloat)))) * (df["Rho"][iRadius].toFloat / amu)
   for iZ in 10..<29:
     n_Z[iRadius][iZ] = (df[elements[iZ]][iRadius].toFloat / atomicMass[iZ]) * (df["Rho"][iRadius].toFloat / amu) # The rest
-  n_e = (df["Rho"][iRadius].toFloat/amu) * (1 + df[elements[0]][iRadius].toFloat/2)
+  n_e = (df["Rho"][iRadius].toFloat/amu) * (1 + df[elements[0]][iRadius].toFloat/2) # (g/cm³ /g) = 1/cm³
   #echo log(parseFloat(solarTable["Temp"][iRadius]), 10.0) / 0.025
   for iTemp in 0..90:
     distTemp = log(df["Temp"][iRadius].toFloat, 10.0) / 0.025 - float(140 + 2 * iTemp)
@@ -265,7 +271,7 @@ for temp in toSet(temperatures):
             n_eInt = n_es[R]  
             var opacity = opFile.densityTab[n_eInt].interp.eval(iE)]#
 
-      
+
 #echo densities
 
 let energies = linspace(1.0, 10000.0, 1112)
@@ -281,27 +287,35 @@ for R in 0..<df["Rho"].len:
     for Z in ElementKind:
       if int(Z) in noElement: #Phosphorus and some other elements also don't exist in opacity files Z=15, etc.
         continue
-      sum += opElements[Z][temperature].densityTab[n_eInt].interp.eval(iE) * n_Z[R][int(Z)]
-    #echo iE.toInt
+      var opacity = opElements[Z][temperature].densityTab[n_eInt].interp.eval(iE)
+      var opacity_keV = opacity * 0.528e-10 * 0.528e-10 * 5.076142e9 * 5.076142e9 # correct conversion
+      # opacities in atomic unit for lenth squared: 0.528 x10-8cm * 0.528 x10-8cm = a0² # 1 m = 1/1.239841336215e-9 1/keV and a0 = 0.528 x10-10m
+      sum += opacity_keV * n_Z[R][int(Z)] * 7.683e-24 #ToDo: check if this is the right way to transform the atomic number density into keV
+      
+    #echo iE.toInt    
+    var n_e_keV = pow(10.0, (n_es[R].toFloat * 0.25)) * 7.683e-24 # was 1/cm³ #correct conversion
+    var temp_keV = pow(10.0, (temperatures[R].toFloat * 0.025)) * 8.617e-8 # was K # correct conversion
     var iEindex = find(energies, iE)
-    absCoeff[R][iEindex] = sum 
+    absCoef[R][iEindex] = sum * (exp(iE * 0.001 / temp_keV) - 1.0) # is in keV
     #iE is in eV 
     # if want to have absorbtion coefficient of a radius and energy: R = (r (in % of sunR) - 0.0015) / 0.0005
     # energy = energies[iEindex]
     
     ## Now it's left to calculate the emission rates and for that the compton emission rate will be calculated first
-    var n_e_keV = pow(10.0, (n_es[R].toFloat * 0.25)) * 7.683e-24
-    var temp_keV = pow(10.0, (temperatures[R].toFloat * 0.025)) * 8.617e-8
-    var compton_emrate = (alpha * g_ae * g_ae * iE * 0.001 * iE * 0.001 * n_e_keV) / (3.0 * m_e_keV * m_e_keV * (exp(iE * 0.001 / temp_keV) - 1.0))
-    echo compton_emrate
+    var energy_keV = iE * 0.001
+    var compton_emrate = (alpha * g_ae * g_ae * energy_keV * energy_keV * n_e_keV) / (3.0 * m_e_keV * m_e_keV * (exp(energy_keV / temp_keV) - 1.0)) # (keV³ / keV²) = keV
+    ## And the bremsstrahlung emission rate
+    var debye_scale = sqrt( (4.0 * PI * alpha / temp_keV) * (n_e_keV + n_Z[R][1] * 7.645e-24 + 4.0 * n_Z[R][2] * 7.645e-24 )) ## making the same approximation as for n_e calculation 
+    var y = debye_scale / (sqrt( 2.0 * m_e_keV * temp_keV))
+    var brems_emrate = (alpha * alpha * g_ae * g_ae * (4.0/3.0) * sqrt(PI) * n_e_keV * n_e_keV * exp(-(energy_keV / temp_keV)) * gauss.F((energy_keV / temp_keV), sqrt(2) * y)) / (sqrt(temp_keV) * pow(m_e_keV,3.5) * energy_keV)
 
-#echo absCoeff
+#echo absCoef
 
 
 
 
 
- 
+
 when false:
 
 
