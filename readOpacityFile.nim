@@ -233,12 +233,12 @@ for iRadius in 0..< df["Rho"].len:
 #echo n_es
 
 echo n_Z
-var opacities = newSeqWith(df["Rho"].len, newSeq[float](29)) #29 elements
+
 proc hash(x: ElementKind): Hash = 
   var h: Hash = 0
   result = h !& int(x)
   result = !$result
-let energies = linspace(1.0, 10000.0, 1000)
+
 var densities: HashSet[int]
 # var opElements: array[ElementKind, seq[OpacityFile]]
 var opElements: Table[ElementKind, Table[int, OpacityFile]]
@@ -262,26 +262,29 @@ for temp in toSet(temperatures):
             var opacity = opFile.densityTab[n_eInt].interp.eval(iE)]#
 
       
-
-
 #echo densities
 
-var sum = 0.0
+let energies = linspace(1.0, 10000.0, 1112)
+var absCoeff = newSeqWith(df["Rho"].len, newSeq[float](1112)) #29 elements
+echo df["Rho"].len
 let noElement = @[3, 4, 5, 9, 15, 17, 19, 21, 22, 23, 27]
-for R in 0..< df["Rho"].len:
+for R in 0..<df["Rho"].len:
   n_eInt = n_es[R]
   temperature = temperatures[R]
   for iE in energies:
-    
+    var sum = 0.0
     for Z in ElementKind:
       if int(Z) in noElement: #Phosphorus and some other elements also don't exist in opacity files Z=15, etc.
         continue
-      #let opH = opElements[Z]
-      echo "start"
+      sum += opElements[Z][temperature].densityTab[n_eInt].interp.eval(iE) * n_Z[R][int(Z)]
+    #echo iE.toInt
+    var iEindex = find(energies, iE)
+    absCoeff[R][iEindex] = sum 
+    #iE is in eV 
+    # if want to have absorbtion coefficient of a radius and energy: R = (r (in % of sunR) - 0.0015) / 0.0005
+    # energy = energies[iEindex]
+echo absCoeff
  
-      let whatever = opElements[Z][temperature].densityTab[n_eInt]#.interp(iE)
-      echo whatever.interp.eval(iE)
-      #sum += opElements[iiZ][temperature].densityTab[n_eInt].interp(iE) * n_Z[iRadius][Z] #opH.getOpacity(T, n_e, E)
 when false:
 
 
