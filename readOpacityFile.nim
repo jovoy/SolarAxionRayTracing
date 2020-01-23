@@ -1,4 +1,4 @@
-import strscans, streams, strutils, math, os, tables, sequtils, strformat, hashes
+import strscans, streams, strutils, math, os, tables, sequtils, strformat, hashes, polynumeric
 
 import numericalnim, ggplotnim
 
@@ -136,13 +136,75 @@ proc parseOpacityFile(path: string): OpacityFile =
     inc idx
   ds.close()
 
+proc lagEval(n : int, x : float) : float = 
+  if(n>0):
+    result  = (2.0 * n.float - 1.0 - x) * lagEval(n-1,x) - (1.0 - (1.0 / n.float))* lagEval(n-2,x)
+  elif(n==1):
+    result =  1.0 - x
+  elif(n==0):
+    result =  1.0 
+  else: result= 0.0
+
+proc lagDeriv(m : int, x : float) : float = 
+  if(m>0):
+    result = lagDeriv(m-1,x) - lagEval(m-1,x)
+  elif(m==0):
+    result = 0.0 
+  else : result = 0.0
+
+proc quadWeight(x : float): float = 
+  let N = 5
+  result = 1.0 / (x * pow(lagDeriv(N,x),2) )
+
+proc inner_integral(t : float, y: float) : float = 
+  result = (1.0/2.0) * ( ((y * y) / (t * t + y * y)) + ln( t * t + y * y ) )
+
+
+proc quadFunc(x : float, y : float, w : float): float = 
+  var up_lim = sqrt(x+w) + sqrt(x);
+  var lo_lim = sqrt(x+w) - sqrt(x);
+  result = inner_integral(up_lim, y) - inner_integral(lo_lim, y);
+
+
+
+
 proc F(w : float, y : float) : float =
   let N = 5
   var 
     res_coef : seq[float]
     lcoef = newSeqWith(N + 1, newSeq[float](N + 1))
+    weights_vec : seq[float]
+  lcoef[0][0] = 1.0
+  lcoef[1][0] = 1.0
+  lcoef[1][1]  = -1.0 # coeffs of the first two polynomials
+  for n in 2..N: # n-th polynomial
+    lcoef[n][0] = 1.0  #constants of all Laguerre polynomials are = 1
+    for i in 1..n: # i-th power of x in the n-th polynomial
+      lcoef[n][i] = ( (2 * n - 1).float * lcoef[n-1][i] - lcoef[n-1][i-1] + (1 - n).float * lcoef[n-2][i] ) / n.float
+  ## storing the coefficients of the N-th order polynomial only whose roots will be computed
+  for i in 0 .. N:
+    res_coef.add(lcoef[N][i]) 
+  #echo res_coef
+  let p = initPoly(res_coef)
+  ## calculate roots (Nullstellen) of this as a vector
+  let roots_vec = p.roots()
+  #for n in 0..N:
+  #  roots_vec.add(0.0)
+    #echo roots(res_coef[n])
 
-const testF = "./OPCD_3.3/mono/fm06.240"
+  var integral = 0.0
+
+  for i in 0 ..< N:
+    weights_vec.add(quadWeight(roots_vec[i]))
+  
+
+  for i in 0 .. <N:
+    integral += weights_vec[i] * quadFunc(roots_vec[i], y, w)
+  
+
+  integral *= (1.0 / 2.0)
+  
+  result = integral
 let opFile = parseOpacityFile(testF)
 
 # let's check whether the calculation worked by plotting the opacity for this file
