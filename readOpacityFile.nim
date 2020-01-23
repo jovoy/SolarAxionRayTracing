@@ -205,6 +205,14 @@ proc F(w : float, y : float) : float =
   integral *= (1.0 / 2.0)
   
   result = integral
+    
+proc comptonEmrate(alpha : float, gae : float, energy : float, ne : float, me : float, temp : float) : float =
+  result = (alpha * gae * gae * energy * energy * ne) / (3.0 * me * me * (exp(energy / temp) - 1.0))
+
+proc bremsEmrate(alpha : float, gae : float, energy : float, ne : float, me : float, temp : float, w : float, y : float) : float =
+  result = (alpha * alpha * gae * gae * 4.0 * sqrt(PI) * ne * ne * exp(- energy / temp) * F(w, sqrt(2.0) * y)) / (3.0 * sqrt(temp) * pow(me, 3.5) * energy)
+
+const testF = "./OPCD_3.3/mono/fm26.300"
 let opFile = parseOpacityFile(testF)
 
 # let's check whether the calculation worked by plotting the opacity for this file
@@ -368,29 +376,88 @@ for R in 0..<df["Rho"].len:
     for Z in ElementKind:
       if int(Z) in noElement: #Phosphorus and some other elements also don't exist in opacity files Z=15, etc.
         continue
-      var opacity = opElements[Z][temperature].densityTab[n_eInt].interp.eval(iE)
+      var opacity = opElements[Z][temperature].densityTab[n_eInt].interp.eval(iE) ###???
+      if int(Z) == 26 and iE > 200:
+        ironOp[R][iEindex] = opacity
       var opacity_keV = opacity * 0.528e-10 * 0.528e-10 * 5.076142e9 * 5.076142e9 # correct conversion
       # opacities in atomic unit for lenth squared: 0.528 x10-8cm * 0.528 x10-8cm = a0² # 1 m = 1/1.239841336215e-9 1/keV and a0 = 0.528 x10-10m
-      sum += opacity_keV * n_Z[R][int(Z)] * 7.683e-24 #ToDo: check if this is the right way to transform the atomic number density into keV
-      
+      sum += opacity_keV * n_Z[R][int(Z)] * 7.683e-24 
+    absCoef =  sum * (1.0 - exp(-energy_keV / temp_keV)) #* 100000000.0 # is in keV  
     #echo iE.toInt    
-    var n_e_keV = pow(10.0, (n_es[R].toFloat * 0.25)) * 7.683e-24 # was 1/cm³ #correct conversion
-    var temp_keV = pow(10.0, (temperatures[R].toFloat * 0.025)) * 8.617e-8 # was K # correct conversion
-    var iEindex = find(energies, iE)
-    absCoef[R][iEindex] = sum * (exp(iE * 0.001 / temp_keV) - 1.0) # is in keV
+    #if iE < 50: 
+      #echo "go"
+      #echo sum
+    echo absCoef
+      #echo exp(energy_keV / temp_keV)
+    
+    absCoefs[R][iEindex] = absCoef
+    #echo absCoef
     #iE is in eV 
     # if want to have absorbtion coefficient of a radius and energy: R = (r (in % of sunR) - 0.0015) / 0.0005
     # energy = energies[iEindex]
     
     ## Now it's left to calculate the emission rates and for that the compton emission rate will be calculated first
-    var energy_keV = iE * 0.001
-    var compton_emrate = (alpha * g_ae * g_ae * energy_keV * energy_keV * n_e_keV) / (3.0 * m_e_keV * m_e_keV * (exp(energy_keV / temp_keV) - 1.0)) # (keV³ / keV²) = keV
-    ## And the bremsstrahlung emission rate
-    var debye_scale = sqrt( (4.0 * PI * alpha / temp_keV) * (n_e_keV + n_Z[R][1] * 7.645e-24 + 4.0 * n_Z[R][2] * 7.645e-24 )) ## making the same approximation as for n_e calculation 
-    var y = debye_scale / (sqrt( 2.0 * m_e_keV * temp_keV))
-    var brems_emrate = (alpha * alpha * g_ae * g_ae * (4.0/3.0) * sqrt(PI) * n_e_keV * n_e_keV * exp(-(energy_keV / temp_keV)) * gauss.F((energy_keV / temp_keV), sqrt(2) * y)) / (sqrt(temp_keV) * pow(m_e_keV,3.5) * energy_keV)
+    
+    
+    let compton_emrate = comptonEmrate(alpha, g_ae, energy_keV, n_e_keV, m_e_keV, temp_keV) # (keV³ / keV²) = keV
 
+    ## And the bremsstrahlung emission rate
+    let debye_scale = sqrt( (4.0 * PI * alpha / temp_keV) * (n_e_keV + n_Z[R][1] * 7.645e-24 + 4.0 * n_Z[R][2] * 7.645e-24 )) ## making the same approximation as for n_e calculation 
+    let y = debye_scale / (sqrt( 2.0 * m_e_keV * temp_keV))
+    
+    let brems_emrate = bremsEmrate(alpha, g_ae, energy_keV, n_e_keV, m_e_keV, temp_keV, w, y)
+
+    let term1 = (g_ae * g_ae * energy_keV * energy_keV * absCoef) / (2.0 * e_charge * e_charge * m_e_keV * m_e_keV * (exp(energy_keV / temp_keV) - 1.0))  # includes contribution from ff, fb and bb processes and a part of the Comption contribution ## keV³ / keV² = keV
+    let term2 = ((exp(energy_keV / temp_keV) - 2.0) * compton_emrate) / (2.0 * (exp(energy_keV / temp_keV) - 1.0)) # completes the Compton contribution #keV
+    let term3 = brems_emrate # contribution from ee-bremsstahlung
+    let total_emrate = (term1  + term2 + term3 )#* 1e-8) # keV 
+    let total_emrate_s = total_emrate / (6.58e-19) # in 1/sec 
+    emratesS[R][iEindex] = total_emrate_s
+    # if want to have absorbtion coefficient of a radius and energy: R = (r (in % of sunR) - 0.0015) / 0.0005
+    # energy = energies[iEindex] in eV
+
+    #echo energy_keV / temp_keV
+    #[if total_emrate_s < 0.0: #term1 < 0.0 or term2 < 0.0 or term3 < 0.0:
+      echo "start"
+      echo R
+      echo iE
+      echo energy_keV
+      echo energy_keV / temp_keV
+      echo exp(energy_keV / temp_keV) - 1.0
+      echo compton_emrate ]#
 #echo absCoef
+    #echo term1
+    #echo term2
+    #echo term3
+for e in energies:
+  var sumIron = 0.0
+  var iEindexx = find(energies, e)
+  for r in 0..<df["Rho"].len:
+    sumIron += ironOp[r][iEindexx]
+  #if sumIron > 0.7 :
+    #echo e
+  ironOpE.add(sumIron)
+#echo ironOpE
+#echo energies
+
+let dfEmrate = seqsToDf({ "energy" : energies,
+                          "emrate" : emratesS[300] })
+ggplot(dfEmrate, aes("energy", "emrate")) +
+  geom_line() +
+  ggsave("emrate_R10.pdf")
+
+let dfAbscoef = seqsToDf({ "energy" : energies,
+                           "absCoefs" : absCoefs[10] })
+ggplot(dfAbscoef, aes("energy", "absCoefs")) +
+  geom_line() +
+  ggsave("abscoefs_R10.pdf")
+
+let dfOpIron = seqsToDf({ "energy" : energies,
+                          "opIron" : ironOpE })
+ggplot(dfOpIron, aes("energy", "opIron")) +
+  geom_line() +
+  ggsave("opIron.pdf")
+
 
 
 
