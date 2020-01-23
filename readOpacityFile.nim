@@ -269,7 +269,9 @@ var
 const
   alpha = 1.0 / 137.0
   g_ae = 1e-13
-  m_e_keV = 510.998
+  m_e_keV = 510.998 #keV
+  e_charge = 1.0
+  kB = 1.380649e-23
 let atomicMass = [1.0078,4.0026,3.0160,12.0000,13.0033,14.0030,15.0001,15.9949,16.9991,17.9991,20.1797,22.9897,24.3055,26.9815,28.085,30.9737,32.0675,35.4515,39.8775,39.0983,40.078,44.9559,47.867,50.9415,51.9961,54.9380,55.845,58.9331,58.6934] #all the 29 elements from the solar model file
 let elements = ["H1", "He4","He3", "C12", "C13", "N14", "N15", "O16", "O17", "O18", "Ne", "Na", "Mg", "Al", "Si", "P", "S", "Cl", "Ar", "K", "Ca", "Sc", "Ti", "V", "Cr", "Mn", "Fe", "Co", "Ni"]
 # var solarTable = readSolarModel(solarModel)
@@ -298,13 +300,14 @@ for iRadius in 0..< df["Rho"].len:
       n_eInt = 74 + iNe * 2
   n_es.add(n_eInt)
   echo df["Temp"][iRadius].toFloat
+  echo n_Z[iRadius][26]
 #echo temperatures
 
 
 
 #echo n_es
 
-echo n_Z
+
 
 proc hash(x: ElementKind): Hash = 
   var h: Hash = 0
@@ -318,8 +321,8 @@ var opElements: Table[ElementKind, Table[int, OpacityFile]]
 for temp in toSet(temperatures):
   for Z in ElementKind:
     let testF = &"./OPCD_3.3/mono/fm{int(Z):02}.{temp}"
-    echo Z
-    echo existsFile(testF)
+    #echo Z
+    #echo existsFile(testF)
     if existsFile(testF):
       let opFile = parseOpacityFile(testF)
       for k in keys(opFile.densityTab):
@@ -337,7 +340,11 @@ for temp in toSet(temperatures):
 #echo densities
 
 let energies = linspace(1.0, 10000.0, 1112)
-var absCoeff = newSeqWith(df["Rho"].len, newSeq[float](1112)) #29 elements
+
+var absCoefs = newSeqWith(df["Rho"].len, newSeq[float](1112)) #29 elements
+var emratesS = newSeqWith(df["Rho"].len, newSeq[float](1112))
+var ironOp = newSeqWith(df["Rho"].len, newSeq[float](1112))
+var ironOpE : seq[float]
 
 echo df["Rho"].len
 let noElement = @[3, 4, 5, 9, 15, 17, 19, 21, 22, 23, 27]
@@ -346,6 +353,18 @@ for R in 0..<df["Rho"].len:
   temperature = temperatures[R]
   for iE in energies:
     var sum = 0.0
+    var absCoef = 0.0
+    var n_e_keV = pow(10.0, (n_es[R].toFloat * 0.25)) * 7.683e-24 # was 1/cm³ #correct conversion
+    var temp_keV = pow(10.0, (temperatures[R].toFloat * 0.025)) * 8.617e-8 # was K # correct conversion
+    var temp_K = pow(10.0, (temperatures[R].toFloat * 0.025))
+    var energy_keV = iE * 0.001
+    var energy_J = 1.60218e-16 * energy_keV
+    var w = energy_keV / temp_keV #(energy_J / ( kB * temp_K)) * 500.0
+    var iEindex = find(energies, iE) # slows down the code: change
+    #if w < 1.0:
+      #echo "w" 
+      #echo w
+    #echo (energy_keV / temp_keV)
     for Z in ElementKind:
       if int(Z) in noElement: #Phosphorus and some other elements also don't exist in opacity files Z=15, etc.
         continue
