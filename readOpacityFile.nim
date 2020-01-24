@@ -212,6 +212,12 @@ proc comptonEmrate(alpha : float, gae : float, energy : float, ne : float, me : 
 proc bremsEmrate(alpha : float, gae : float, energy : float, ne : float, me : float, temp : float, w : float, y : float) : float =
   result = (alpha * alpha * gae * gae * 4.0 * sqrt(PI) * ne * ne * exp(- energy / temp) * F(w, sqrt(2.0) * y)) / (3.0 * sqrt(temp) * pow(me, 3.5) * energy)
 
+proc term1(gae : float, energy : float, abscoef : float, echarge : float, me : float, temp : float) : float = 
+  result = (gae * gae * energy * energy * abscoef) / (2.0 * echarge * echarge * me * me * (exp(energy / temp) - 1.0))
+
+proc term2(alpha : float, gae : float, energy : float, ne : float, me : float, temp : float) : float =
+  result = ((exp(energy / temp) - 2.0) * comptonEmrate(alpha, gae, energy, ne, me, temp)) / (2.0 * (exp(energy / temp) - 1.0))
+
 const testF = "./OPCD_3.3/mono/fm26.300"
 let opFile = parseOpacityFile(testF)
 
@@ -278,7 +284,7 @@ const
   alpha = 1.0 / 137.0
   g_ae = 1e-13
   m_e_keV = 510.998 #keV
-  e_charge = 1.0
+  e_charge = sqrt(4.0 * PI * alpha)#1.0
   kB = 1.380649e-23
 let atomicMass = [1.0078,4.0026,3.0160,12.0000,13.0033,14.0030,15.0001,15.9949,16.9991,17.9991,20.1797,22.9897,24.3055,26.9815,28.085,30.9737,32.0675,35.4515,39.8775,39.0983,40.078,44.9559,47.867,50.9415,51.9961,54.9380,55.845,58.9331,58.6934] #all the 29 elements from the solar model file
 let elements = ["H1", "He4","He3", "C12", "C13", "N14", "N15", "O16", "O17", "O18", "Ne", "Na", "Mg", "Al", "Si", "P", "S", "Cl", "Ar", "K", "Ca", "Sc", "Ti", "V", "Cr", "Mn", "Fe", "Co", "Ni"]
@@ -369,66 +375,39 @@ for R in 0..<df["Rho"].len:
     var energy_J = 1.60218e-16 * energy_keV
     var w = energy_keV / temp_keV #(energy_J / ( kB * temp_K)) * 500.0
     var iEindex = find(energies, iE) # slows down the code: change
-    #if w < 1.0:
-      #echo "w" 
-      #echo w
-    #echo (energy_keV / temp_keV)
+
     for Z in ElementKind:
       if int(Z) in noElement: #Phosphorus and some other elements also don't exist in opacity files Z=15, etc.
         continue
       var opacity = opElements[Z][temperature].densityTab[n_eInt].interp.eval(iE) ###???
       if int(Z) == 26 and iE > 200:
         ironOp[R][iEindex] = opacity
-      var opacity_keV = opacity * 0.528e-10 * 0.528e-10 * 5.076142e9 * 5.076142e9 # correct conversion
+      var opacity_keV = opacity * 0.528e-8 * 0.528e-8 # correct conversion
       # opacities in atomic unit for lenth squared: 0.528 x10-8cm * 0.528 x10-8cm = a0² # 1 m = 1/1.239841336215e-9 1/keV and a0 = 0.528 x10-10m
-      sum += opacity_keV * n_Z[R][int(Z)] * 7.683e-24 
+      sum += opacity_keV * n_Z[R][int(Z)] * 1.97327e-8 #* 7.683e-24 
     absCoef =  sum * (1.0 - exp(-energy_keV / temp_keV)) #* 100000000.0 # is in keV  
-    #echo iE.toInt    
-    #if iE < 50: 
-      #echo "go"
-      #echo sum
-    echo absCoef
-      #echo exp(energy_keV / temp_keV)
     
     absCoefs[R][iEindex] = absCoef
-    #echo absCoef
-    #iE is in eV 
+
     # if want to have absorbtion coefficient of a radius and energy: R = (r (in % of sunR) - 0.0015) / 0.0005
     # energy = energies[iEindex]
     
-    ## Now it's left to calculate the emission rates and for that the compton emission rate will be calculated first
+    ## Now it's left to calculate the emission rates
     
-    
-    let compton_emrate = comptonEmrate(alpha, g_ae, energy_keV, n_e_keV, m_e_keV, temp_keV) # (keV³ / keV²) = keV
-
-    ## And the bremsstrahlung emission rate
     let debye_scale = sqrt( (4.0 * PI * alpha / temp_keV) * (n_e_keV + n_Z[R][1] * 7.645e-24 + 4.0 * n_Z[R][2] * 7.645e-24 )) ## making the same approximation as for n_e calculation 
     let y = debye_scale / (sqrt( 2.0 * m_e_keV * temp_keV))
     
-    let brems_emrate = bremsEmrate(alpha, g_ae, energy_keV, n_e_keV, m_e_keV, temp_keV, w, y)
+    let term1 = term1(g_ae, energy_keV, absCoef, e_charge, m_e_keV, temp_keV)  # includes contribution from ff, fb and bb processes and a part of the Comption contribution ## keV³ / keV² = keV
+    let term2 = term2(alpha, g_ae, energy_keV, n_e_keV, m_e_keV, temp_keV)# completes the Compton contribution #keV
+    let term3 = bremsEmrate(alpha, g_ae, energy_keV, n_e_keV, m_e_keV, temp_keV, w, y) # contribution from ee-bremsstahlung
 
-    let term1 = (g_ae * g_ae * energy_keV * energy_keV * absCoef) / (2.0 * e_charge * e_charge * m_e_keV * m_e_keV * (exp(energy_keV / temp_keV) - 1.0))  # includes contribution from ff, fb and bb processes and a part of the Comption contribution ## keV³ / keV² = keV
-    let term2 = ((exp(energy_keV / temp_keV) - 2.0) * compton_emrate) / (2.0 * (exp(energy_keV / temp_keV) - 1.0)) # completes the Compton contribution #keV
-    let term3 = brems_emrate # contribution from ee-bremsstahlung
-    let total_emrate = (term1  + term2 + term3 )#* 1e-8) # keV 
+    let total_emrate = (term1 + term2 + term3  ) # keV 
     let total_emrate_s = total_emrate / (6.58e-19) # in 1/sec 
     emratesS[R][iEindex] = total_emrate_s
     # if want to have absorbtion coefficient of a radius and energy: R = (r (in % of sunR) - 0.0015) / 0.0005
     # energy = energies[iEindex] in eV
 
-    #echo energy_keV / temp_keV
-    #[if total_emrate_s < 0.0: #term1 < 0.0 or term2 < 0.0 or term3 < 0.0:
-      echo "start"
-      echo R
-      echo iE
-      echo energy_keV
-      echo energy_keV / temp_keV
-      echo exp(energy_keV / temp_keV) - 1.0
-      echo compton_emrate ]#
-#echo absCoef
-    #echo term1
-    #echo term2
-    #echo term3
+    
 for e in energies:
   var sumIron = 0.0
   var iEindexx = find(energies, e)
