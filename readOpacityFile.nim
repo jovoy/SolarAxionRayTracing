@@ -161,8 +161,8 @@ proc inner_integral(t : float, y: float) : float =
 
 
 proc quadFunc(x : float, y : float, w : float): float = 
-  var up_lim = sqrt(x+w) + sqrt(x);
-  var lo_lim = sqrt(x+w) - sqrt(x);
+  var up_lim = sqrt(x * x + w) + x # sqrt(x  +w) + sqrt(x)
+  var lo_lim = sqrt(x * x + w) - x # sqrt(x  +w) - sqrt(x)
   result = inner_integral(up_lim, y) - inner_integral(lo_lim, y);
 
 
@@ -259,7 +259,7 @@ ggplot(dfFiltered, aes("energy", "opacity", color = "densityStr")) +
 const solarModel = "./ReadSolarModel/resources/AGSS09_solar_model_stripped.dat"
 
 var df = readSolarModel(solarModel)
-df = df.filter(f{"Radius" <= 0.2})
+df = df.filter(f{"Radius" <= 0.4})
 echo df.pretty(precision = 10)
 
 # to read a single column, e.g. radius:
@@ -274,23 +274,28 @@ ggplot(df, aes("Radius", "Temp", color = "Rho")) +
 var 
   n_Z = newSeqWith(df["Rho"].len, newSeq[float](29)) #29 elements
   n_e : float
+  n_e_old : float
   n_es : seq[int]
   n_eInt : int
   distNe : float
   distTemp : float
   temperature : int
   temperatures : seq[int]
+let noElement = @[3, 4, 5, 9, 15, 17, 19, 21, 22, 23, 27]
 const
   alpha = 1.0 / 137.0
   g_ae = 1e-13
   m_e_keV = 510.998 #keV
   e_charge = sqrt(4.0 * PI * alpha)#1.0
   kB = 1.380649e-23
+  r_sun = 6.957e11 #mm
+  r_sunearth = 1.5e14 #mm
 let atomicMass = [1.0078,4.0026,3.0160,12.0000,13.0033,14.0030,15.0001,15.9949,16.9991,17.9991,20.1797,22.9897,24.3055,26.9815,28.085,30.9737,32.0675,35.4515,39.8775,39.0983,40.078,44.9559,47.867,50.9415,51.9961,54.9380,55.845,58.9331,58.6934] #all the 29 elements from the solar model file
 let elements = ["H1", "He4","He3", "C12", "C13", "N14", "N15", "O16", "O17", "O18", "Ne", "Na", "Mg", "Al", "Si", "P", "S", "Cl", "Ar", "K", "Ca", "Sc", "Ti", "V", "Cr", "Mn", "Fe", "Co", "Ni"]
+let charges = [1.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]  #6.0, 6.0, 7.0, 7.0, 8.0, 8.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0] ## ion charges
 # var solarTable = readSolarModel(solarModel)
 let amu = 1.6605e-24 #grams
-echo df["Mass"][6]
+#echo df["Mass"][6]
 for iRadius in 0..< df["Rho"].len:
   n_Z[iRadius][1] = (df[elements[0]][iRadius].toFloat / atomicMass[0]) * (df["Rho"][iRadius].toFloat / amu) # Hydrogen
   for iZmult in 1..3:
@@ -300,7 +305,13 @@ for iRadius in 0..< df["Rho"].len:
   n_Z[iRadius][8] = ((df[elements[7]][iRadius].toFloat + df[elements[8]][iRadius].toFloat + df[elements[9]][iRadius].toFloat) / ((atomicMass[7] * df[elements[7]][iRadius].toFloat / (df[elements[7]][iRadius].toFloat + df[elements[8]][iRadius].toFloat + df[elements[9]][iRadius].toFloat)) + (atomicMass[8] * df[elements[8]][iRadius].toFloat / (df[elements[7]][iRadius].toFloat + df[elements[8]][iRadius].toFloat + df[elements[9]][iRadius].toFloat)) + (atomicMass[9] * df[elements[9]][iRadius].toFloat / (df[elements[7]][iRadius].toFloat + df[elements[8]][iRadius].toFloat + df[elements[9]][iRadius].toFloat)))) * (df["Rho"][iRadius].toFloat / amu)
   for iZ in 10..<29:
     n_Z[iRadius][iZ] = (df[elements[iZ]][iRadius].toFloat / atomicMass[iZ]) * (df["Rho"][iRadius].toFloat / amu) # The rest
-  n_e = (df["Rho"][iRadius].toFloat/amu) * (1 + df[elements[0]][iRadius].toFloat/2) # (g/cm³ /g) = 1/cm³
+  n_e = 0.0
+  for Z in 0..<elements.len:
+    #if charges[Z].int in noElement: ## unnecessary
+      #continue
+    n_e += (df["Rho"][iRadius].toFloat/amu) * charges[Z] * df[elements[Z]][iRadius].toFloat / atomicMass[Z] #(df["Rho"][iRadius].toFloat/amu) * (1 + df[elements[0]][iRadius].toFloat/2) # (g/cm³ /g) = 1/cm³
+  n_e_old = (df["Rho"][iRadius].toFloat/amu) * (1 + df[elements[0]][iRadius].toFloat/2)
+
   #echo log(parseFloat(solarTable["Temp"][iRadius]), 10.0) / 0.025
   for iTemp in 0..90:
     distTemp = log(df["Temp"][iRadius].toFloat, 10.0) / 0.025 - float(140 + 2 * iTemp)
@@ -313,8 +324,8 @@ for iRadius in 0..< df["Rho"].len:
     if abs(distNe) <= 1.0: 
       n_eInt = 74 + iNe * 2
   n_es.add(n_eInt)
-  echo df["Temp"][iRadius].toFloat
-  echo n_Z[iRadius][26]
+  #echo df["Temp"][iRadius].toFloat
+  #echo n_Z[iRadius][26]
 #echo temperatures
 
 
@@ -359,22 +370,22 @@ var absCoefs = newSeqWith(df["Rho"].len, newSeq[float](1112)) #29 elements
 var emratesS = newSeqWith(df["Rho"].len, newSeq[float](1112))
 var ironOp = newSeqWith(df["Rho"].len, newSeq[float](1112))
 var ironOpE : seq[float]
-
+var n_e_keV : float
 echo df["Rho"].len
-let noElement = @[3, 4, 5, 9, 15, 17, 19, 21, 22, 23, 27]
+
 for R in 0..<df["Rho"].len:
   n_eInt = n_es[R]
   temperature = temperatures[R]
   for iE in energies:
     var sum = 0.0
     var absCoef = 0.0
-    var n_e_keV = pow(10.0, (n_es[R].toFloat * 0.25)) * 7.683e-24 # was 1/cm³ #correct conversion
+    n_e_keV = pow(10.0, (n_es[R].toFloat * 0.25)) * 7.683e-24 # was 1/cm³ #correct conversion
     var temp_keV = pow(10.0, (temperatures[R].toFloat * 0.025)) * 8.617e-8 # was K # correct conversion
     var temp_K = pow(10.0, (temperatures[R].toFloat * 0.025))
     var energy_keV = iE * 0.001
     var energy_J = 1.60218e-16 * energy_keV
     var w = energy_keV / temp_keV #(energy_J / ( kB * temp_K)) * 500.0
-    var iEindex = find(energies, iE) # slows down the code: change
+    var iEindex = ((iE - 1.0) / 9.0).toInt #find(energies, iE) # slows down the code: change
 
     for Z in ElementKind:
       if int(Z) in noElement: #Phosphorus and some other elements also don't exist in opacity files Z=15, etc.
@@ -382,9 +393,9 @@ for R in 0..<df["Rho"].len:
       var opacity = opElements[Z][temperature].densityTab[n_eInt].interp.eval(iE) ###???
       if int(Z) == 26 and iE > 200:
         ironOp[R][iEindex] = opacity
-      var opacity_keV = opacity * 0.528e-8 * 0.528e-8 # correct conversion
+      var opacity_cm = opacity * 0.528e-8 * 0.528e-8 # correct conversion
       # opacities in atomic unit for lenth squared: 0.528 x10-8cm * 0.528 x10-8cm = a0² # 1 m = 1/1.239841336215e-9 1/keV and a0 = 0.528 x10-10m
-      sum += opacity_keV * n_Z[R][int(Z)] * 1.97327e-8 #* 7.683e-24 
+      sum += opacity_cm * n_Z[R][int(Z)] * 1.97327e-8 #* 7.683e-24 
     absCoef =  sum * (1.0 - exp(-energy_keV / temp_keV)) #* 100000000.0 # is in keV  
     
     absCoefs[R][iEindex] = absCoef
