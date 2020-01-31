@@ -412,26 +412,43 @@ for R in 0..<df["Rho"].len:
     let term2 = term2(alpha, g_ae, energy_keV, n_e_keV, m_e_keV, temp_keV)# completes the Compton contribution #keV
     let term3 = bremsEmrate(alpha, g_ae, energy_keV, n_e_keV, m_e_keV, temp_keV, w, y) # contribution from ee-bremsstahlung
 
-    let total_emrate = (term1 + term2 + term3  ) # keV 
+    let total_emrate = (term1  + term2   + term3   ) # keV 
     let total_emrate_s = total_emrate / (6.58e-19) # in 1/sec 
     emratesS[R][iEindex] = total_emrate_s
     # if want to have absorbtion coefficient of a radius and energy: R = (r (in % of sunR) - 0.0015) / 0.0005
     # energy = energies[iEindex] in eV
 
     
+
+var r_last = 0.0
+var diff_fluxs : seq[float]
 for e in energies:
   var sumIron = 0.0
-  var iEindexx = find(energies, e)
+  var iEindexx = ((e - 1.0) / 9.0).toInt #find(energies, e)
+  var diff_flux = 0.0
+  var e_keV = e * 0.001
+  echo iEindexx
+  
   for r in 0..<df["Rho"].len:
+    n_e_keV = pow(10.0, (n_es[r].toFloat * 0.25)) * 7.683e-24 # was 1/cm³ #correct conversion
     sumIron += ironOp[r][iEindexx]
+    let r_mm = (r.float * 0.0005 + 0.0015) * r_sun
+    if e_keV > 0.4:
+      let k = sqrt((e_keV * e_keV) - ((4.0 * PI * alpha * n_e_keV) / m_e_keV)) #However, at energies near and below a typical solar plasma frequency, i.e., for energies near or below 0.3 keV,this calculation is not appropriate because the charged particles were treated as staticsources of electric fields, neglecting both recoil effects and collective motions. 
+      diff_flux +=  emratesS[r][iEindexx]  * (r_mm - r_last)  *  r_mm * r_mm * e_keV * k#* e_keV
+    else : diff_flux +=  emratesS[r][iEindexx]  * (r_mm - r_last)  *  r_mm * r_mm * e_keV * e_keV
+    r_last = r_mm 
+  diff_flux = diff_flux / (2.0 * PI * PI * r_sunearth * r_sunearth) * (1.0 / 1.239841336215e-9) * (1.0 / 1.239841336215e-9) * (1.0 / 1.239841336215e-6) * (1.0 / 3.1709791983765e-8) * 1e-20 # in e20 1/(keV * year * m²)
+  diff_fluxs.add(diff_flux)
   #if sumIron > 0.7 :
     #echo e
   ironOpE.add(sumIron)
 #echo ironOpE
 #echo energies
+#echo diff_fluxs
 
 let dfEmrate = seqsToDf({ "energy" : energies,
-                          "emrate" : emratesS[300] })
+                          "emrate" : emratesS[10] })
 ggplot(dfEmrate, aes("energy", "emrate")) +
   geom_line() +
   ggsave("emrate_R10.pdf")
@@ -447,6 +464,12 @@ let dfOpIron = seqsToDf({ "energy" : energies,
 ggplot(dfOpIron, aes("energy", "opIron")) +
   geom_line() +
   ggsave("opIron.pdf")
+
+let dfDiffflux = seqsToDf({ "energy" : energies,
+                            "diffFlux" : diff_fluxs })
+ggplot(dfDiffflux, aes("energy", "diffFlux")) +
+  geom_line() +
+  ggsave("diffFlux.pdf")
 
 
 
