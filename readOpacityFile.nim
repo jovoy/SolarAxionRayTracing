@@ -207,7 +207,7 @@ proc F(w : float, y : float) : float =
   result = integral
     
 proc comptonEmrate(alpha : float, gae : float, energy : float, ne : float, me : float, temp : float) : float =
-  result = (alpha * gae * gae * energy * energy * ne) / (3.0 * me * me * (exp(energy / temp) - 1.0))
+  result = (alpha * gae * gae * energy * energy * ne) / (3.0 * me * me * me * me * (exp(energy / temp) - 1.0))
 
 proc bremsEmrate(alpha : float, gae : float, energy : float, ne : float, me : float, temp : float, w : float, y : float) : float =
   result = (alpha * alpha * gae * gae * 4.0 * sqrt(PI) * ne * ne * exp(- energy / temp) * F(w, sqrt(2.0) * y)) / (3.0 * sqrt(temp) * pow(me, 3.5) * energy)
