@@ -254,22 +254,13 @@ proc F(w : float, y : float) : float =
   let p = initPoly(res_coef)
   ## calculate roots (Nullstellen) of this as a vector
   let roots_vec = p.roots()
-  #for n in 0..N:
-  #  roots_vec.add(0.0)
-    #echo roots(res_coef[n])
-
   var integral = 0.0
-
   for i in 0 ..< N:
     weights_vec.add(quadWeight(roots_vec[i]))
   
-
-  for i in 0 .. <N:
+  for i in 0 ..< N:
     integral += weights_vec[i] * quadFunc(roots_vec[i], y, w)
-  
-
   integral *= (1.0 / 2.0)
-  
   result = integral
     
 proc comptonEmrate(alpha : float, gae : float, energy : float, ne : float, me : float, temp : float) : float =
@@ -345,21 +336,23 @@ var
   distTemp : float
   temperature : int
   temperatures : seq[int]
+
 let noElement = @[3, 4, 5, 9, 15, 17, 19, 21, 22, 23, 27]
 const
   alpha = 1.0 / 137.0
-  g_ae = 1e-13
+  g_ae = 1e-13 # Redondo 2013: 0.511e-10 
   m_e_keV = 510.998 #keV
   e_charge = sqrt(4.0 * PI * alpha)#1.0
   kB = 1.380649e-23
   r_sun = 6.957e11 #mm
   r_sunearth = 1.5e14 #mm
+  hbar = 6.582119514e-25 # in GeV * s
+  keV2cm = 1.97327e-8 # cm per keV^-1
+  amu = 1.6605e-24 #grams
 let atomicMass = [1.0078,4.0026,3.0160,12.0000,13.0033,14.0030,15.0001,15.9949,16.9991,17.9991,20.1797,22.9897,24.3055,26.9815,28.085,30.9737,32.0675,35.4515,39.8775,39.0983,40.078,44.9559,47.867,50.9415,51.9961,54.9380,55.845,58.9331,58.6934] #all the 29 elements from the solar model file
 let elements = ["H1", "He4","He3", "C12", "C13", "N14", "N15", "O16", "O17", "O18", "Ne", "Na", "Mg", "Al", "Si", "P", "S", "Cl", "Ar", "K", "Ca", "Sc", "Ti", "V", "Cr", "Mn", "Fe", "Co", "Ni"]
-let charges = [1.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]  #6.0, 6.0, 7.0, 7.0, 8.0, 8.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0] ## ion charges
-# var solarTable = readSolarModel(solarModel)
-let amu = 1.6605e-24 #grams
-#echo df["Mass"][6]
+let charges = [1.0, 2.0, 2.0, 6.0, 6.0, 7.0, 7.0, 8.0, 8.0, 8.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0] 
+
 for iRadius in 0..< df["Rho"].len:
   n_Z[iRadius][1] = (df[elements[0]][iRadius].toFloat / atomicMass[0]) * (df["Rho"][iRadius].toFloat / amu) # Hydrogen
   for iZmult in 1..3:
@@ -371,30 +364,19 @@ for iRadius in 0..< df["Rho"].len:
     n_Z[iRadius][iZ] = (df[elements[iZ]][iRadius].toFloat / atomicMass[iZ]) * (df["Rho"][iRadius].toFloat / amu) # The rest
   n_e = 0.0
   for Z in 0..<elements.len:
-    #if charges[Z].int in noElement: ## unnecessary
-      #continue
-    n_e += (df["Rho"][iRadius].toFloat/amu) * charges[Z] * df[elements[Z]][iRadius].toFloat / atomicMass[Z] #(df["Rho"][iRadius].toFloat/amu) * (1 + df[elements[0]][iRadius].toFloat/2) # (g/cm³ /g) = 1/cm³
+    n_e += (df["Rho"][iRadius].toFloat/amu) * charges[Z] * df[elements[Z]][iRadius].toFloat / atomicMass[Z] # (g/cm³ /g) = 1/cm³
   n_e_old = (df["Rho"][iRadius].toFloat/amu) * (1 + df[elements[0]][iRadius].toFloat/2)
-
-  #echo log(parseFloat(solarTable["Temp"][iRadius]), 10.0) / 0.025
   for iTemp in 0..90:
     distTemp = log(df["Temp"][iRadius].toFloat, 10.0) / 0.025 - float(140 + 2 * iTemp)
     if abs(distTemp) <= 1.0: 
       temperature = 140 + 2 * iTemp
-      #echo distTemp
   temperatures.add(temperature)
   for iNe in 0..17:
     distNe = log(n_e, 10.0) / 0.25 - float(74 + iNe * 2)
     if abs(distNe) <= 1.0: 
       n_eInt = 74 + iNe * 2
   n_es.add(n_eInt)
-  #echo df["Temp"][iRadius].toFloat
-  #echo n_Z[iRadius][26]
-#echo temperatures
 
-
-
-#echo n_es
 
 
 
@@ -456,62 +438,69 @@ for R in 0..<df["Rho"].len:
 
         if Z == 26 and iE > 200:
         ironOp[R][iEindex] = opacity
-      var opacity_cm = opacity * 0.528e-8 * 0.528e-8 # correct conversion
+        var opacity_cm = opacity  # correct conversion
       # opacities in atomic unit for lenth squared: 0.528 x10-8cm * 0.528 x10-8cm = a0² # 1 m = 1/1.239841336215e-9 1/keV and a0 = 0.528 x10-10m
-      sum += opacity_cm * n_Z[R][int(Z)] * 1.97327e-8 #* 7.683e-24 
-    absCoef =  sum * (1.0 - exp(-energy_keV / temp_keV)) #* 100000000.0 # is in keV  
     
-    absCoefs[R][iEindex] = absCoef
+        sum +=  n_Z[R][Z] #* opacityL
 
-    # if want to have absorbtion coefficient of a radius and energy: R = (r (in % of sunR) - 0.0015) / 0.0005
-    # energy = energies[iEindex]
+    
+      absCoef = sum * 1.97327e-8 * 0.528e-8 * 0.528e-8 * (1.0 - exp(-energy_keV / temp_keV)) # is in keV  
+      
+      absCoefs[R][iEindex] = absCoef
     
     ## Now it's left to calculate the emission rates
+    ## making the same approximation as for n_e calculation 
+    let debye_scale = sqrt( (4.0 * PI * alpha / temp_keV) * (n_e_keV + n_Z[R][1] * 7.645e-24 + 4.0 * n_Z[R][2] * 7.645e-24 )) 
     
-    let debye_scale = sqrt( (4.0 * PI * alpha / temp_keV) * (n_e_keV + n_Z[R][1] * 7.645e-24 + 4.0 * n_Z[R][2] * 7.645e-24 )) ## making the same approximation as for n_e calculation 
     let y = debye_scale / (sqrt( 2.0 * m_e_keV * temp_keV))
-    
-    let term1 = term1(g_ae, energy_keV, absCoef, e_charge, m_e_keV, temp_keV)  # includes contribution from ff, fb and bb processes and a part of the Comption contribution ## keV³ / keV² = keV
+    ## includes contribution from ff, fb and bb processes and a part of the Comption contribution ## keV³ / keV² = keV :
+    let term1 = term1(g_ae, energy_keV, absCoefs[R][iEindex], e_charge, m_e_keV, temp_keV)  
     let term2 = term2(alpha, g_ae, energy_keV, n_e_keV, m_e_keV, temp_keV)# completes the Compton contribution #keV
     let term3 = bremsEmrate(alpha, g_ae, energy_keV, n_e_keV, m_e_keV, temp_keV, w, y) # contribution from ee-bremsstahlung
-
-    let total_emrate = (term1  + term2   + term3   ) # keV 
-    let total_emrate_s = total_emrate / (6.58e-19) # in 1/sec 
+    let compton = comptonEmrate(alpha, g_ae, energy_keV, n_e_keV, m_e_keV, temp_keV) 
+    let total_emrate = term1# +  term2 + term3) keV 
+    let total_emrate_s = total_emrate #/ (6.58e-19) # in 1/sec 
     emratesS[R][iEindex] = total_emrate_s
     # if want to have absorbtion coefficient of a radius and energy: R = (r (in % of sunR) - 0.0015) / 0.0005
     # energy = energies[iEindex] in eV
 
     
 
-var r_last = 0.0
 var diff_fluxs : seq[float]
+let factor =   pow( r_sun * 0.1 / (keV2cm), 3.0) / ( pow( 0.1 * r_sunearth, 2.0) * (1.0e6 * hbar)) #/ (3.1709791983765E-8 * 1.0e-4) # for units of 1/(keV y m²)
+echo factor
 for e in energies:
   var sumIron = 0.0
-  var iEindexx = ((e - 1.0) / 9.0).toInt #find(energies, e)
+  var iEindexx = ((e - 1.0) / 9.0).toInt 
   var diff_flux = 0.0
   var e_keV = e * 0.001
-  echo iEindexx
-  
+  var r_last = 0.0
+  var summm = 0.0
+  var sum = 0.0
   for r in 0..<df["Rho"].len:
     n_e_keV = pow(10.0, (n_es[r].toFloat * 0.25)) * 7.683e-24 # was 1/cm³ #correct conversion
     sumIron += ironOp[r][iEindexx]
+    var t_keV = pow(10.0, (temperatures[r].toFloat * 0.025)) * 8.617e-8 # was K # correct conversion
     let r_mm = (r.float * 0.0005 + 0.0015) * r_sun
+    let r_perc = (r.float * 0.0005 + 0.0015)
     if e_keV > 0.4:
       let k = sqrt((e_keV * e_keV) - ((4.0 * PI * alpha * n_e_keV) / m_e_keV)) #However, at energies near and below a typical solar plasma frequency, i.e., for energies near or below 0.3 keV,this calculation is not appropriate because the charged particles were treated as staticsources of electric fields, neglecting both recoil effects and collective motions. 
-      diff_flux +=  emratesS[r][iEindexx]  * (r_mm - r_last)  *  r_mm * r_mm * e_keV * k#* e_keV
-    else : diff_flux +=  emratesS[r][iEindexx]  * (r_mm - r_last)  *  r_mm * r_mm * e_keV * e_keV
-    r_last = r_mm 
-  diff_flux = diff_flux / (2.0 * PI * PI * r_sunearth * r_sunearth) * (1.0 / 1.239841336215e-9) * (1.0 / 1.239841336215e-9) * (1.0 / 1.239841336215e-6) * (1.0 / 3.1709791983765e-8) * 1e-20 # in e20 1/(keV * year * m²)
+      diff_flux +=  emratesS[r][iEindexx]  * (r_perc - r_last)  *  r_perc * r_perc * e_keV * k * 0.5 / (PI * PI)
+
+    else : 
+      diff_flux +=  emratesS[r][iEindexx]  * (r_perc - r_last)  *  r_perc * r_perc * e_keV * e_keV * 0.5 / (PI * PI)
+    summm = summm + (r_perc - r_last)
+    sum += (r_perc - r_last)
+
+    r_last = r_perc 
+  diff_flux = diff_flux * factor
   diff_fluxs.add(diff_flux)
-  #if sumIron > 0.7 :
-    #echo e
+
   ironOpE.add(sumIron)
-#echo ironOpE
-#echo energies
-#echo diff_fluxs
+
 
 let dfEmrate = seqsToDf({ "energy" : energies,
-                          "emrate" : emratesS[10] })
+                          "emrate" : emratesS[200] })
 ggplot(dfEmrate, aes("energy", "emrate")) +
   geom_line() +
   ggsave("emrate_R10.pdf")
