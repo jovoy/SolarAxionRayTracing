@@ -1,4 +1,4 @@
-import strscans, streams, strutils, math, os, tables, sequtils, strformat, hashes, polynumeric
+import strscans, streams, strutils, math, os, tables, sequtils, strformat, hashes, polynumeric, macros
 
 import numericalnim, ggplotnim
 
@@ -49,11 +49,32 @@ type
     # `energies` and `opacities`
     interp: CubicSpline[float]
 
+  OpacityFileKind = enum
+    ofkOriginal, ofkNew
+
   OpacityFile = object
     fname: string
     element: ElementKind
     temp: int
+    case kind: OpacityFileKind
+    of ofkOriginal:
     densityTab: Table[int, DensityOpacity]
+    of ofkNew:
+      density: int
+      densityOp: DensityOpacity
+
+  ZTempDensity = tuple[Z: int, temp: int, density: int]
+
+macro iterEnum(en: typed): untyped =
+  result = nnkBracket.newTree()
+  let impl = en.getImpl
+  expectKind impl[2], nnkEnumTy
+  var first = true
+  for el in impl[2]:
+    if first: 
+      first = false
+      continue
+    result.add nnkPar.newTree(newLit(el[0].toStrLit.strVal), el[1])
 
 proc parseTableLine(energy, opacity: var float, line: string) {.inline.} =
   ## parses the energy and opacity float values from `line` into `energy`
@@ -80,25 +101,68 @@ proc parseTableHeader(line: string, hKind: HeaderLine): OpTableHeader =
     # do stuff for line 2, if we need something from here
     result = OpTableHeader(kind: H2)
 
-proc parseOpacityFile(path: string): OpacityFile =
-  ## we parse the monochromatic opacity file using strscans
-  ## - first we drop the first line as the file header. Information in this?
-  ## - then read table header (3 lines)
-  ## - then num lines
-  let ds = newFileStream(path)
-  if ds.isNil:
-    raise newException(IOError, "Could not open file " & $path)
-  var buf = newString(200)
-  var idx = 0
-  let fname = path.extractFilename
-  result = OpacityFile(fname: fname,
-                       element: ElementKind(fname[2 .. 3].parseInt),
-                       temp: parseInt(fname[5 .. ^1])) #pow(10.0, parseFloat(fname[5 .. ^1]) / 40.0))
-  echo result
+proc convertLogUToE(logU, temp: float): float =
+  ## converts a given energy in `logU` to a temperature in `eV`
+  result = pow(10, logU) * pow(10.0, (temp * 0.025)) * 8.617e-8
+
+proc parseDensityTab(ds: FileStream, temp: int, 
+                     kind: OpacityFileKind,
+                     tableCount = 1000): DensityOpacity =
+  # now parse the table according to table count
+  result = DensityOpacity(energies: newSeqOfCap[float](tableCount),
+                          opacities: newSeqOfCap[float](tableCount))
   var
+    buf = newString(200)
     energy: float
     opac: float
-    densityOpacity: DensityOpacity
+    idx = 0
+  while not ds.atEnd:
+    discard ds.readLine(buf)
+    parseTableLine(energy, opac, buf)
+    case kind
+    of ofkOriginal:
+      if tableCount == 10000:
+        # set energy manually to `j`, since we simply have 1 eV steps
+        energy = float idx + 1
+    of ofkNew:
+      energy = convertLogUToE(energy, temp.float)
+    result.energies.add energy
+    result.opacities.add opac
+    inc idx
+    if kind == ofkOriginal and idx == tableCount:
+      break
+  # finalize densityOpacity by creating spline and adding to result
+  result.interp = newCubicSpline(result.energies,
+                                  result.opacities) 
+
+proc parseOpacityNew(ds: FileStream, 
+                         fname: string,
+                         kind: static OpacityFileKind): OpacityFile =          
+  var buf = newString(200)
+  discard ds.readLine(buf)
+  proc removeSuffix(s, suffix: string): string =
+    result = s
+    result.removeSuffix(suffix)
+  let fnameSeq = fname.removeSuffix(".dat").split("_")
+  let elStr = fnameSeq[2]
+  let temp = parseInt(fnameSeq[3])
+  result = OpacityFile(fname: fname,
+                       kind: kind,
+                       element: parseEnum[ElementKind]("e" & elStr),
+                       temp: temp,
+                       density: parseInt(fnameSeq[4]))
+  result.densityOp = ds.parseDensityTab(temp = temp, kind = kind)
+
+proc parseOpacityOriginal(ds: FileStream,
+                          fname: string,
+                          kind: static OpacityFileKind): OpacityFile =
+  let temp = parseInt(fname[5 .. ^1])                        
+  result = OpacityFile(fname: fname,
+                       kind: kind,
+                       element: ElementKind(fname[2 .. 3].parseInt),
+                       temp: temp) #pow(10.0, parseFloat(fname[5 .. ^1]) / 40.0))
+  var idx = 0
+  var buf = newString(200)
   while not ds.atEnd:
     if idx == 0:
       # skip file header
@@ -116,24 +180,26 @@ proc parseOpacityFile(path: string): OpacityFile =
     var tableCount = buf.strip.parseInt
     tableCount = if tableCount == 0: 10000 else: tableCount
     inc idx
-
-    # now parse the table according to table count
-    densityOpacity = DensityOpacity(energies: newSeq[float](tableCount),
-                                    opacities: newSeq[float](tableCount))
-    for j in 0 ..< tableCount:
-      discard ds.readLine(buf)
-      parseTableLine(energy, opac, buf)
-      if tableCount == 10000:
-        # set energy manually to `j`, since we simply have 1 eV steps
-        energy = float j + 1
-      densityOpacity.energies[j] = energy
-      densityOpacity.opacities[j] = opac
+    result.densityTab[h1.density] = ds.parseDensityTab(temp, kind, tableCount)
       inc idx
-    # finalize densityOpacity by creating spline and adding to result
-    densityOpacity.interp = newCubicSpline(densityOpacity.energies,
-                                           densityOpacity.opacities)
-    result.densityTab[h1.density] = densityOpacity
-    inc idx
+
+proc parseOpacityFile(path: string, kind: OpacityFileKind): OpacityFile =
+  ## we parse the monochromatic opacity file using strscans
+  ## - first we drop the first line as the file header. Information in this?
+  ## - then read table header (3 lines)
+  ## - then num lines
+  let ds = newFileStream(path)
+  echo path
+  if ds.isNil:
+    raise newException(IOError, "Could not open file " & $path)
+  let fname = path.extractFilename
+  case kind
+  of ofkOriginal:
+    result = ds.parseOpacityOriginal(fname = fname,
+                                     kind = ofkOriginal)
+  of ofkNew:
+    result = ds.parseOpacityNew(fname = fname,
+                                    kind = ofkNew)
   ds.close()
 
 proc lagEval(n : int, x : float) : float = 
@@ -219,7 +285,9 @@ proc term2(alpha : float, gae : float, energy : float, ne : float, me : float, t
   result = ((exp(energy / temp) - 2.0) * comptonEmrate(alpha, gae, energy, ne, me, temp)) / (2.0 * (exp(energy / temp) - 1.0))
 
 const testF = "./OPCD_3.3/mono/fm26.300"
-let opFile = parseOpacityFile(testF)
+let opFile = parseOpacityFile(testF, kind = ofkOriginal)
+
+
 
 # let's check whether the calculation worked by plotting the opacity for this file
 # using the interpolation function we create
@@ -235,7 +303,7 @@ for d, op in pairs(opFile.densityTab):
   else:
     dfSpline.add df
 
-# filter out all opacities > 1.0 so that we can see the lines
+## filter out all opacities > 1.0 so that we can see the lines
 proc str(i: Value): Value = %~ $i
 let dfFiltered = dfSpline.filter(f{"opacity" < 1.0}).mutate(f{"densityStr" ~ str("density")})
 # and plot all interpolated density opacities
@@ -257,15 +325,11 @@ ggplot(dfFiltered, aes("energy", "opacity", color = "densityStr")) +
 
 ## First lets access the solar model and calculate some necessary values
 const solarModel = "./ReadSolarModel/resources/AGSS09_solar_model_stripped.dat"
-
 var df = readSolarModel(solarModel)
-df = df.filter(f{"Radius" <= 0.4})
+df = df.filter(f{"Radius" <= 0.2})
 echo df.pretty(precision = 10)
 
-# to read a single column, e.g. radius:
-#echo df1["Rho"].len
-
-# now let's plot radius against temperature colored by density
+## now let's plot radius against temperature colored by density
 ggplot(df, aes("Radius", "Temp", color = "Rho")) +
   geom_line() +
   ggtitle("Radius versus temperature of solar mode, colored by density") +
@@ -340,31 +404,28 @@ proc hash(x: ElementKind): Hash =
   result = !$result
 
 var densities: HashSet[int]
-# var opElements: array[ElementKind, seq[OpacityFile]]
 var opElements: Table[ElementKind, Table[int, OpacityFile]]
-# allows for: opElements[Z][temp].densityTab[n_e].interp(E)
+var opElNew: Table[ZTempDensity, OpacityFile]
+
+
 for temp in toSet(temperatures):
-  for Z in ElementKind:
-    let testF = &"./OPCD_3.3/mono/fm{int(Z):02}.{temp}"
-    #echo Z
-    #echo existsFile(testF)
+  for (Z_str, Z) in iterEnum(ElementKind):
+    let testF = &"./OPCD_3.3/mono/fm{Z:02}.{temp}"
     if existsFile(testF):
-      let opFile = parseOpacityFile(testF)
+      let opFile = parseOpacityFile(testF, kind = ofkOriginal)
       for k in keys(opFile.densityTab):
         densities.incl k
-      if Z notin opElements:
-        opElements[Z] = initTable[int, OpacityFile]()
-      opElements[Z][temp] = opFile
-      #[for iE in energies:
-        for R in 0..< df["Rho"].len:
-          if temp == temperatures[R]:
-            n_eInt = n_es[R]  
-            var opacity = opFile.densityTab[n_eInt].interp.eval(iE)]#
+      let zKind = ElementKind(Z)
+      if zKind notin opElements:
+        opElements[zKind] = initTable[int, OpacityFile]()
+      opElements[zKind][temp] = opFile
+    for ne in toSet(n_es):
+      let opFile = &"./OPCD_3.3/OP/opacity_table_{Z_str[1 .. ^1]}_{temp}_{ne}.dat"
+      if existsFile(opFile):
+        opElNew[(Z, temp, ne)] = parseOpacityFile(opFile, kind = ofkNew)
 
 
-#echo densities
 
-let energies = linspace(1.0, 10000.0, 1112)
 
 var absCoefs = newSeqWith(df["Rho"].len, newSeq[float](1112)) #29 elements
 var emratesS = newSeqWith(df["Rho"].len, newSeq[float](1112))
@@ -390,8 +451,10 @@ for R in 0..<df["Rho"].len:
     for Z in ElementKind:
       if int(Z) in noElement: #Phosphorus and some other elements also don't exist in opacity files Z=15, etc.
         continue
-      var opacity = opElements[Z][temperature].densityTab[n_eInt].interp.eval(iE) ###???
-      if int(Z) == 26 and iE > 200:
+        let opacityL = opElNew[(Z, temperature, n_eInt)].densityOp.interp.eval(energy_keV)
+        var opacity = opElements[ElementKind(Z)][temperature].densityTab[n_eInt].interp.eval(table) 
+
+        if Z == 26 and iE > 200:
         ironOp[R][iEindex] = opacity
       var opacity_cm = opacity * 0.528e-8 * 0.528e-8 # correct conversion
       # opacities in atomic unit for lenth squared: 0.528 x10-8cm * 0.528 x10-8cm = a0² # 1 m = 1/1.239841336215e-9 1/keV and a0 = 0.528 x10-10m
