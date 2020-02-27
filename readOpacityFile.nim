@@ -409,9 +409,13 @@ for temp in toSet(temperatures):
 
 
 
+## Calculate the absorbtion coefficients depending on the energy and the radius out of the opacity values
+
+let energies = linspace(1.0, 10000.0, 1112)
 var absCoefs = newSeqWith(df["Rho"].len, newSeq[float](1112)) #29 elements
 var emratesS = newSeqWith(df["Rho"].len, newSeq[float](1112))
 var ironOp = newSeqWith(df["Rho"].len, newSeq[float](1112))
+var posOP = newSeqWith(df["Rho"].len, newSeq[int](1112))
 var ironOpE : seq[float]
 var n_e_keV : float
 echo df["Rho"].len
@@ -427,12 +431,29 @@ for R in 0..<df["Rho"].len:
     var temp_K = pow(10.0, (temperatures[R].toFloat * 0.025))
     var energy_keV = iE * 0.001
     var energy_J = 1.60218e-16 * energy_keV
-    var w = energy_keV / temp_keV #(energy_J / ( kB * temp_K)) * 500.0
-    var iEindex = ((iE - 1.0) / 9.0).toInt #find(energies, iE) # slows down the code: change
+    var w = energy_keV / temp_keV
+    var iEindex = ((iE - 1.0) / 9.0).toInt 
 
-    for Z in ElementKind:
-      if int(Z) in noElement: #Phosphorus and some other elements also don't exist in opacity files Z=15, etc.
+    if w > 20.0 or w < 0.0732: #because the tables dont go beyond that, apparently because the axion production beyond that is irrelevant #except for He, maybe find a better solution
+      for (Z_str, Z) in iterEnum(ElementKind):
+        if Z in noElement:
+          continue
+        sum = sum + n_Z[R][Z] #* 0.0       
+      absCoefs[R][iEindex] = sum * 1.97327e-8 * 0.528e-8 * 0.528e-8 * (1.0 - exp(-energy_keV / temp_keV))
+    else : 
+      for (Z_str, Z) in iterEnum(ElementKind):
+        if Z in noElement:
         continue
+        var m = 0.0
+        var n = 0.0
+        if Z == 2: 
+          m = (10000.0 - 1.0) / (20.0 - 0.001)
+          n = 1.0 - 0.0732 * m
+        else : 
+          m = (10000.0 - 1.0) / (20.0 - 0.0732) 
+          n = 1.0 - 0.0732 * m
+        var table = w * m + n
+
         let opacityL = opElNew[(Z, temperature, n_eInt)].densityOp.interp.eval(energy_keV)
         var opacity = opElements[ElementKind(Z)][temperature].densityTab[n_eInt].interp.eval(table) 
 
@@ -465,7 +486,6 @@ for R in 0..<df["Rho"].len:
     # energy = energies[iEindex] in eV
 
     
-
 var diff_fluxs : seq[float]
 let factor =   pow( r_sun * 0.1 / (keV2cm), 3.0) / ( pow( 0.1 * r_sunearth, 2.0) * (1.0e6 * hbar)) #/ (3.1709791983765E-8 * 1.0e-4) # for units of 1/(keV y m²)
 echo factor
