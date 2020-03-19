@@ -103,7 +103,7 @@ proc parseTableHeader(line: string, hKind: HeaderLine): OpTableHeader =
 
 proc convertLogUToE(logU, temp: float): float =
   ## converts a given energy in `logU` to a temperature in `eV`
-  result = pow(10, logU) * pow(10.0, (temp * 0.025)) * 8.617e-8
+  result = exp(logU) * pow(10.0, (temp * 0.025)) * 8.617e-8
 
 proc parseDensityTab(ds: FileStream, temp: int, 
                      kind: OpacityFileKind,
@@ -311,7 +311,7 @@ ggplot(dfFiltered, aes("energy", "opacity", color = "densityStr")) +
 #  ggtitle("Energy dependency of opacity at different densities") +
 #  scale_y_log10() +
 #  ggsave("energy_opacity_density_log.pdf")
-
+echo dfFiltered
 
 
 ## First lets access the solar model and calculate some necessary values
@@ -336,6 +336,7 @@ var
   distTemp : float
   temperature : int
   temperatures : seq[int]
+  rs3 : seq[float]
 
 let noElement = @[3, 4, 5, 9, 15, 17, 19, 21, 22, 23, 27]
 const
@@ -376,9 +377,17 @@ for iRadius in 0..< df["Rho"].len:
     if abs(distNe) <= 1.0: 
       n_eInt = 74 + iNe * 2
   n_es.add(n_eInt)
+  rs3.add(iRadius.float * 0.0005 + 0.0015)
 
+var dfTemp = seqsToDf({ "Radius" : rs3,
+                      "Temp" : temperatures,
+                      "Ne" : n_es})
+echo dfTemp
 
-
+ggplot(dfTemp, aes("Radius", "Ne", color = "Temp")) +
+  geom_point() +
+  ggtitle("Radius versus temperature of solar mode, colored by density") +
+  ggsave("radius_temp_ne.pdf")
 
 proc hash(x: ElementKind): Hash = 
   var h: Hash = 0
@@ -419,6 +428,12 @@ var posOP = newSeqWith(df["Rho"].len, newSeq[int](1112))
 var ironOpE : seq[float]
 var n_e_keV : float
 echo df["Rho"].len
+var zs : seq[int]
+var rs : seq[float]
+var rs2 : seq[float]
+var nZs : seq[float]
+var engs : seq[float]
+var ops : seq[float]
 
 for R in 0..<df["Rho"].len:
   n_eInt = n_es[R]
@@ -438,12 +453,19 @@ for R in 0..<df["Rho"].len:
       for (Z_str, Z) in iterEnum(ElementKind):
         if Z in noElement:
           continue
-        sum = sum + n_Z[R][Z] #* 0.0       
+        sum = sum + n_Z[R][Z] * 0.0       
       absCoefs[R][iEindex] = sum * 1.97327e-8 * 0.528e-8 * 0.528e-8 * (1.0 - exp(-energy_keV / temp_keV))
     else : 
       for (Z_str, Z) in iterEnum(ElementKind):
         if Z in noElement:
         continue
+        
+        if iEindex == 11 :
+          zs.add(Z)
+          rs.add((R.float * 0.0005 + 0.0015))
+          #if Z == 1 :
+          nZs.add(n_Z[R][Z])
+        
         var m = 0.0
         var n = 0.0
         if Z == 2: 
@@ -453,16 +475,25 @@ for R in 0..<df["Rho"].len:
           m = (10000.0 - 1.0) / (20.0 - 0.0732) 
           n = 1.0 - 0.0732 * m
         var table = w * m + n
+        if iEindex == 12 and Z == 1 and R == 0:
+          echo "now"
+          echo w 
+          echo opElements[ElementKind(1)][288].densityTab[104].interp.eval(table) 
+          echo opElNew[(1, 288, 104)].densityOp.interp.eval(0.1119)
 
+        if Z == 1 and (iEindex == 12 or iEindex == 68 or iEindex == 140 or iEindex == 239 or iEindex == 599): #and (iEindex == 12 or iEindex == 68) :
+          rs2.add((R.float * 0.0005 + 0.0015))
+          engs.add(energy_keV)
+          ops.add(opElNew[(Z, temperature, n_eInt)].densityOp.interp.eval(energy_keV))
         let opacityL = opElNew[(Z, temperature, n_eInt)].densityOp.interp.eval(energy_keV)
-        var opacity = opElements[ElementKind(Z)][temperature].densityTab[n_eInt].interp.eval(table) 
+        let opacity = opElements[ElementKind(Z)][temperature].densityTab[n_eInt].interp.eval(table) 
 
         if Z == 26 and iE > 200:
         ironOp[R][iEindex] = opacity
         var opacity_cm = opacity  # correct conversion
       # opacities in atomic unit for lenth squared: 0.528 x10-8cm * 0.528 x10-8cm = a0² # 1 m = 1/1.239841336215e-9 1/keV and a0 = 0.528 x10-10m
     
-        sum +=  n_Z[R][Z] #* opacityL
+        sum +=  n_Z[R][Z] * opacityL
 
     
       absCoef = sum * 1.97327e-8 * 0.528e-8 * 0.528e-8 * (1.0 - exp(-energy_keV / temp_keV)) # is in keV  
@@ -479,12 +510,32 @@ for R in 0..<df["Rho"].len:
     let term2 = term2(alpha, g_ae, energy_keV, n_e_keV, m_e_keV, temp_keV)# completes the Compton contribution #keV
     let term3 = bremsEmrate(alpha, g_ae, energy_keV, n_e_keV, m_e_keV, temp_keV, w, y) # contribution from ee-bremsstahlung
     let compton = comptonEmrate(alpha, g_ae, energy_keV, n_e_keV, m_e_keV, temp_keV) 
-    let total_emrate = term1# +  term2 + term3) keV 
+    let total_emrate = compton +  term1 + term3#) keV 
     let total_emrate_s = total_emrate #/ (6.58e-19) # in 1/sec 
     emratesS[R][iEindex] = total_emrate_s
     # if want to have absorbtion coefficient of a radius and energy: R = (r (in % of sunR) - 0.0015) / 0.0005
     # energy = energies[iEindex] in eV
+echo rs2.len
+echo ops.len
+echo engs.len
 
+var dfNZ = seqsToDf({ "Radius" : rs,
+                      "nZ" : nZs,
+                      "Z" : zs})
+echo dfNZ
+ggplot(dfNZ, aes("Radius", "nZ", color = "Z")) +
+  geom_point() +
+  ggtitle("Radius versus atomic density for different Z") +
+  ggsave("radius_nZ_Z.pdf") 
+
+var dfOp = seqsToDf({ "Radius" : rs2,
+                      "opacity" : ops,
+                      "energies" : engs})
+echo dfOp
+ggplot(dfOp, aes("Radius", "opacity", color = "energies")) +
+  geom_point() +
+  ggtitle("Radius versus opacity for different energies") +
+  ggsave("radius_op_energies.pdf")   
     
 var diff_fluxs : seq[float]
 let factor =   pow( r_sun * 0.1 / (keV2cm), 3.0) / ( pow( 0.1 * r_sunearth, 2.0) * (1.0e6 * hbar)) #/ (3.1709791983765E-8 * 1.0e-4) # for units of 1/(keV y m²)
@@ -505,7 +556,7 @@ for e in energies:
     let r_perc = (r.float * 0.0005 + 0.0015)
     if e_keV > 0.4:
       let k = sqrt((e_keV * e_keV) - ((4.0 * PI * alpha * n_e_keV) / m_e_keV)) #However, at energies near and below a typical solar plasma frequency, i.e., for energies near or below 0.3 keV,this calculation is not appropriate because the charged particles were treated as staticsources of electric fields, neglecting both recoil effects and collective motions. 
-      diff_flux +=  emratesS[r][iEindexx]  * (r_perc - r_last)  *  r_perc * r_perc * e_keV * k * 0.5 / (PI * PI)
+      diff_flux +=  emratesS[r][iEindexx]  * (r_perc - r_last)  *  r_perc * r_perc * e_keV * e_keV * 0.5 / (PI * PI) #k instead of e
 
     else : 
       diff_flux +=  emratesS[r][iEindexx]  * (r_perc - r_last)  *  r_perc * r_perc * e_keV * e_keV * 0.5 / (PI * PI)
