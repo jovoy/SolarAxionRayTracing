@@ -202,6 +202,31 @@ proc parseOpacityFile(path: string, kind: OpacityFileKind): OpacityFile =
                                     kind = ofkNew)
   ds.close()
 
+proc readMeshFile(fname: string): seq[float] =
+  var uValues : seq[float]
+  var df = toDf(readCsv(fname))#, sep = ' ', header = "#"))
+  for i in 0..10000:
+    uValues.add(toFloat(df["u"][i]))
+  result = uValues
+  #[var
+    f = open(fname) # with Bose-Einstein distribution of the thermal photon bath
+    line = ""
+    ustring : string
+    uValues : seq[float]
+
+  while f.readLine(line):
+    let ustring = line
+    uValues.add(parseFloat(ustring))
+
+  defer: f.close()
+  return uValues]#
+
+let lineNumbers = linspace(0.0, 10000.0, 10001)
+const meshFile = "./OPCD_3.3/mono/fm01.mesh"
+let dfMesh = readMeshFile(meshFile)
+
+let spline = newCubicSpline(dfMesh, lineNumbers )
+
 proc lagEval(n : int, x : float) : float = 
   if(n>0):
     result  = (2.0 * n.float - 1.0 - x) * lagEval(n-1,x) - (1.0 - (1.0 / n.float))* lagEval(n-2,x)
@@ -444,42 +469,30 @@ for R in 0..<df["Rho"].len:
     n_e_keV = pow(10.0, (n_es[R].toFloat * 0.25)) * 7.683e-24 # was 1/cm³ #correct conversion
     var temp_keV = pow(10.0, (temperatures[R].toFloat * 0.025)) * 8.617e-8 # was K # correct conversion
     var temp_K = pow(10.0, (temperatures[R].toFloat * 0.025))
-    var energy_keV = iE * 0.001
+    
+    var energy_keV = iE * 0.001 #w * temp_keV
     var energy_J = 1.60218e-16 * energy_keV
-    var w = energy_keV / temp_keV
+    var w = energy_keV / temp_keV #toFloat(dfMesh["u"][iE.int])
     var iEindex = ((iE - 1.0) / 9.0).toInt 
-
-    if w > 20.0 or w < 0.0732: #because the tables dont go beyond that, apparently because the axion production beyond that is irrelevant #except for He, maybe find a better solution
+    var table = 1.0
+    var prevMesh = 1.0
+    if w >= 20.0 or w <= 0.0732: #because the tables dont go beyond that, apparently because the axion production beyond that is irrelevant #except for He, maybe find a better solution
       for (Z_str, Z) in iterEnum(ElementKind):
         if Z in noElement:
           continue
         sum = sum + n_Z[R][Z] * 0.0       
       absCoefs[R][iEindex] = sum * 1.97327e-8 * 0.528e-8 * 0.528e-8 * (1.0 - exp(-energy_keV / temp_keV))
     else : 
+
       for (Z_str, Z) in iterEnum(ElementKind):
         if Z in noElement:
         continue
-        
+        table = spline.eval(w)
         if iEindex == 11 :
           zs.add(Z)
           rs.add((R.float * 0.0005 + 0.0015))
-          #if Z == 1 :
           nZs.add(n_Z[R][Z])
         
-        var m = 0.0
-        var n = 0.0
-        if Z == 2: 
-          m = (10000.0 - 1.0) / (20.0 - 0.001)
-          n = 1.0 - 0.0732 * m
-        else : 
-          m = (10000.0 - 1.0) / (20.0 - 0.0732) 
-          n = 1.0 - 0.0732 * m
-        var table = w * m + n
-        if iEindex == 12 and Z == 1 and R == 0:
-          echo "now"
-          echo w 
-          echo opElements[ElementKind(1)][288].densityTab[104].interp.eval(table) 
-          echo opElNew[(1, 288, 104)].densityOp.interp.eval(0.1119)
 
         if Z == 1 and (iEindex == 12 or iEindex == 68 or iEindex == 140 or iEindex == 239 or iEindex == 599): #and (iEindex == 12 or iEindex == 68) :
           rs2.add((R.float * 0.0005 + 0.0015))
@@ -490,10 +503,10 @@ for R in 0..<df["Rho"].len:
 
         if Z == 26 and iE > 200:
         ironOp[R][iEindex] = opacity
-        var opacity_cm = opacity  # correct conversion
+        #var opacity_cm = opacity  # correct conversion
       # opacities in atomic unit for lenth squared: 0.528 x10-8cm * 0.528 x10-8cm = a0² # 1 m = 1/1.239841336215e-9 1/keV and a0 = 0.528 x10-10m
     
-        sum +=  n_Z[R][Z] * opacityL
+        sum +=  n_Z[R][Z] * opacity
 
     
       absCoef = sum * 1.97327e-8 * 0.528e-8 * 0.528e-8 * (1.0 - exp(-energy_keV / temp_keV)) # is in keV  
@@ -514,7 +527,6 @@ for R in 0..<df["Rho"].len:
     let total_emrate_s = total_emrate #/ (6.58e-19) # in 1/sec 
     emratesS[R][iEindex] = total_emrate_s
     # if want to have absorbtion coefficient of a radius and energy: R = (r (in % of sunR) - 0.0015) / 0.0005
-    # energy = energies[iEindex] in eV
 echo rs2.len
 echo ops.len
 echo engs.len
@@ -544,7 +556,7 @@ for e in energies:
   var sumIron = 0.0
   var iEindexx = ((e - 1.0) / 9.0).toInt 
   var diff_flux = 0.0
-  var e_keV = e * 0.001
+  
   var r_last = 0.0
   var summm = 0.0
   var sum = 0.0
@@ -552,6 +564,7 @@ for e in energies:
     n_e_keV = pow(10.0, (n_es[r].toFloat * 0.25)) * 7.683e-24 # was 1/cm³ #correct conversion
     sumIron += ironOp[r][iEindexx]
     var t_keV = pow(10.0, (temperatures[r].toFloat * 0.025)) * 8.617e-8 # was K # correct conversion
+    var e_keV = e * 0.001
     let r_mm = (r.float * 0.0005 + 0.0015) * r_sun
     let r_perc = (r.float * 0.0005 + 0.0015)
     if e_keV > 0.4:
@@ -595,19 +608,3 @@ ggplot(dfDiffflux, aes("energy", "diffFlux")) +
   ggsave("diffFlux.pdf")
 
 
-
-
-
-
-
-when false:
-
-
-
-  proc getOpacity(opH: seq[OpacityFile], T, n_e, E: float): float =
-    # angenommen T ist die Form die in OpacityFile enthalten
-    let opF = opH.filterIt(it.temp == T)
-    let dOp = opF.denstiyTab[n_e]
-    result = dOp.interp(E)
-
-  
