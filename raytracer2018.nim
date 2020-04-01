@@ -8,7 +8,7 @@ import algorithm
 import plotly
 import random
 import sequtils, os
-import nimhdf5
+import nimhdf5 except linspace
 import chroma
 #import ingrid/[tos_helpers, likelihood, ingrid_types]
 import readOpacityFile
@@ -120,26 +120,6 @@ proc getRandomPointOnDisk(center: Vec3, radius:float64) : Vec3 =
   vector = vector + center
   result = vector
 
-proc getEmRatesSums(energyVec: seq[float], emissionRates: seq[float]) : seq[float] =
-
-  ## This function gives a vector, where thr first entry is the summ over all emissionrates (over all radii and energies) and the next are the for each radius over all energies plus the value of the last entry (except for the second entry) ##
-
-  var
-    sumAllEmRates = 0.0
-    sumEmRatesR = 0.0
-    emRateVecSums : seq[float]
-
-  for i in 0..<emissionRates.len:
-    sumAllEmRates = sumAllEmRates + emissionRates[i]
-  emRateVecSums.add(sumAllEmRates)
-
-  for r in 0..396:
-    for iEnergy in 0..<energyVec.len:
-      sumEmRatesR = sumEmRatesR + emissionRates[iEnergy + (r * energyVec.len)]
-    emRateVecSums.add(sumEmRatesR)
-
-  result = emRateVecSums
-
 
 proc getRandomPointFromSolarModel(center : Vec3, radius : float64 , emRateVecSums : seq[float]) : Vec3 =
 
@@ -152,13 +132,15 @@ proc getRandomPointFromSolarModel(center : Vec3, radius : float64 , emRateVecSum
     r :float
     angle1 = 360 * random(1.0)
     angle2 = 180 * random(1.0)
-    i = random(emRateVecSums[0])
-
-  for iRad in 1..<emRateVecSums.len:
-    if iRad != 1 and i > emRateVecSums[iRad-1] and i <= emRateVecSums[iRad]:
-      r =  (0.0015 + (iRad-1).float * 0.0005) * radius
-    elif iRad == 1 and i >= 0.0 and i <= emRateVecSums[iRad]:
-      r =  (0.0015 + (iRad-1).float * 0.0005) * radius
+    i = random(emRateVecSums[emRateVecSums.len - 1])
+    prevSum = 0.0
+  
+  for iRad in 0..<emRateVecSums.len - 1:
+    if iRad != 0 and i > prevSum and i <= emRateVecSums[iRad] + prevSum:
+      r =  (0.0015 + (iRad).float * 0.0005) * radius
+    elif iRad == 0 and i >= 0.0 and i <= emRateVecSums[iRad]:
+      r =  (0.0015 + (iRad).float * 0.0005) * radius
+    prevSum += emRateVecSums[iRad]
 
 
   x = cos(degToRad(angle1)) * sin(degToRad(angle2)) * r
@@ -169,64 +151,8 @@ proc getRandomPointFromSolarModel(center : Vec3, radius : float64 , emRateVecSum
 
   result = vector
 
-proc evenlyDistributedEnergies(energies :  seq[float], emissionRates : seq[float] , enOrEm: string) : seq[float] =
 
-  ## get the energies and their emission rates as evenly distributed energies, because from the solar model we get very unevenly distributed energies and their emission rates ##
-
-  var
-    energyGl : float
-    enrgiesGl: seq[float]
-    emrateGl : float
-    emratesGl : seq[float]
-    x : float
-    d_plus : float
-    d_minus : float
-  for iRad in 0..396:
-    energyGl = 0.0
-    emrateGl = 0.0
-    for iEnergy in 0..<energies.len:
-      energyGl = iEnergy.float * 0.0515 + 0.005
-      enrgiesGl.add(energyGl)
-      for iEnergy2 in 0..<energies.len:
-        x = sqrt((energyGl-energies[iEnergy2])*(energyGl-energies[iEnergy2]))
-
-        if iEnergy2 != 0 and iEnergy2 != (energies.len - 1):
-          d_plus = sqrt((energyGl-energies[iEnergy2+1])*(energyGl-energies[iEnergy2+1]))
-          d_minus = sqrt((energyGl-energies[iEnergy2-1])*(energyGl-energies[iEnergy2-1]))
-          if x < d_minus and x < d_plus:
-            if (energyGl-energies[iEnergy2]) < 0.0:
-              emrateGl = emissionRates[(iEnergy2) + (iRad * energies.len)] * (1- (x / sqrt((energies[iEnergy2]-energies[iEnergy2-1])*(energies[iEnergy2]-energies[iEnergy2-1])))) + emissionRates[(iEnergy2-1) + (iRad * energies.len)] * (1- (d_minus / sqrt((energies[iEnergy2]-energies[iEnergy2-1])*(energies[iEnergy2]-energies[iEnergy2-1]))))
-              emratesGl.add(emrateGl)
-
-            elif (energyGl-energies[iEnergy2]) > 0.0:
-              emrateGl = emissionRates[(iEnergy2) + (iRad * energies.len)] * (1- (x / sqrt((energies[iEnergy2]-energies[iEnergy2+1])*(energies[iEnergy2]-energies[iEnergy2+1])))) + emissionRates[(iEnergy2+1) + (iRad * energies.len)] * (1- (d_plus / sqrt((energies[iEnergy2]-energies[iEnergy2+1])*(energies[iEnergy2]-energies[iEnergy2+1]))))
-              emratesGl.add(emrateGl)
-
-        elif iEnergy2 == 0:
-          d_plus = sqrt((energyGl-energies[iEnergy2+1])*(energyGl-energies[iEnergy2+1]))
-          if x < d_plus:
-            if (energyGl-energies[iEnergy2]) < 0.0:
-              emrateGl = emissionRates[(iEnergy2) + (iRad * energies.len)]  * (1- (x / sqrt((energies[iEnergy2]-0.0)*(energies[iEnergy2]-0.0)))) #+ (emissionRates[(iEnergy2+1) + (iRad * energies.len)] * sqrt((energyGl-energies[iEnergy2+1])*(energyGl-energies[iEnergy2+1])))
-              emratesGl.add(emrateGl)
-
-            elif(energyGl-energies[iEnergy2]) > 0.0:
-              emrateGl = emissionRates[(iEnergy2) + (iRad * energies.len)] * (1- (x / sqrt((energies[iEnergy2]-energies[iEnergy2+1])*(energies[iEnergy2]-energies[iEnergy2+1])))) + emissionRates[(iEnergy2+1) + (iRad * energies.len)] * (1- (d_plus / sqrt((energies[iEnergy2]-energies[iEnergy2+1])*(energies[iEnergy2]-energies[iEnergy2+1]))))
-              emratesGl.add(emrateGl)
-        elif iEnergy2 == (energies.len - 1):
-          d_minus = sqrt((energyGl-energies[iEnergy2-1])*(energyGl-energies[iEnergy2-1]))
-          if x < d_minus:
-            if (energyGl-energies[iEnergy2]) < 0.0:
-              emrateGl = emissionRates[(iEnergy2) + (iRad * energies.len)] * (1- (x / sqrt((energies[iEnergy2]-energies[iEnergy2-1])*(energies[iEnergy2]-energies[iEnergy2-1])))) + emissionRates[(iEnergy2-1) + (iRad * energies.len)] * (1- (d_minus / sqrt((energies[iEnergy2]-energies[iEnergy2-1])*(energies[iEnergy2]-energies[iEnergy2-1]))))
-              emratesGl.add(emrateGl)
-            elif (energyGl-energies[iEnergy2]) > 0.0:
-              emrateGl = emissionRates[(iEnergy2) + (iRad * energies.len)] * (1- (x / sqrt((energies[iEnergy2]-0.0)*(energies[iEnergy2]-0.0)))) #+ (emissionRates[(iEnergy2-1) + (iRad * energies.len)] * (energyGl-energies[iEnergy2-1]))
-              emratesGl.add(emrateGl)
-  if enOrEm == "energies":
-    result = enrgiesGl
-  elif enOrEm == "emrates":
-    result = emratesGl
-
-proc getRandomEnergyFromSolarModel(emRateVecSums : seq[float], vectorInSun: Vec3, center : Vec3, radius : float64, energies :  seq[float],emissionRates: seq[float]) : float =
+proc getRandomEnergyFromSolarModel(emRateVecSums : seq[float], vectorInSun: Vec3, center : Vec3, radius : float64, energies :  seq[float],emissionRates: seq[seq[float]]) : float =
 
   ## This function gives a random energy for an event at a given radius, biased by the emissionrates at that radius. This only works if the energies to choose from are evenly distributed ##
 
@@ -239,6 +165,8 @@ proc getRandomEnergyFromSolarModel(emRateVecSums : seq[float], vectorInSun: Vec3
     emRateEnergySumPrev : float
     i : float
     emRateEnergySumAll : float
+  
+
 
   var
     indexRad = (r - 0.0015) / 0.0005
@@ -247,22 +175,22 @@ proc getRandomEnergyFromSolarModel(emRateVecSums : seq[float], vectorInSun: Vec3
     iRad = int(ceil(indexRad))
   else: iRad = int(floor(indexRad))
 
-  for iE in 0..<233:
-    emRateEnergySumAll = emRateEnergySumAll + emissionRates[(iE) + (iRad * 233)]
+  for iE in 0..<energies.len:
+    emRateEnergySumAll += emissionRates[iRad][iE]
   #echo emRateEnergySumAll
+  i = random(emRateEnergySumAll)
 
-
-  if iRad != 0:
+  #[if iRad != 0:
     #i = random((emRateVecSums[iRad+1] - emRateVecSums[iRad])) # no because this is not with energy Gl
     i = random(emRateEnergySumAll)
   else:
-    i = random(emRateVecSums[iRad+1])
+    i = random(emRateVecSums[iRad+1])]#
 
-  for iEnergy in 0..<233: #energise.len/ radii
+  for iEnergy in 0..<energies.len: #energise.len/ radii
     emRateEnergySumPrev = emRateEnergySum
-    emRateEnergySum = emRateEnergySumPrev + emissionRates[(iEnergy) + (iRad * 233)]#energise.len/ radii
+    emRateEnergySum = emRateEnergySumPrev + emissionRates[iRad][iEnergy]#energise.len/ radii
     if i > emRateEnergySumPrev and i <= emRateEnergySum:
-      energy = energies[iEnergy]
+      energy = energies[iEnergy] * 0.001 #in keV
     #if iEnergy == 232:
       #echo "sum over all energies 2"
       #echo emRateEnergySum
@@ -435,75 +363,6 @@ proc getXandY( h5file : string , dsetgrp1 :string, numFirstRun : int, numLastRun
   #elif xOrY == "Y":
   #  result = valuesY
   #else: return @[0.0]
-
-proc getAxionEnergy(): seq[float] =
-  var
-    f = open("energies.txt")
-    line = ""
-    energy : seq[float]
-    energystring : string
-
-  #doAssert f.getPosition()
-  while f.readLine(line):
-    let energystring = line
-    energy.add(parseFloat(energystring))
-
-  defer: f.close()
-  return energy
-
-proc getfluxfracVec () : seq[float] =
-  var
-    f = open("flux_fractions_with_fB.txt") # with Bose-Einstein distribution of the thermal photon bath
-    line = ""
-    fluxstring : string
-    fluxfractions : seq[float]
-
-  while f.readLine(line):
-    let fluxstring = line
-    fluxfractions.add(parseFloat(fluxstring))
-
-  defer: f.close()
-  return fluxfractions
-
-proc getfluxfrac (radius : float, energyVec: seq[float], iEnergy : int) : int =
-  var
-    linenum : int
-    linenumfloat : float
-    posfluxfraction : int
-    radiusPerc : float
-
-  radiusPerc = radius / radiusSun
-  linenumfloat = ((radiusPerc - 0.0015) / 0.0005) + 1.0
-
-  if round(linenumfloat, 1) < (floor(linenumfloat) + 0.5) :
-    linenum = int(floor(linenumfloat))
-  else:
-    linenum = int(ceil(linenumfloat))
-
-  if linenum > 0 and linenum < 398:
-    posfluxfraction = (linenum - 1 ) * (energyVec.len ) + (iEnergy )
-  elif linenum > 397:
-    posfluxfraction = (linenum - 2 ) * (energyVec.len ) + (iEnergy )
-  elif linenum == 0:
-    posfluxfraction = (linenum ) * (energyVec.len ) + (iEnergy )
-  elif linenum < 0:
-    posfluxfraction = (linenum + 2) * (energyVec.len ) + (iEnergy )
-
-  return posfluxfraction#linenum##posfluxfraction#
-
-proc getEmRateVec() : seq[float] =
-  var
-    f = open("emission_rates_Hz.txt")
-    line = ""
-    emissionstring : string
-    emissionrates : seq[float]
-
-  while f.readLine(line):
-    let emissionstring = line
-    emissionrates.add(parseFloat(emissionstring))
-
-  defer: f.close()
-  return emissionrates
 
 
 proc findPosXRT*(pointXRT : Vec3, pointCB : Vec3, r1 : float, r2 : float, angle : float, lMirror : float, distMirr : float, uncer : float, sMin : float, sMax : float) : Vec3 =
@@ -747,8 +606,6 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   var misalignment = (sunMisalignmentH != 0.0) or (sunMisalignmentV != 0.0) or (detectorMisalignmentX != 0.0) or (detectorMisalignmentY != 0.0)
 
 
-
-
   var
     pointdataX : seq[float]
     pointdataY : seq[float]
@@ -757,6 +614,8 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     weights : seq[float]
     pixvalsX : seq[float]
     pixvalsY : seq[float]
+
+  ## Measurements of the Telescope mirrors in the following, R1 are the radii of the mirror shells at the entrance of the mirror
   const
     allR1 = @[60.7095, 63.006 , 65.606 , 68.305 , 71.105 , 74.011 , 77.027 , 80.157 , 83.405 , 86.775 , 90.272 , 93.902 , 97.668 , 101.576 , 105.632]  ## the radii of the shells
     allXsep = @[4.0, 4.171, 4.140, 4.221, 4.190, 4.228, 4.245, 4.288, 4.284, 4.306, 4.324, 4.373, 4.387, 4.403, 4.481]
@@ -768,10 +627,18 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     circleTotal = circleEdges( allR1)
     d = 83.0 #mm ## distance between center of colbore at XRT and center of XRT (where the focal point is on the minus x axis)
   let
-    energy = getAxionEnergy()
-    fluxfracs = getfluxfracVec()
-    emrates = getEmRateVec()
-    emratesSums = getEmRatesSums(energy, emrates)
+    energiesNew = linspace(1.0, 10000.0, 1112)
+
+  var emratesNewSum : seq[float]
+  let emratesNew = main(energiesNew)
+  var sum2 = 0.0
+  for rI in 0..<emratesNew.len:
+    var sum = 0.0
+    for eI in 0..<emratesNew[rI].len:
+      sum += emratesNew[rI][eI]
+    emratesNewSum.add(sum)
+    sum2 += sum
+  emratesNewSum.add(sum2)
 
   var
     fluxfractionrad : seq[float]
@@ -780,65 +647,28 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     energies : seq[float]
     fluxfracints : seq[float]
 
-  let
-    energiesGl = evenlyDistributedEnergies(energy, emrates ,"energies")
-    emratesGl = evenlyDistributedEnergies(energy, emrates ,"emrates")
   var ffff : seq[float]
-
-  #for iRad in 0..396:
-    #var
-      #r= 0.0015 + (iRad.float * 0.0005)
-
-      #fluxfr = fluxfracs[getfluxfrac(r, energy, iEnergy)]
-
-    #fluxfracint = fluxfracint + (fluxfr * r)
-    #var vecSun = getRandomPointFromSolarModel(centerSun,radiusSun,emratesSums)
-    #radii.add(getRandomEnergyFromSolarModel(emratesSums, vecSun,centerSun, radiusSun,energy, emrates))
-    #fluxfractionrad.add(1.0 + (iRad.float * 0.001))
-  # count through all points in the magnet end (coldbore) and then in the sun (set to 1000 points), to connect them and get 1000000 lines (axion traces)
-
-
-    #fluxfracints.add(fluxfracint)
-    #energies.add(energyAx)
-  for iRad in 0..2:
-    var 
-      r = 396.0 * iRad.float / 2.0
-      i = r.int
-    for iEnergy in 0..<energy.len:
-      energies.add(energy[iEnergy])
-      fluxfractionen.add(emrates[(iEnergy) + (i * 233)])
-
-
-
-
-
-
-
+  ## In the following we will go over a number of points in the sun, whose location and energy will be biased by the emission rate and whose track will be 
+  ## calculated through the CAST experimental setup from 2018 at VT3
 
   for iSun in 1..numberOfPointsSun:
     integralNormalisation = integralNormalisation + 1
-    var pointInSun = vec3(0.0)
-    case  axionRadiationCharacteristic
-    of "axionRadiation::characteristic::sar":
-      pointInSun = getRandomPointFromSolarModel(centerSun,radiusSun,emratesSums)#getRandomPointOnDisk(centerSun,radiusSunTwentyPecent)#pointInSun = getRandomPointFromSolarModel(centerSun,radiusSun)
-    of "axionRadiation::characteristic::def":
-      echo "Error: Default radiation characteristic not implemented"
-    else:
-      echo "Error: Unknown axion radiation characteristic"
 
-    var pointExitCBMagneticField = vec3(0.0)
-    pointExitCBMagneticField = getRandomPointOnDisk(centerExitCBMagneticField, radiusCB)
+    ## Get a random point in the sun, biased by the emission rate, which is higher at smalller radii, so this will give more points in the center of the sun ##
+    var pointInSun = getRandomPointFromSolarModel(centerSun,radiusSun,emratesNewSum)
     var radiusInSun = sqrt(pointInSun[0] * pointInSun[0] + pointInSun[1] * pointInSun[1])
 
+    ## Get a random point at the end of the coldbore of the magnet to take all axions into account that make it to this point no matter where they enter the magnet ##
+    var pointExitCBMagneticField = getRandomPointOnDisk(centerExitCBMagneticField, radiusCB)
 
-    var vecSun = getRandomPointFromSolarModel(centerSun,radiusSun,emratesSums)
-    var energyAx = getRandomEnergyFromSolarModel(emratesSums, vecSun,centerSun, radiusSun,energiesGl, emratesGl)
+    ## Get a random energy for the axion biased by the emission rate ##
+    var energyAx = getRandomEnergyFromSolarModel(emratesNewSum, pointInSun, centerSun, radiusSun, energiesNew, emratesNew)
+
+    ## Throw away all the axions, that don't make it through the piping system and therefore exit the system at some point ##
     var intersect = vec3(0.0)
     var pathCB : float64
-    var intersectsEntranceCB : bool
-    intersectsEntranceCB = lineIntersectsCircle(pointInSun, pointExitCBMagneticField, centerEntranceCB, radiusCB, intersect)
+    var intersectsEntranceCB = lineIntersectsCircle(pointInSun, pointExitCBMagneticField, centerEntranceCB, radiusCB, intersect)
     var intersectsCB = false
-    #echo energyAx
 
     if (not intersectsEntranceCB):
       intersectsCB = lineIntersectsCylinderOnce(pointInSun,pointExitCBMagneticField,centerEntranceCB,centerExitCBMagneticField,radiusCB,intersect)
@@ -867,17 +697,9 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
 
     pointExitPipeVT3XRT = pointExitCB + ((centerExitPipeVT3XRT[2] - pointExitCB[2]) / (pointExitPipeCBVT3 - pointExitCB)[2]) * (pointExitPipeCBVT3 - pointExitCB)
 
-    #pointExitPipeVT3XRT = pointInSun - pointExitCBMagneticField
-    #pointExitPipeVT3XRT = pointExitPipeVT3XRT/ sqrt(pointExitPipeVT3XRT[0]*pointExitPipeVT3XRT[0] + pointExitPipeVT3XRT[1]*pointExitPipeVT3XRT[1] + pointExitPipeVT3XRT[2]*pointExitPipeVT3XRT[2])
-    #pointExitPipeVT3XRT = pointExitCBMagneticField + pointExitPipeVT3XRT * (RAYTRACER_LENGTH_COLDBORE + RAYTRACER_LENGTH_PIPE_CB_VT3 + RAYTRACER_LENGTH_PIPE_VT3_XRT)
+    var vectorBeforeXRT = pointExitPipeVT3XRT - pointExitCB
 
-    var vectorBeforeXRT = vec3(0.0)
-    vectorBeforeXRT = pointExitPipeVT3XRT - pointExitCB
-
-
-
-
-    ###################von CB (coldbore(pipe in Magnet)) zum XRT (XrayTelescope)#######################
+    ###################from the CB (coldbore(pipe in Magnet)) to the XRT (XrayTelescope)#######################
 
     var pointEntranceXRT = vec3(0.0)
     pointEntranceXRT[0] = pointExitPipeVT3XRT[0] #- distanceCBAxisXRTAxis
@@ -900,6 +722,8 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     vectorAfterXRTCircular[0] = radius1
     vectorAfterXRTCircular[1] = phi_radius
     vectorAfterXRTCircular[2] = alpha
+    
+    ## Calculate the way of the axion through the telescope by manually reflecting the ray on the two mirror layers and then ending up before the detector ##
 
     var 
       dist : seq[float]
@@ -952,22 +776,8 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     var t = getVectoraAfterMirror(pointAfterMirror1, pointMirror1, pointMirror2, beta3, "angle")
     if pointMirror2[0] == 0.0 and pointMirror2[1] == 0.0 and pointMirror2[2] == 0.0: continue ## with more uncertainty, 10% of the 0.1% we loose here can be recovered, but it gets more uncertain
     
-    
-    #echo 2.0 * radToDeg(beta) - 0.5 * s[0]
-    #echo 0.5 * t[0]
     var vectorAfterMirrors = getVectoraAfterMirror(pointAfterMirror1, pointMirror1, pointMirror2, beta3, "vectorAfter")
     
-
-    
-    #if not isDigit(intToStr(t[0].int)):
-      #echo 2.0 * radToDeg(beta) - s[0]
-      #echo t[0]  ## those two are the same!!! it works!!!
-      #echo pointMirror1
-      #echo vectorAfterMirror1
-      #echo pointMirror2
-      #echo vectorAfterMirrors
-      #echo pointMirror1
-      #ffff.add(1.1)
 
     ############################################# Mirrors end #################################################
     ## now get the points in the focal / detector plane
@@ -975,41 +785,19 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     ## because the detector is tuned in regards to the coldbore because it follows the direction of the telescope, set the origin to the detector window and turn the coordinate syste, to the detector
     var distDet = distanceMirrors - 0.5 * allXsep[8] * cos(beta) + RAYTRACER_FOCAL_LENGTH_XRT - RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW
     var epsilon = arctan(d / distDet)
-    #echo epsilon
     
     var n = (distDet - pointMirror2[2]) / vectorAfterMirrors[2]
 
-    # echo n
     var pointDetectorWindow = pointMirror2 + n * vectorAfterMirrors
-    #echo pointDetectorWindow
 
-
-
-    #for i in 1 .. < allR1.len:
-      #echo lineIntersectsArea( (allR1[i] + 0.2), allR1[i], pointEntranceXRT)
-      #if lineIntersectsArea( (allR1[i] + 0.2), allR1[i], pointEntranceXRT):continue
-
-    #echo pointEntranceXRT
     var valuesPix = getPixelValue(pointEntranceXRT)
     pointdataXBefore.add(pointEntranceXRT[0])
     pointdataYBefore.add(pointEntranceXRT[1])
     pixvalsX.add(valuesPix[0])
     pixvalsY.add(valuesPix[1])
 
-    ## Old XRT stuff ##
-        #[var
-          angle = (arccos(vectorBeforeXRT[2]/sqrt(vectorBeforeXRT[0]*vectorBeforeXRT[0]+vectorBeforeXRT[1]*vectorBeforeXRT[1]+vectorBeforeXRT[2]*vectorBeforeXRT[2])))  # Here we want to adress theta, the polar angle, which should be the second entrance of the vector
-          r_x = pointEntranceXRT[0]
-          r_y = pointEntranceXRT[1]
-          theta_x = vectorBeforeXRT[0] / vectorBeforeXRT[2]
-          theta_y = vectorBeforeXRT[1] / vectorBeforeXRT[2]
-          theta_x_prime = theta_x - ( r_x / RAYTRACER_FOCAL_LENGTH_XRT)
-          theta_y_prime = theta_y - ( r_y / RAYTRACER_FOCAL_LENGTH_XRT)]#
 
-        #[var vectorAfterXRT = vec3(0.0)
-        vectorAfterXRT[0] = vectorBeforeXRT[0] #sin(theta_x_prime) * 100.0 # theta_x_prime seemes to be in rad, since sin in c++ also does calculate from rad
-        vectorAfterXRT[1] = vectorBeforeXRT[1] #sin(theta_y_prime) * 100.0
-        vectorAfterXRT[2] = 100.0]#
+
     var centerDetectorWindow = vec3(0.0)
     centerDetectorWindow[0] = 0.0
     centerDetectorWindow[1] = 0.0
@@ -1019,16 +807,11 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     pointDetectorWindowCircle[0] = tan(vectorAfterXRTCircular[2]) * RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW
     pointDetectorWindowCircle[1] = vectorAfterXRTCircular[1]
     pointDetectorWindowCircle[2] = vectorAfterXRTCircular[2]
-    var pointDetectorWindow2 = vec3(0.0)
-    pointDetectorWindow2[1] = pointDetectorWindowCircle[0] * sin(pointDetectorWindowCircle[1])
-    pointDetectorWindow2[0] = pointDetectorWindowCircle[0] * cos(pointDetectorWindowCircle[1])
-    pointDetectorWindow2[2] = 0.0
 
-
-        #[var lambda_0 = ( centerDetectorWindow[2] - pointEntranceXRT[2] ) / vectorAfterXRT[2]
-
-        pointDetectorWindow = pointEntranceXRT + lambda_0 * vectorAfterXRT
-        pointDetectorWindow = pointDetectorWindow - misalignmentDetector]#
+    ## Calculate the weight for each axion as the probability of its signal arriving at the detector which consists of:
+    ## The probability of conversion into Xrays in the path in the homogeneous magnetic field
+    ## The fraction of the flux of actions emitted from the given point in the sun per second, that actually arrives at the random point in the coldbore end
+    ## The transmission probability through the LLNL Xray telescope, which depends on the energy of the Xray and its angle
 
     vectorBeforeXRT = - vectorBeforeXRT # because we have to get the angles from the perspective of the XRT
 
@@ -1047,8 +830,6 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
       probConversionMagnet = 0.025 * 9.0 * 1e-24 * (1 / (1.44 * 1.2398)) * (1 / (1.44 * 1.2398)) * (pathCB * 1e-3) * (pathCB * 1e-3)
       transmissionMagnet = cos(ya) * probConversionMagnet#1.0 # this is the transformation probability of an axion into a photon, if an axion flying straight through the magnet had one of 100%, angular dependency of the primakoff effect
       transmissionTelescopeEnergy : float
-    #echo p
-
 
     if energyAx < 2.0:
       transmissionTelescopeEnergy = (-0.013086145 * energyAx * energyAx * energyAx * energyAx + 0.250552655 * energyAx * energyAx * energyAx - 1.541426299 * energyAx * energyAx + 2.064933639 * energyAx + 7.625254445) / 14.38338 #total eff area of telescope = 1438.338mm² = 14.38338cm²
@@ -1057,11 +838,10 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     else:
       transmissionTelescopeEnergy = 0.0
 
-
     if transmissionTelescopeEnergy < 0.0 :
       transmissionTelescopeEnergy = 0.0
 
-    var prob = ((43/2) * (43/2) * 3.1415) / (4 * 3.1415 * centersun[2] * centersun[2])
+    var prob = ((43/2) * (43/2) * 3.1415) / (4 * 3.1415 * centersun[2] * centersun[2]) ##Flux fraction. Is this correct??
 
     var weight = ( transmissionTelescopeEnergy* transmissionTelescopePitch*transmissionTelescopeYaw* transmissionMagnet * (pathCB * pathCB / RAYTRACER_LENGTH_COLDBORE_9T / RAYTRACER_LENGTH_COLDBORE_9T) ) #* prob # prob too small#transmission probabilities times time the axion spend in the magnet
 
@@ -1070,7 +850,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
 
     pointDetectorWindow[0] = pointDetectorWindow[0] + CHIPREGIONS_CHIP_CENTER_X
     pointDetectorWindow[1] = pointDetectorWindow[1] + CHIPREGIONS_CHIP_CENTER_Y
-        #echo pointDetectorWindow
+
     pointdataX.add(pointDetectorWindow[0])
     pointdataY.add(pointDetectorWindow[1])
     weights.add(weight)
@@ -1089,10 +869,6 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     if(bronze and withinWindow): integralBronze = integralBronze + weight
     if(detector and withinWindow): integralDetector = integralDetector + weight
 
-
-    #fluxfractionen.add(fluxfractionAll)
-    #energies.add(energyAx)
-    #fluxfractionen.add(1.0 + (iSun.float * 0.001))
 
 
   ## get the heatmaps out of the sequences of data X and data Y, first for the amount of data in one pixel ##
@@ -1117,8 +893,6 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   echo pointdataX.len # number of hits after the setup
 
   # get the heatmap of the data of a run for comparison
-  echo "here"
-  echo weights.len
 
 
   #let FILE = "likelihood_2018_2_all.h5"
@@ -1188,11 +962,14 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   
   echo "whooop"
   echo ffff.len 
+  echo emratesNewSum
+  echo emratesNew.len
+  echo emratesNew[0].len
 
 
 
 
-echo main()
+
 var radiationCharacteristic : string ##axionRadiation::characteristic radiationCharacteristic(axionRadiation::characteristic::sar);
 radiationCharacteristic = "axionRadiation::characteristic::sar"
 var coldboreBlockedLength : float64

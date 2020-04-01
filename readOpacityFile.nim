@@ -2,6 +2,7 @@ import strscans, streams, strutils, math, os, tables, sequtils, strformat, hashe
 
 import numericalnim, ggplotnim
 
+
 import readSolarModel
 
 type
@@ -346,16 +347,18 @@ proc getFluxFraction(energies : seq[float], df : DataFrame, n_es : seq[int], tem
     diff_fluxs.add(diff_flux)
 
     result = diff_fluxs
+
 proc hash(x: ElementKind): Hash = 
   var h: Hash = 0
   result = h !& int(x)
   result = !$result
-proc main*() : seq[seq[float]] = 
+
+proc main*(energies : seq[float]) : seq[seq[float]] = 
 
   ## First lets access the solar model and calculate some necessary values
   const solarModel = "./ReadSolarModel/resources/AGSS09_solar_model_stripped.dat"
   var df = readSolarModel(solarModel)
-  #df = df.filter(f{"Radius" <= 0.2})
+  df = df.filter(f{"Radius" <= 0.2})
   echo df.pretty(precision = 10)
 
   ## now let's plot radius against temperature colored by density
@@ -455,7 +458,7 @@ proc main*() : seq[seq[float]] =
 
   ## Calculate the absorbtion coefficients depending on the energy and the radius out of the opacity values
 
-  let energies = linspace(1.0, 10000.0, 1112)
+
   var absCoefs = newSeqWith(df["Rho"].len, newSeq[float](1112)) #29 elements
   var emratesS = newSeqWith(df["Rho"].len, newSeq[float](1112))
   var term1s = newSeqWith(df["Rho"].len, newSeq[float](1112))
@@ -610,4 +613,4 @@ proc main*() : seq[seq[float]] =
   
   result = emratesS
 
-echo main()
+#echo main()

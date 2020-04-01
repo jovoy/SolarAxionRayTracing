@@ -4,7 +4,7 @@ proc readSolarModel*(fname: string): DataFrame =
   ## first of all parses the given AGSS09 solar model and returns it as a
   ## ggplotnim DataFrame. For efficiency's sake it might be a good idea and
   ## later use a `Table[string, seq[float]]` instead of the dataframe!
-  result = toDf(readCsv(fname, sep = ' '))
+  result = toDf(readCsv(fname, sep = ' ', header = "#"))
 
 when isMainModule:
   const solarModel = "./ReadSolarModel/resources/AGSS09_solar_model_stripped.dat"
