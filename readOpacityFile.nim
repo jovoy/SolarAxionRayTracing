@@ -210,7 +210,7 @@ proc readMeshFile(fname: string): seq[float] =
     uValues.add(toFloat(df["u"][i]))
   result = uValues
   #[var
-    f = open(fname) # with Bose-Einstein distribution of the thermal photon bath
+    f = open(fname) 
     line = ""
     ustring : string
     uValues : seq[float]
@@ -251,6 +251,34 @@ proc quadWeight(x : float): float =
 proc inner_integral(t : float, y: float) : float = 
   result = (1.0/2.0) * ( ((y * y) / (t * t + y * y)) + ln( t * t + y * y ) )
 
+proc outer(x, w, y: float): float =
+  let coeff = x * exp(-x * x)
+  # wrap the inner call to have an `IntegrateFunc` kind
+  #let fn = proc(x: float, optional: seq[float]): float =
+    #result = inner(x, y)
+  let
+    frm = sqrt(x * x + w) - x
+    to = sqrt(x * x + w) + x
+  let integral = inner_integral(to, y) - inner_integral(frm, y)#adaptiveGauss(fn, frm, to) #check if analytical integral gives the same results: difference of e-15
+
+  result = coeff * integral
+
+proc fNew(w : float, y : float) : float =
+  # integrate `outer` frm `0` to `inf`
+  # rewrite via
+  # int_a^infty dx f(x) = int_0^1 f(a + (1 - t) / t) / t^2
+  # in our case a = 0
+  # so express by wrapping `outer` in a new proc
+  let fnToInt = proc(t: float, optional: seq[float]): float =
+    #echo t
+    if t != 0:
+      result = outer(x = (1 - t) / t, w = w, y = y) / (t * t)
+    else:
+      # workaround singularity by adding epsilon
+      result = outer(x = (1 - t) / (t + 1e-8), w = w, y = y) / (t * t)
+  # and integrate that from 0 to 1
+  result = adaptiveGauss(fnToInt, 0.0, 1.0)
+
 
 proc quadFunc(x : float, y : float, w : float): float = 
   var up_lim = sqrt(x * x + w) + x # sqrt(x  +w) + sqrt(x)
@@ -260,7 +288,7 @@ proc quadFunc(x : float, y : float, w : float): float =
 
 
 
-proc F(w : float, y : float) : float =
+proc f(w : float, y : float) : float =
   let N = 5
   var 
     res_coef : seq[float]
@@ -288,12 +316,15 @@ proc F(w : float, y : float) : float =
     integral += weights_vec[i] * quadFunc(roots_vec[i], y, w)
   integral *= (1.0 / 2.0)
   result = integral
+
+
+## The functions for all the parts of the emission rate ##
     
 proc comptonEmrate(alpha : float, gae : float, energy : float, ne : float, me : float, temp : float) : float =
   result = (alpha * gae * gae * energy * energy * ne) / (3.0 * me * me * me * me * (exp(energy / temp) - 1.0))
 
 proc bremsEmrate(alpha : float, gae : float, energy : float, ne : float, me : float, temp : float, w : float, y : float) : float =
-  result = (alpha * alpha * gae * gae * 4.0 * sqrt(PI) * ne * ne * exp(- energy / temp) * F(w, sqrt(2.0) * y)) / (3.0 * sqrt(temp) * pow(me, 3.5) * energy)
+  result = (alpha * alpha * gae * gae * 4.0 * sqrt(PI) * ne * ne * exp(- energy / temp) * fNew(w, sqrt(2.0) * y)) / (3.0 * sqrt(temp) * pow(me, 3.5) * energy)
 
 proc term1(gae : float, energy : float, abscoef : float, echarge : float, me : float, temp : float) : float = 
   result = (gae * gae * energy * energy * abscoef) / (2.0 * echarge * echarge * me * me * (exp(energy / temp) - 1.0))
@@ -301,6 +332,8 @@ proc term1(gae : float, energy : float, abscoef : float, echarge : float, me : f
 proc term2(alpha : float, gae : float, energy : float, ne : float, me : float, temp : float) : float =
   result = ((exp(energy / temp) - 2.0) * comptonEmrate(alpha, gae, energy, ne, me, temp)) / (2.0 * (exp(energy / temp) - 1.0))
 
+proc freefreeEmrate(alpha : float, gae : float, energy : float, ne : float, me : float, temp : float, nzZ2 :float, w:float, y:float) : float =
+  result = (fNew(w, y) * alpha * alpha * gae * gae  * 8.0 * sqrt(PI) * ne * nzZ2 * exp(-energy/temp)) / (3.0 * sqrt(2.0 * temp) * pow(me, 3.5) * energy)#*( ) * )
 
 
 proc getFluxFraction(energies : seq[float], df : DataFrame, n_es : seq[int], temperatures : seq[int], emratesS : seq[seq[float]]) : seq[float] = 
@@ -358,7 +391,7 @@ proc main*(energies : seq[float]) : seq[seq[float]] =
   ## First lets access the solar model and calculate some necessary values
   const solarModel = "./ReadSolarModel/resources/AGSS09_solar_model_stripped.dat"
   var df = readSolarModel(solarModel)
-  df = df.filter(f{"Radius" <= 0.2})
+  #df = df.filter(f{"Radius" <= 0.2})
   echo df.pretty(precision = 10)
 
   ## now let's plot radius against temperature colored by density
@@ -464,6 +497,7 @@ proc main*(energies : seq[float]) : seq[seq[float]] =
   var term1s = newSeqWith(df["Rho"].len, newSeq[float](1112))
   var comptons = newSeqWith(df["Rho"].len, newSeq[float](1112))
   var term3s = newSeqWith(df["Rho"].len, newSeq[float](1112))
+  var ffterms = newSeqWith(df["Rho"].len, newSeq[float](1112))
 
   var posOP = newSeqWith(df["Rho"].len, newSeq[int](1112))
   var ironOpE : seq[float]
@@ -491,7 +525,10 @@ proc main*(energies : seq[float]) : seq[seq[float]] =
       var w = energy_keV / temp_keV #toFloat(dfMesh["u"][iE.int])
       var iEindex = ((iE - 1.0) / 9.0).toInt 
       var table = 1.0
-      var prevMesh = 1.0
+      var prevMesh = 1.0      
+      let debye_scale = sqrt( (4.0 * PI * alpha / temp_keV) * (n_e_keV + n_Z[R][1] * 7.645e-24 + 4.0 * n_Z[R][2] * 7.645e-24 )) 
+      
+      let y = debye_scale / (sqrt( 2.0 * m_e_keV * temp_keV))
       if w >= 20.0 or w <= 0.0732: #because the tables dont go beyond that, apparently because the axion production beyond that is irrelevant #except for He, maybe find a better solution
         for (Z_str, Z) in iterEnum(ElementKind):
           if Z in noElement:
@@ -520,8 +557,9 @@ proc main*(energies : seq[float]) : seq[seq[float]] =
 
           #var opacity_cm = opacity  # correct conversion
           # opacities in atomic unit for lenth squared: 0.528 x10-8cm * 0.528 x10-8cm = a0² # 1 m = 1/1.239841336215e-9 1/keV and a0 = 0.528 x10-10m
+          if Z > 2:
+            sum +=  n_Z[R][Z] * opacity
           
-          sum +=  n_Z[R][Z] * opacity
 
         
         absCoef = sum * 1.97327e-8 * 0.528e-8 * 0.528e-8 * (1.0 - exp(-energy_keV / temp_keV)) # is in keV  
@@ -530,21 +568,28 @@ proc main*(energies : seq[float]) : seq[seq[float]] =
       
       ## Now it's left to calculate the emission rates
       ## making the same approximation as for n_e calculation 
-      let debye_scale = sqrt( (4.0 * PI * alpha / temp_keV) * (n_e_keV + n_Z[R][1] * 7.645e-24 + 4.0 * n_Z[R][2] * 7.645e-24 )) 
-      
-      let y = debye_scale / (sqrt( 2.0 * m_e_keV * temp_keV))
+
+      ##ion density weighted by charge^2 from Raffelt
+      let nZZ2_raffelt_keV = (df["Rho"][R].toFloat / amu) * 7.683e-24 #seems to be correct
+      let ffterm = freefreeEmrate(alpha, g_ae, energy_keV, n_e_keV, m_e_keV, temp_keV, nZZ2_raffelt_keV, w, y) 
       ## includes contribution from ff, fb and bb processes and a part of the Comption contribution ## keV³ / keV² = keV :
-      let term1 = term1(g_ae, energy_keV, absCoefs[R][iEindex], e_charge, m_e_keV, temp_keV)  
+      let term1 = term1(g_ae, energy_keV, (absCoefs[R][iEindex]), e_charge, m_e_keV, temp_keV)  
       let term2 = term2(alpha, g_ae, energy_keV, n_e_keV, m_e_keV, temp_keV)# completes the Compton contribution #keV
       let term3 = bremsEmrate(alpha, g_ae, energy_keV, n_e_keV, m_e_keV, temp_keV, w, y) # contribution from ee-bremsstahlung
       let compton = comptonEmrate(alpha, g_ae, energy_keV, n_e_keV, m_e_keV, temp_keV) 
       term1s[R][iEindex] = term1
       comptons[R][iEindex] = compton
       term3s[R][iEindex] = term3
-      let total_emrate = compton +  term1 + term3#) keV 
+      ffterms[R][iEindex] = ffterm 
+      let total_emrate = compton +  term1 + term3 + ffterm#) keV 
       let total_emrate_s = total_emrate #/ (6.58e-19) # in 1/sec 
       emratesS[R][iEindex] = total_emrate_s
       # if want to have absorbtion coefficient of a radius and energy: R = (r (in % of sunR) - 0.0015) / 0.0005
+      
+      #if iEindex == 110:
+        #echo fNew(w, y), " for r ", (R.float * 0.0005 + 0.0015), " and e ", energy_keV 
+      #echo total_emrate
+
 
   
   var dfNZ = seqsToDf({ "Radius" : rs,
@@ -569,6 +614,7 @@ proc main*(energies : seq[float]) : seq[seq[float]] =
   let term1flux = getFluxFraction(energies, df, n_es, temperatures, term1s)
   let comptonflux = getFluxFraction(energies, df, n_es, temperatures, comptons)
   let term3flux = getFluxFraction(energies, df, n_es, temperatures, term3s)
+  let fftermflux = getFluxFraction(energies, df, n_es, temperatures, ffterms)
   var energieslong : seq[float]
   var fluxes : seq[float]
   var kinds : seq[string]
@@ -580,13 +626,16 @@ proc main*(energies : seq[float]) : seq[seq[float]] =
     kinds.add("Total Flux")
     energieslong.add(e_keV)
     fluxes.add(term1flux[iEindex])
-    kinds.add("Term1 Flux")
+    kinds.add("FB BB Flux")
     energieslong.add(e_keV)
     fluxes.add(comptonflux[iEindex])
     kinds.add("Compton Flux")
     energieslong.add(e_keV)
     fluxes.add(term3flux[iEindex])
-    kinds.add("Term3 Flux")
+    kinds.add("EE Flux")
+    energieslong.add(e_keV)
+    fluxes.add(fftermflux[iEindex])
+    kinds.add("FF Flux")
 
 
 
@@ -603,12 +652,12 @@ proc main*(energies : seq[float]) : seq[seq[float]] =
     ggsave("abscoefs_R10.pdf")
 
 
-  let dfDiffflux = seqsToDf({ "energy in [eV]" : energieslong,
-                              "fluxfraction in [keV⁻¹y⁻¹m⁻²]" : fluxes,
+  let dfDiffflux = seqsToDf({ "Axion energy [eV]" : energieslong,
+                              "Fluxfraction [keV⁻¹y⁻¹m⁻²]" : fluxes,
                               "type" : kinds })
-  ggplot(dfDiffflux, aes("energy in [eV]", "fluxfraction in [keV⁻¹y⁻¹m⁻²]", color = "type")) +
+  ggplot(dfDiffflux, aes("Axion energy [eV]", "Fluxfraction [keV⁻¹y⁻¹m⁻²]", color = "type")) +
     geom_line() +
-    ggtitle("The flux fraction of the axion from the sun") +
+    ggtitle("The flux fraction of axions from the sun") +
     ggsave("diffFlux.pdf")
   
   result = emratesS
