@@ -43,7 +43,7 @@ const
   distanceCBAxisXRTAxis = 0.0#62.1#58.44 #mm from XRT drawing #there is no difference in the axis even though the picture gets transfered 62,1mm down, but in the detector center
   RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW = 0.0 #mm #no change, because don't know # is actually -10.0 mm
   numberOfPointsEndOfCB = 200
-  numberOfPointsSun = 2000 #100000
+  numberOfPointsSun = 10000 #100000
 ## Chipregions#####
 
 const
@@ -425,6 +425,20 @@ proc getVectoraAfterMirror*(pointXRT : Vec3, pointCB : Vec3, pointMirror : Vec3,
   of "vectorAfter":
     result = vectorAfterMirror
 
+proc interpTrans(fname: string): CubicSpline[float] =
+  var values : seq[float]
+  var values2 : seq[float]
+  var df = toDf(readCsv(fname, sep = ' '))#, header = "#" ))# "Si3N4 Density=3.44 Thickness=0.3 microns" Si3N4 Density=3.44 Thickness=0.3 microns
+  for i in 0..<df["PhotonEnergy(eV)"].len:  ## Si Density=2.33 Thickness=200. microns
+    values.add(toFloat(df["PhotonEnergy(eV)"][i]))
+  
+  for i in 0..<df["Transmission"].len:
+    values2.add(toFloat(df["Transmission"][i]))
+  result = newCubicSpline(values, values2)
+let siNfile = "./resources/Si3N4Density=3.44Thickness=0.3microns"
+let spline = interpTrans(siNfile)
+let siFile =  "./resources/SiDensity=2.33Thickness=200.microns"
+let splineStrips = interpTrans(siFile)
 
 ## Now some functions for the graphs later, that store the data in heatmaps and then give them out with plotly ##
 
@@ -549,7 +563,8 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   sunMisalignmentV:float64 = 0.0,
   detectorMisalignmentX:float64 = 0.0,
   detectorMisalignmentY:float64 = 0.0,
-  coldboreBlockedLength:float64 = 0.0) : int =
+  coldboreBlockedLength:float64 = 0.0,
+  year : string) : int =
 
   var misalignmentSun = vec3(0.0) #works, but maybe bad package?
   misalignmentSun[2] = 0
@@ -648,6 +663,19 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     fluxfracints : seq[float]
 
   var ffff : seq[float]
+
+  ## Detector Window##
+  #theta angle between window strips and horizontal x axis
+  var theta :float
+  case year
+  of "2017":
+    theta = degToRad(10.8)
+  of "2018":
+    theta = degToRad(71.5)
+  const
+    stripDistWindow = 2.3 #mm
+    stripWidthWindow = 0.5 #mm
+  #let spline = neCubicSpline
   ## In the following we will go over a number of points in the sun, whose location and energy will be biased by the emission rate and whose track will be 
   ## calculated through the CAST experimental setup from 2018 at VT3
 
@@ -715,13 +743,13 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     if  pointEntranceXRT[1] <= 1.0 and pointEntranceXRT[1] >= -1.0: continue #there is a 2mm wide graphit block between each glass mirror, to seperate them in the middle of the x-Ray telescope
 
     var
-      vectorAfterXRTCircular = vec3(0.0)
+      vectorEntranceXRTCircular = vec3(0.0)
       radius1 = sqrt((pointEntranceXRT[0]+d) * (pointEntranceXRT[0]+d) + (pointEntranceXRT[1]) * (pointEntranceXRT[1]))
       phi_radius = arctan2(-pointEntranceXRT[1],(pointEntranceXRT[0]+d)) #arccos((pointEntranceXRT[1]+d) / radius1)
       alpha = arctan(radius1 / RAYTRACER_FOCAL_LENGTH_XRT)
-    vectorAfterXRTCircular[0] = radius1
-    vectorAfterXRTCircular[1] = phi_radius
-    vectorAfterXRTCircular[2] = alpha
+    vectorEntranceXRTCircular[0] = radius1
+    vectorEntranceXRTCircular[1] = phi_radius
+    vectorEntranceXRTCircular[2] = alpha
     
     ## Calculate the way of the axion through the telescope by manually reflecting the ray on the two mirror layers and then ending up before the detector ##
 
@@ -735,14 +763,16 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
       beta = 0.0 ## in degree
       r1Zyl = 0.0
       xSep = 0.0
-    
+
+    if vectorEntranceXRTCircular[0] > allR1[allR1.len - 1]: continue
     for j in 0..<allR1.len:
-      if vectorAfterXRTCircular[0] > allR1[j] and vectorAfterXRTCircular[0] < allR1[j] + 0.2:
+      
+      if vectorEntranceXRTCircular[0] > allR1[j] and vectorEntranceXRTCircular[0] < allR1[j] + 0.2:
         continue
-      if allR1[j] - vectorAfterXRTCircular[0] > 0.0:
-        dist.add(allR1[j] - vectorAfterXRTCircular[0])
+      if allR1[j] - vectorEntranceXRTCircular[0] > 0.0:
+        dist.add(allR1[j] - vectorEntranceXRTCircular[0])
     for k in 0..<allR1.len:
-      if min(dist) == allR1[k] - vectorAfterXRTCircular[0]:
+      if min(dist) == allR1[k] - vectorEntranceXRTCircular[0]:
         r1 = allR1[k]
         beta = degToRad(allAngles[k])
         xSep = allXsep[k]
@@ -803,11 +833,6 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     centerDetectorWindow[1] = 0.0
     centerDetectorWindow[2] = 0.0 #RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW # + pointEntranceXRT[2] + RAYTRACER_FOCAL_LENGTH_XRT
 
-    var pointDetectorWindowCircle = vec3(0.0)
-    pointDetectorWindowCircle[0] = tan(vectorAfterXRTCircular[2]) * RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW
-    pointDetectorWindowCircle[1] = vectorAfterXRTCircular[1]
-    pointDetectorWindowCircle[2] = vectorAfterXRTCircular[2]
-
     ## Calculate the weight for each axion as the probability of its signal arriving at the detector which consists of:
     ## The probability of conversion into Xrays in the path in the homogeneous magnetic field
     ## The fraction of the flux of actions emitted from the given point in the sun per second, that actually arrives at the random point in the coldbore end
@@ -832,9 +857,9 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
       transmissionTelescopeEnergy : float
 
     if energyAx < 2.0:
-      transmissionTelescopeEnergy = (-0.013086145 * energyAx * energyAx * energyAx * energyAx + 0.250552655 * energyAx * energyAx * energyAx - 1.541426299 * energyAx * energyAx + 2.064933639 * energyAx + 7.625254445) / 14.38338 #total eff area of telescope = 1438.338mm² = 14.38338cm²
+      transmissionTelescopeEnergy = (-0.013086145 * energyAx * energyAx * energyAx * energyAx + 0.250552655 * energyAx * energyAx * energyAx - 1.541426299 * energyAx * energyAx + 2.064933639 * energyAx + 7.625254445) / (14.38338 - (4.3 * 0.2)) #total eff area of telescope = 1438.338mm² = 14.38338cm² #the last thing are the mirror seperators
     elif energyAx >= 2.0 and energyAx < 8.0:
-      transmissionTelescopeEnergy = (0.0084904 * energyAx * energyAx * energyAx * energyAx * energyAx * energyAx - 0.199553 * energyAx * energyAx * energyAx * energyAx * energyAx + 1.75302 * energyAx * energyAx * energyAx * energyAx - 7.05939 * energyAx * energyAx * energyAx + 12.6706 * energyAx * energyAx - 9.23947 * energyAx + 9.96953) / 14.38338
+      transmissionTelescopeEnergy = (0.0084904 * energyAx * energyAx * energyAx * energyAx * energyAx * energyAx - 0.199553 * energyAx * energyAx * energyAx * energyAx * energyAx + 1.75302 * energyAx * energyAx * energyAx * energyAx - 7.05939 * energyAx * energyAx * energyAx + 12.6706 * energyAx * energyAx - 9.23947 * energyAx + 9.96953) / (14.38338 - (4.3 * 0.2))
     else:
       transmissionTelescopeEnergy = 0.0
 
@@ -846,10 +871,29 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     var weight = ( transmissionTelescopeEnergy* transmissionTelescopePitch*transmissionTelescopeYaw* transmissionMagnet * (pathCB * pathCB / RAYTRACER_LENGTH_COLDBORE_9T / RAYTRACER_LENGTH_COLDBORE_9T) ) #* prob # prob too small#transmission probabilities times time the axion spend in the magnet
 
     integralTotal = integralTotal + weight
+
+    ##Detector window:##
+    if sqrt(pointDetectorWindow[0] * pointDetectorWindow[0] + pointDetectorWindow[1] * pointDetectorWindow[1]) > 7.0: continue
+    var pointDetectorWindowTurned = vec3(0.0)
+    pointDetectorWindowTurned[0] = pointDetectorWindow[0] * cos(theta) + pointDetectorWindow[1] * sin(theta)
+    pointDetectorWindowTurned[1] = pointDetectorWindow[1] * cos(theta) - pointDetectorWindow[0] * sin(theta)
+    pointDetectorWindowTurned[2] = pointDetectorWindow[2]
+    var x = pointDetectorWindowTurned[0]
+    var y = pointDetectorWindowTurned[1]
+
+    if abs(y) > stripDistWindow / 2.0 and abs(y) < stripDistWindow / 2.0 + stripWidthWindow or abs(y) > 1.5 * stripDistWindow + stripWidthWindow and abs(y) < 1.5 * stripDistWindow + 2.0 * stripWidthWindow:
+      #echo "yaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaay"
+      #echo pointDetectorWindow
+      weight *=  splineStrips.eval(energyAx * 1000.0)
+      #continue
+    else:
+      weight *= spline.eval(energyAx * 1000.0)
     ###detector COS has (0/0) at the bottom left corner of the chip
 
     pointDetectorWindow[0] = pointDetectorWindow[0] + CHIPREGIONS_CHIP_CENTER_X
     pointDetectorWindow[1] = pointDetectorWindow[1] + CHIPREGIONS_CHIP_CENTER_Y
+
+
 
     pointdataX.add(pointDetectorWindow[0])
     pointdataY.add(pointDetectorWindow[1])
@@ -977,7 +1021,7 @@ coldboreBlockedLength = 0.0
 var detectorWindowAperture : float64
 detectorWindowAperture = 14.0 #mm
 
-echo calculateFluxFractions(radiationCharacteristic, detectorWindowAperture, 0.0, 0.0, 0.0, 0.0, coldboreBlockedLength) # radiationCharacteristic = "axionRadiation::characteristic::sar"
+echo calculateFluxFractions(radiationCharacteristic, detectorWindowAperture, 0.0, 0.0, 0.0, 0.0, coldboreBlockedLength, "2018") # radiationCharacteristic = "axionRadiation::characteristic::sar"
 
 #type
 #    vector3 = ref object of Vec3
