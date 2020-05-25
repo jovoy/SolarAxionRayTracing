@@ -15,6 +15,7 @@ import readOpacityFile
 import numericalnim, ggplotnim, strformat
 import strscans
 import streams, tables
+import axionMass/axionMass
 
 
 
@@ -32,19 +33,16 @@ import streams, tables
 const
   RAYTRACER_DISTANCE_SUN_EARTH =  1.5e14  #mm #ok
   radiusSun = 6.9e11 #mm #ok
-  radiusCB = 21.5 #mm #ok
-  RAYTRACER_LENGTH_COLDBORE = 9756.0 #mm half B field to end of CB #ok
-  RAYTRACER_LENGTH_COLDBORE_9T = 9260.0 #mm half B field to half B field #ok
-  RAYTRACER_LENGTH_PIPE_CB_VT3 = 2571.5 #mm should stay the same #from beam pipe drawings #ok
-  radiusPipeCBVT3 = 39.64 #30.0 #mm smallest aperture between end of CB and VT4 # 43 mm but only 85% of area: 39,64mm #ok
-  RAYTRACER_LENGTH_PIPE_VT3_XRT = 150.0 #mm from drawings #198.2 #mm from XRT drawing #ok
-  radiusPipeVT3XRT = 35.0#25.0 #mm from drawing #35.0 #m irrelevant, large enough to not loose anything # needs to be mm #ok
-  RAYTRACER_FOCAL_LENGTH_XRT = 1500.0#1485.0 #mm is from llnl XRT https://iopscience.iop.org/article/10.1088/1475-7516/2015/12/008/pdf #1600.0 #mm was the Telescope of 2014 (MPE XRT) also: Aperatur changed #ok
-  distanceCBAxisXRTAxis = 0.0#62.1#58.44 #mm from XRT drawing #there is no difference in the axis even though the picture gets transfered 62,1mm down, but in the detector center
-  RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW = 0.0 #mm #no change, because don't know # is actually -10.0 mm
-  numberOfPointsEndOfCB = 200
-  numberOfPointsSun = 10000 #100000
+  numberOfPointsSun = 10000 #100000 for statistics
+
+  pressGas = 14.3345 #for example P = 14.3345 mbar (corresponds to 1 bar at room temperature).
+  tempGas = 1.7 #K
+  
+  mAxion = 0.4 #eV for example
+  g_agamma = 1e-12
+  
 ## Chipregions#####
+
 
 const
   CHIPREGIONS_CHIP_X_MIN = 0.0
@@ -106,7 +104,7 @@ proc getFluxFraction(chipRegionstring:string): float64 =
 
 proc getRandomPointOnDisk(center: Vec3, radius:float64) : Vec3 =
 
-  ## This function gets a random point on a disk --> in this case this would be the entrance of the coldbore ##
+  ## This function gets a random point on a disk --> in this case this would be the exit of the coldbore ##
 
   var
     x = 0.0
@@ -165,10 +163,6 @@ proc getRandomEnergyFromSolarModel(emRateVecSums : seq[float], vectorInSun: Vec3
     emRateEnergySumPrev : float
     i : float
     emRateEnergySumAll : float
-  
-
-
-  var
     indexRad = (r - 0.0015) / 0.0005
 
   if indexRad - 0.5 > floor(indexRad):
@@ -177,31 +171,22 @@ proc getRandomEnergyFromSolarModel(emRateVecSums : seq[float], vectorInSun: Vec3
 
   for iE in 0..<energies.len:
     emRateEnergySumAll += emissionRates[iRad][iE]
-  #echo emRateEnergySumAll
+
   i = random(emRateEnergySumAll)
 
-  #[if iRad != 0:
-    #i = random((emRateVecSums[iRad+1] - emRateVecSums[iRad])) # no because this is not with energy Gl
-    i = random(emRateEnergySumAll)
-  else:
-    i = random(emRateVecSums[iRad+1])]#
-
-  for iEnergy in 0..<energies.len: #energise.len/ radii
+  for iEnergy in 0..<energies.len: 
     emRateEnergySumPrev = emRateEnergySum
-    emRateEnergySum = emRateEnergySumPrev + emissionRates[iRad][iEnergy]#energise.len/ radii
+    emRateEnergySum = emRateEnergySumPrev + emissionRates[iRad][iEnergy]
     if i > emRateEnergySumPrev and i <= emRateEnergySum:
       energy = energies[iEnergy] * 0.001 #in keV
-    #if iEnergy == 232:
-      #echo "sum over all energies 2"
-      #echo emRateEnergySum
 
   result = energy
 
 ## The following are some functions to determine inetersection of the rays with the geometry (pipes, magnet, mirrors) of the setup ##
 
-proc lineIntersectsCircle(point_1 : Vec3, point_2 : Vec3, center : Vec3, radius : float64, intersect : Vec3) : bool = # probably still some error (lambda1 -> infinity)
+proc lineIntersectsCircle(point_1 : Vec3, point_2 : Vec3, center : Vec3, radius : float64, intersect : Vec3) : bool = 
 
-  ## Now a function to see if the linesfrom the sun will actually intersect the circle area from the magnet entrance (called coldbore) etc. ##
+  ## Now a function to see if the lines from the sun will actually intersect the circle area from the magnet entrance (called coldbore) etc. ##
 
   var vector = vec3(0.0)
   vector = point_2 - point_1
@@ -367,9 +352,9 @@ proc getXandY( h5file : string , dsetgrp1 :string, numFirstRun : int, numLastRun
 
 proc findPosXRT*(pointXRT : Vec3, pointCB : Vec3, r1 : float, r2 : float, angle : float, lMirror : float, distMirr : float, uncer : float, sMin : float, sMax : float) : Vec3 =
 
-  ##this is to find the position the ray hits the mirror shell of r1. it is after transforming the ray into a cylindrical coordinate system, that has the middle and the beginning of the mirror "cylinders" as its origin and is in cylindrical coordinates
-    
-  var
+  ##this is to find the position the ray hits the mirror shell of r1. it is after transforming the ray into a coordinate system, that has the middle of the beginning of the mirror cones as its origin
+  
+  var 
     point = pointCB
     s : float
     term : float
@@ -428,8 +413,8 @@ proc getVectoraAfterMirror*(pointXRT : Vec3, pointCB : Vec3, pointMirror : Vec3,
 proc interpTrans(fname: string): CubicSpline[float] =
   var values : seq[float]
   var values2 : seq[float]
-  var df = toDf(readCsv(fname, sep = ' '))#, header = "#" ))# "Si3N4 Density=3.44 Thickness=0.3 microns" Si3N4 Density=3.44 Thickness=0.3 microns
-  for i in 0..<df["PhotonEnergy(eV)"].len:  ## Si Density=2.33 Thickness=200. microns
+  var df = toDf(readCsv(fname, sep = ' '))
+  for i in 0..<df["PhotonEnergy(eV)"].len: 
     values.add(toFloat(df["PhotonEnergy(eV)"][i]))
   
   for i in 0..<df["Transmission"].len:
@@ -558,37 +543,81 @@ proc drawgraph(diagramtitle : string, data_X : seq[float], data_Y: seq[float], e
 
 
 proc calculateFluxFractions(axionRadiationCharacteristic: string,
-  detectorWindowAperture :float64 = 14.0,
-  sunMisalignmentH :float64 = 0.0, #given in arcmin(?)
-  sunMisalignmentV:float64 = 0.0,
-  detectorMisalignmentX:float64 = 0.0,
-  detectorMisalignmentY:float64 = 0.0,
-  coldboreBlockedLength:float64 = 0.0,
-  year : string) : int =
+  detectorWindowAperture :float, pGas : float, tGas : float, m_a : float, setup : string,
 
-  var misalignmentSun = vec3(0.0) #works, but maybe bad package?
-  misalignmentSun[2] = 0
-  misalignmentSun[0] = tan(degToRad(sunMisalignmentH / 60)) * RAYTRACER_DISTANCE_SUN_EARTH
-  misalignmentSun[1] = tan(degToRad(sunMisalignmentV / 60)) * RAYTRACER_DISTANCE_SUN_EARTH
+  year : string) : int = #The year is only for the way the window in front of the detector was turned.
+  
+  case setup
+  of "CAST":
+    let
+      radiusCB = 21.5 #mm 
+      RAYTRACER_LENGTH_COLDBORE = 9756.0 #mm half B field to end of CB #ok
+      RAYTRACER_LENGTH_COLDBORE_9T = 9260.0 #mm half B field to half B field #ok
+      RAYTRACER_LENGTH_PIPE_CB_VT3 = 2571.5 #mm should stay the same #from beam pipe drawings #ok
+      radiusPipeCBVT3 = 39.64 #30.0 #mm smallest aperture between end of CB and VT4 # 43 mm but only 85% of area: 39,64mm #ok
+      RAYTRACER_LENGTH_PIPE_VT3_XRT = 150.0 #mm from drawings #198.2 #mm from XRT drawing #ok
+      radiusPipeVT3XRT = 35.0#25.0 #mm from drawing #35.0 #m irrelevant, large enough to not loose anything # needs to be mm #ok
+      RAYTRACER_FOCAL_LENGTH_XRT = 1500.0#1485.0 #mm is from llnl XRT https://iopscience.iop.org/article/10.1088/1475-7516/2015/12/008/pdf #1600.0 #mm was the Telescope of 2014 (MPE XRT) also: Aperatur changed #ok
+      distanceCBAxisXRTAxis = 0.0#62.1#58.44 #mm from XRT drawing #there is no difference in the axis even though the picture gets transfered 62,1mm down, but in the detector center
+      RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW = 0.0 #mm #no change, because don't know
 
-  var misalignmentDetector = vec3(0.0)
-  misalignmentDetector[0] = detectorMisalignmentX
-  misalignmentDetector[1] = detectorMisalignmentY
-  misalignmentDetector[2] = 0
+      ## Measurements of the Telescope mirrors in the following, R1 are the radii of the mirror shells at the entrance of the mirror
+      allR1 = @[60.7095, 63.006 , 65.606 , 68.305 , 71.105 , 74.011 , 77.027 , 80.157 , 83.405 , 86.775 , 90.272 , 93.902 , 97.668 , 101.576 , 105.632]  ## the radii of the shells
+      allXsep = @[4.0, 4.171, 4.140, 4.221, 4.190, 4.228, 4.245, 4.288, 4.284, 4.306, 4.324, 4.373, 4.387, 4.403, 4.481]
+      #allR2 = @[0.0, 60.731, 63.237, 65.838, 68.538, 71.339, 74.246, 77.263, 80.394, 83.642]
+      allAngles = @[0.0, 0.579, 0.603, 0.628, 0.654, 0.680, 0.708, 0.737, 0.767, 0.798, 0.830, 0.863, 0.898, 0.933, 0.970] ## the angles of the mirror shells coresponding to the radii above
+      lMirror = 225.0 #mm Mirror length
+      d = 83.0 #mm ## distance between center of colbore at XRT and center of XRT (where the focal point is on the minus x axis)
+      B = 9.0 #T magnetic field of magnet
+      
+  of "BabyIaxo":
+    let
+      radiusCB = 350 #mm 
 
+      ## Change:
+      RAYTRACER_LENGTH_COLDBORE = 9756.0 #mm half B field to end of CB #ok
+      RAYTRACER_LENGTH_COLDBORE_9T = 9260.0 #mm half B field to half B field #ok
+      RAYTRACER_LENGTH_PIPE_CB_VT3 = 2571.5 #mm should stay the same #from beam pipe drawings #ok
+      radiusPipeCBVT3 = 39.64 #30.0 #mm smallest aperture between end of CB and VT4 # 43 mm but only 85% of area: 39,64mm #ok
+      RAYTRACER_LENGTH_PIPE_VT3_XRT = 150.0 #mm from drawings #198.2 #mm from XRT drawing #ok
+      radiusPipeVT3XRT = 35.0#25.0 #mm from drawing #35.0 #m irrelevant, large enough to not loose anything # needs to be mm #ok
+      RAYTRACER_FOCAL_LENGTH_XRT = 1500.0#1485.0 #mm is from llnl XRT https://iopscience.iop.org/article/10.1088/1475-7516/2015/12/008/pdf #1600.0 #mm was the Telescope of 2014 (MPE XRT) also: Aperatur changed #ok
+      distanceCBAxisXRTAxis = 0.0#62.1#58.44 #mm from XRT drawing #there is no difference in the axis even though the picture gets transfered 62,1mm down, but in the detector center
+      RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW = 0.0 #mm #no change, because don't know
+  
+      ## Measurements of the Telescope mirrors in the following, R1 are the radii of the mirror shells at the entrance of the mirror
+      
+      allR1 = @[60.7095, 63.006 , 65.606 , 68.305 , 71.105 , 74.011 , 77.027 , 80.157 , 83.405 , 86.775 , 90.272 , 93.902 , 97.668 , 101.576 , 105.632]  ## the radii of the shells
+      allXsep = @[4.0, 4.171, 4.140, 4.221, 4.190, 4.228, 4.245, 4.288, 4.284, 4.306, 4.324, 4.373, 4.387, 4.403, 4.481]
+      #allR2 = @[0.0, 60.731, 63.237, 65.838, 68.538, 71.339, 74.246, 77.263, 80.394, 83.642]
+      allAngles = @[0.0, 0.579, 0.603, 0.628, 0.654, 0.680, 0.708, 0.737, 0.767, 0.798, 0.830, 0.863, 0.898, 0.933, 0.970] ## the angles of the mirror shells coresponding to the radii above
+      lMirror = 225.0 #mm Mirror length
+      d = 0.0 #mm ## distance between center of colbore at XRT and center of XRT (where the focal point is on the minus x axis)
+      B = 2.0 #T magnetic field of magnet
+
+      ##Telescope transmission needs to be changed as well
+
+
+
+    
+  let 
+    radiusColdbore = radiusCB * 1e-3
+    circleX = circleEdges( allR1)
+    circleY = circleEdges( allR1)
+    circleTotal = circleEdges( allR1)
   var centerSun = vec3(0.0)
   centerSun[0] = 0
   centerSun[1] = 0
   centerSun[2] = RAYTRACER_DISTANCE_SUN_EARTH
 
-  centerSun = centerSun + misalignmentSun
+  #centerSun = centerSun + misalignmentSun
 
   var radiusSunTwentyPecent = radiusSun * 0.2
 
   var centerEntranceCB = vec3(0.0)
   centerEntranceCB[0] = 0
   centerEntranceCB[1] = 0
-  centerEntranceCB[2] = coldboreBlockedLength
+  centerEntranceCB[2] = 0 #coldboreBlockedLength # was 0 anyway
 
   var centerExitCBMagneticField = vec3(0.0)
   centerExitCBMagneticField[0] = 0
@@ -618,9 +647,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     integralSilver = 0.0
     integralGold = 0.0
 
-  var misalignment = (sunMisalignmentH != 0.0) or (sunMisalignmentV != 0.0) or (detectorMisalignmentX != 0.0) or (detectorMisalignmentY != 0.0)
-
-
+  
   var
     pointdataX : seq[float]
     pointdataY : seq[float]
@@ -629,7 +656,8 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     weights : seq[float]
     pixvalsX : seq[float]
     pixvalsY : seq[float]
-
+    radii : seq[float]
+    energies : seq[float]
   ## Measurements of the Telescope mirrors in the following, R1 are the radii of the mirror shells at the entrance of the mirror
   const
     allR1 = @[60.7095, 63.006 , 65.606 , 68.305 , 71.105 , 74.011 , 77.027 , 80.157 , 83.405 , 86.775 , 90.272 , 93.902 , 97.668 , 101.576 , 105.632]  ## the radii of the shells
@@ -641,6 +669,8 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     circleY = circleEdges( allR1)
     circleTotal = circleEdges( allR1)
     d = 83.0 #mm ## distance between center of colbore at XRT and center of XRT (where the focal point is on the minus x axis)
+    g_agamma = 1e-12
+    B = 9.0 #T magnetic field of magnet
   let
     energiesNew = linspace(1.0, 10000.0, 1112)
 
@@ -655,14 +685,6 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     sum2 += sum
   emratesNewSum.add(sum2)
 
-  var
-    fluxfractionrad : seq[float]
-    fluxfractionen : seq[float]
-    radii : seq[float]
-    energies : seq[float]
-    fluxfracints : seq[float]
-
-  var ffff : seq[float]
 
   ## Detector Window##
   #theta angle between window strips and horizontal x axis
@@ -675,7 +697,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   const
     stripDistWindow = 2.3 #mm
     stripWidthWindow = 0.5 #mm
-  #let spline = neCubicSpline
+
   ## In the following we will go over a number of points in the sun, whose location and energy will be biased by the emission rate and whose track will be 
   ## calculated through the CAST experimental setup from 2018 at VT3
 
@@ -852,16 +874,23 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     var
       transmissionTelescopePitch = (0.0008*p*p*p*p + 1e-04*p*p*p - 0.4489*p*p - 0.3116*p + 96.787) / 100.0
       transmissionTelescopeYaw = (-0.0316*ya*ya + 0.0421*ya + 99.771) / 100.0
-      probConversionMagnet = 0.025 * 9.0 * 1e-24 * (1 / (1.44 * 1.2398)) * (1 / (1.44 * 1.2398)) * (pathCB * 1e-3) * (pathCB * 1e-3)
-      transmissionMagnet = cos(ya) * probConversionMagnet#1.0 # this is the transformation probability of an axion into a photon, if an axion flying straight through the magnet had one of 100%, angular dependency of the primakoff effect
-      transmissionTelescopeEnergy : float
+      probConversionMagnet = 0.025 * B * B * g_agamma * g_agamma * (1 / (1.44 * 1.2398)) * (1 / (1.44 * 1.2398)) * (pathCB * 1e-3) * (pathCB * 1e-3) #g_agamma= 1e-12
+      
+      distancePipe = (pointDetectorWindow[2] - pointExitCBZylKart[2]) * 1e-3 #m
+      probConversionMagnetGas = axionConversionProb2(m_a, energyAx, pGas, tGas, (pathCB * 1e-3), radiusCB, g_agamma, B)  
+      absorbtionXrays = intensitySuppression2(energyAx, (pathCB * 1e-3) , distancePipe, pressGas, tempGas, 293.15) #room temperature in K
 
+      transmissionMagnet = cos(ya) * probConversionMagnet#1.0 # this is the transformation probability of an axion into a photon, if an axion flying straight through the magnet had one of 100%, angular dependency of the primakoff effect
+      transmissionMagnetGas = cos(ya) * probConversionMagnetGas * absorbtionXrays
+      transmissionTelescopeEnergy : float
     if energyAx < 2.0:
       transmissionTelescopeEnergy = (-0.013086145 * energyAx * energyAx * energyAx * energyAx + 0.250552655 * energyAx * energyAx * energyAx - 1.541426299 * energyAx * energyAx + 2.064933639 * energyAx + 7.625254445) / (14.38338 - (4.3 * 0.2)) #total eff area of telescope = 1438.338mm² = 14.38338cm² #the last thing are the mirror seperators
     elif energyAx >= 2.0 and energyAx < 8.0:
       transmissionTelescopeEnergy = (0.0084904 * energyAx * energyAx * energyAx * energyAx * energyAx * energyAx - 0.199553 * energyAx * energyAx * energyAx * energyAx * energyAx + 1.75302 * energyAx * energyAx * energyAx * energyAx - 7.05939 * energyAx * energyAx * energyAx + 12.6706 * energyAx * energyAx - 9.23947 * energyAx + 9.96953) / (14.38338 - (4.3 * 0.2))
     else:
       transmissionTelescopeEnergy = 0.0
+    #echo "Without gas", probConversionMagnet
+    #echo "With gas", probConversionMagnetGas
 
     if transmissionTelescopeEnergy < 0.0 :
       transmissionTelescopeEnergy = 0.0
@@ -1003,12 +1032,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
 
   echo "Flux fraction for the gold region:"
   echo getFluxFraction("region: gold")  
-  
-  echo "whooop"
-  echo ffff.len 
-  echo emratesNewSum
-  echo emratesNew.len
-  echo emratesNew[0].len
+
 
 
 
@@ -1021,7 +1045,7 @@ coldboreBlockedLength = 0.0
 var detectorWindowAperture : float64
 detectorWindowAperture = 14.0 #mm
 
-echo calculateFluxFractions(radiationCharacteristic, detectorWindowAperture, 0.0, 0.0, 0.0, 0.0, coldboreBlockedLength, "2018") # radiationCharacteristic = "axionRadiation::characteristic::sar"
+echo calculateFluxFractions(radiationCharacteristic, detectorWindowAperture, pressGas , tempGas,  mAxion,"CAST", "2018") # radiationCharacteristic = "axionRadiation::characteristic::sar"
 
 #type
 #    vector3 = ref object of Vec3
