@@ -190,7 +190,7 @@ proc parseOpacityFile(path: string, kind: OpacityFileKind): OpacityFile =
   ## - then read table header (3 lines)
   ## - then num lines
   let ds = newFileStream(path)
-  echo path
+  #echo path
   if ds.isNil:
     raise newException(IOError, "Could not open file " & $path)
   let fname = path.extractFilename
@@ -333,7 +333,14 @@ proc term2(alpha : float, gae : float, energy : float, ne : float, me : float, t
   result = ((exp(energy / temp) - 2.0) * comptonEmrate(alpha, gae, energy, ne, me, temp)) / (2.0 * (exp(energy / temp) - 1.0))
 
 proc freefreeEmrate(alpha : float, gae : float, energy : float, ne : float, me : float, temp : float, nzZ2 :float, w:float, y:float) : float =
-  result = (fNew(w, y) * alpha * alpha * gae * gae  * 8.0 * sqrt(PI) * ne * nzZ2 * exp(-energy/temp)) / (3.0 * sqrt(2.0 * temp) * pow(me, 3.5) * energy)#*( ) * )
+  result = (fNew(w, y) * alpha * alpha * gae * gae  * 8.0 * sqrt(PI) * ne * nzZ2 * exp(-energy/temp)) / (3.0 * sqrt(2.0 * temp) * pow(me, 3.5) * energy)
+
+proc primakoff(temp : float, energy : float, gagamma : float, ks2 : float, alpha : float, ne : float, me : float) : float = # from Raffelt 2006 dont know if this is the newest
+  if (4.0 * PI * ne) / (me * energy * energy) > 1.0 or  energy == 0.0  : 
+    result = 0.0
+  #echo "now ", (4.0 * PI * ne) / (me * energy * energy)
+  else:
+    result = (gagamma * gagamma * 1e-12 * temp * ks2) / (32.0 * PI) * ((1.0 + (ks2 / (4.0 * energy * energy))) * ln(1.0 + (4.0 * energy * energy) / ks2) - 1.0) * 2.0 * sqrt(1.0 - (4.0 * PI * ne) / (me * energy * energy)) / (exp(energy/temp) - 1.0)
 
 
 proc getFluxFraction(energies : seq[float], df : DataFrame, n_es : seq[int], temperatures : seq[int], emratesS : seq[seq[float]]) : seq[float] = 
@@ -416,6 +423,7 @@ proc main*(energies : seq[float]) : seq[seq[float]] =
   const
     alpha = 1.0 / 137.0
     g_ae = 1e-13 # Redondo 2013: 0.511e-10 
+    gagamma = 1e-12
     m_e_keV = 510.998 #keV
     e_charge = sqrt(4.0 * PI * alpha)#1.0
     kB = 1.380649e-23
@@ -498,6 +506,7 @@ proc main*(energies : seq[float]) : seq[seq[float]] =
   var comptons = newSeqWith(df["Rho"].len, newSeq[float](1112))
   var term3s = newSeqWith(df["Rho"].len, newSeq[float](1112))
   var ffterms = newSeqWith(df["Rho"].len, newSeq[float](1112))
+  var primakoffs = newSeqWith(df["Rho"].len, newSeq[float](1112))
 
   var posOP = newSeqWith(df["Rho"].len, newSeq[int](1112))
   var ironOpE : seq[float]
@@ -527,6 +536,7 @@ proc main*(energies : seq[float]) : seq[seq[float]] =
       var table = 1.0
       var prevMesh = 1.0      
       let debye_scale = sqrt( (4.0 * PI * alpha / temp_keV) * (n_e_keV + n_Z[R][1] * 7.645e-24 + 4.0 * n_Z[R][2] * 7.645e-24 )) 
+      let debye_scale_squared = (4.0 * PI * alpha / temp_keV) * (n_e_keV + n_Z[R][1] * 7.645e-24 + 4.0 * n_Z[R][2] * 7.645e-24 )
       
       let y = debye_scale / (sqrt( 2.0 * m_e_keV * temp_keV))
       if w >= 20.0 or w <= 0.0732: #because the tables dont go beyond that, apparently because the axion production beyond that is irrelevant #except for He, maybe find a better solution
@@ -577,10 +587,12 @@ proc main*(energies : seq[float]) : seq[seq[float]] =
       let term2 = term2(alpha, g_ae, energy_keV, n_e_keV, m_e_keV, temp_keV)# completes the Compton contribution #keV
       let term3 = bremsEmrate(alpha, g_ae, energy_keV, n_e_keV, m_e_keV, temp_keV, w, y) # contribution from ee-bremsstahlung
       let compton = comptonEmrate(alpha, g_ae, energy_keV, n_e_keV, m_e_keV, temp_keV) 
+      let primakoff = primakoff(temp_keV, energy_keV, gagamma, debye_scale_squared, alpha, n_e_keV, m_e_keV)
       term1s[R][iEindex] = term1
       comptons[R][iEindex] = compton
       term3s[R][iEindex] = term3
       ffterms[R][iEindex] = ffterm 
+      primakoffs[R][iEindex] = primakoff
       let total_emrate = compton +  term1 + term3 + ffterm#) keV 
       let total_emrate_s = total_emrate #/ (6.58e-19) # in 1/sec 
       emratesS[R][iEindex] = total_emrate_s
@@ -615,6 +627,7 @@ proc main*(energies : seq[float]) : seq[seq[float]] =
   let comptonflux = getFluxFraction(energies, df, n_es, temperatures, comptons)
   let term3flux = getFluxFraction(energies, df, n_es, temperatures, term3s)
   let fftermflux = getFluxFraction(energies, df, n_es, temperatures, ffterms)
+  let primakoffflux = getFluxFraction(energies, df, n_es, temperatures, primakoffs)
   var energieslong : seq[float]
   var fluxes : seq[float]
   var kinds : seq[string]
@@ -636,6 +649,9 @@ proc main*(energies : seq[float]) : seq[seq[float]] =
     energieslong.add(e_keV)
     fluxes.add(fftermflux[iEindex])
     kinds.add("FF Flux")
+    energieslong.add(e_keV)
+    fluxes.add(50.0 * primakoffflux[iEindex])
+    kinds.add("Primakoff Flux times 50")
 
 
 
