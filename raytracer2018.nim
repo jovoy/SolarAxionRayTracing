@@ -33,13 +33,14 @@ import axionMass/axionMass
 const
   RAYTRACER_DISTANCE_SUN_EARTH =  1.5e14  #mm #ok
   radiusSun = 6.9e11 #mm #ok
-  numberOfPointsSun = 10000 #100000 for statistics
+  numberOfPointsSun = 100000 #100000 for statistics
 
   pressGas = 14.3345 #for example P = 14.3345 mbar (corresponds to 1 bar at room temperature).
-  tempGas = 1.7 #K
+  
   
   mAxion = 0.4 #eV for example
   g_agamma = 1e-12
+
   
 ## Chipregions#####
 
@@ -420,10 +421,13 @@ proc interpTrans(fname: string): CubicSpline[float] =
   for i in 0..<df["Transmission"].len:
     values2.add(toFloat(df["Transmission"][i]))
   result = newCubicSpline(values, values2)
+
 let siNfile = "./resources/Si3N4Density=3.44Thickness=0.3microns"
 let spline = interpTrans(siNfile)
 let siFile =  "./resources/SiDensity=2.33Thickness=200.microns"
 let splineStrips = interpTrans(siFile)
+let detectorFile =  "./resources/transmission-argon-30mm-1050mbar-295K.dat"
+let splineDet = interpTrans(detectorFile)
 
 ## Now some functions for the graphs later, that store the data in heatmaps and then give them out with plotly ##
 
@@ -543,59 +547,90 @@ proc drawgraph(diagramtitle : string, data_X : seq[float], data_Y: seq[float], e
 
 
 proc calculateFluxFractions(axionRadiationCharacteristic: string,
-  detectorWindowAperture :float, pGas : float, tGas : float, m_a : float, setup : string,
+  detectorWindowAperture :float, pGas : float, m_a : float, setup : string,
 
   year : string) : int = #The year is only for the way the window in front of the detector was turned.
+  var
+    x: seq[int] # a reference to a sequence of integers
+  x = @[1, 2, 3, 4, 5, 6] # the @ turns the array into a sequence allocated on the heap
+  var 
+    radiusCB = 0.0
+    RAYTRACER_LENGTH_COLDBORE = 0.0
+    RAYTRACER_LENGTH_COLDBORE_9T = 0.0
+    RAYTRACER_LENGTH_PIPE_CB_VT3 = 0.0
+    radiusPipeCBVT3 = 0.0
+    RAYTRACER_LENGTH_PIPE_VT3_XRT = 0.0
+    radiusPipeVT3XRT = 0.0
+    RAYTRACER_FOCAL_LENGTH_XRT = 0.0
+    distanceCBAxisXRTAxis = 0.0
+    RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW = 0.0 
+    pipes_turned = 0.0
+
+    ## Measurements of the Telescope mirrors in the following, R1 are the radii of the mirror shells at the entrance of the mirror
+    allR1 : seq[float]
+    allXsep : seq[float]
+    #allR2 = @[0.0, 60.731, 63.237, 65.838, 68.538, 71.339, 74.246, 77.263, 80.394, 83.642]
+    allAngles : seq[float]
+    lMirror : float
+    d : float
+    B : float
+    tGas : float
   
+
   case setup
   of "CAST":
-    let
-      radiusCB = 21.5 #mm 
-      RAYTRACER_LENGTH_COLDBORE = 9756.0 #mm half B field to end of CB #ok
-      RAYTRACER_LENGTH_COLDBORE_9T = 9260.0 #mm half B field to half B field #ok
-      RAYTRACER_LENGTH_PIPE_CB_VT3 = 2571.5 #mm should stay the same #from beam pipe drawings #ok
-      radiusPipeCBVT3 = 39.64 #30.0 #mm smallest aperture between end of CB and VT4 # 43 mm but only 85% of area: 39,64mm #ok
-      RAYTRACER_LENGTH_PIPE_VT3_XRT = 150.0 #mm from drawings #198.2 #mm from XRT drawing #ok
-      radiusPipeVT3XRT = 35.0#25.0 #mm from drawing #35.0 #m irrelevant, large enough to not loose anything # needs to be mm #ok
-      RAYTRACER_FOCAL_LENGTH_XRT = 1500.0#1485.0 #mm is from llnl XRT https://iopscience.iop.org/article/10.1088/1475-7516/2015/12/008/pdf #1600.0 #mm was the Telescope of 2014 (MPE XRT) also: Aperatur changed #ok
-      distanceCBAxisXRTAxis = 0.0#62.1#58.44 #mm from XRT drawing #there is no difference in the axis even though the picture gets transfered 62,1mm down, but in the detector center
-      RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW = 0.0 #mm #no change, because don't know
+    radiusCB = 21.5 #mm 
+    RAYTRACER_LENGTH_COLDBORE = 9756.0 #mm half B field to end of CB #ok
+    RAYTRACER_LENGTH_COLDBORE_9T = 9260.0 #mm half B field to half B field #ok
+    RAYTRACER_LENGTH_PIPE_CB_VT3 = 2571.5 #mm should stay the same #from beam pipe drawings #ok
+    radiusPipeCBVT3 = 39.64 #30.0 #mm smallest aperture between end of CB and VT3
+    RAYTRACER_LENGTH_PIPE_VT3_XRT = 150.0 #mm from drawings #198.2 #mm from XRT drawing #ok
+    radiusPipeVT3XRT = 35.0#25.0 #mm from drawing #35.0 #m irrelevant, large enough to not loose anything # needs to be mm #ok
+    RAYTRACER_FOCAL_LENGTH_XRT = 1500.0#1485.0 #mm is from llnl XRT https://iopscience.iop.org/article/10.1088/1475-7516/2015/12/008/pdf #1600.0 #mm was the Telescope of 2014 (MPE XRT) also: Aperatur changed #ok
+    distanceCBAxisXRTAxis = 0.0#62.1#58.44 #mm from XRT drawing #there is no difference in the axis even though the picture gets transfered 62,1mm down, but in the detector center
+    RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW = 0.0 #mm #no change, because don't know
+    pipes_turned = 3.0 #degree # this is the angle by which the pipes before the detector were turned in comparison to the telescope
 
-      ## Measurements of the Telescope mirrors in the following, R1 are the radii of the mirror shells at the entrance of the mirror
-      allR1 = @[60.7095, 63.006 , 65.606 , 68.305 , 71.105 , 74.011 , 77.027 , 80.157 , 83.405 , 86.775 , 90.272 , 93.902 , 97.668 , 101.576 , 105.632]  ## the radii of the shells
-      allXsep = @[4.0, 4.171, 4.140, 4.221, 4.190, 4.228, 4.245, 4.288, 4.284, 4.306, 4.324, 4.373, 4.387, 4.403, 4.481]
-      #allR2 = @[0.0, 60.731, 63.237, 65.838, 68.538, 71.339, 74.246, 77.263, 80.394, 83.642]
-      allAngles = @[0.0, 0.579, 0.603, 0.628, 0.654, 0.680, 0.708, 0.737, 0.767, 0.798, 0.830, 0.863, 0.898, 0.933, 0.970] ## the angles of the mirror shells coresponding to the radii above
-      lMirror = 225.0 #mm Mirror length
-      d = 83.0 #mm ## distance between center of colbore at XRT and center of XRT (where the focal point is on the minus x axis)
-      B = 9.0 #T magnetic field of magnet
+    ## Measurements of the Telescope mirrors in the following, R1 are the radii of the mirror shells at the entrance of the mirror
+    allR1 = @[60.7095, 63.006 , 65.606 , 68.305 , 71.105 , 74.011 , 77.027 , 80.157 , 83.405 , 86.775 , 90.272 , 93.902 , 97.668 , 101.576 , 105.632]  ## the radii of the shells
+    allXsep = @[4.0, 4.171, 4.140, 4.221, 4.190, 4.228, 4.245, 4.288, 4.284, 4.306, 4.324, 4.373, 4.387, 4.403, 4.481]
+    #allR2 = @[0.0, 60.731, 63.237, 65.838, 68.538, 71.339, 74.246, 77.263, 80.394, 83.642]
+    allAngles = @[0.0, 0.579, 0.603, 0.628, 0.654, 0.680, 0.708, 0.737, 0.767, 0.798, 0.830, 0.863, 0.898, 0.933, 0.970] ## the angles of the mirror shells coresponding to the radii above
+    lMirror = 225.0 #mm Mirror length
+    d = 83.0 #mm ## distance between center of colbore at XRT and center of XRT (where the focal point is on the minus x axis)
+    B = 9.0 #T magnetic field of magnet
+    tGas = 1.7 #K
       
   of "BabyIaxo":
-    let
-      radiusCB = 350 #mm 
+    radiusCB = 350.0 #mm 
 
-      ## Change:
-      RAYTRACER_LENGTH_COLDBORE = 9756.0 #mm half B field to end of CB #ok
-      RAYTRACER_LENGTH_COLDBORE_9T = 9260.0 #mm half B field to half B field #ok
-      RAYTRACER_LENGTH_PIPE_CB_VT3 = 2571.5 #mm should stay the same #from beam pipe drawings #ok
-      radiusPipeCBVT3 = 39.64 #30.0 #mm smallest aperture between end of CB and VT4 # 43 mm but only 85% of area: 39,64mm #ok
-      RAYTRACER_LENGTH_PIPE_VT3_XRT = 150.0 #mm from drawings #198.2 #mm from XRT drawing #ok
-      radiusPipeVT3XRT = 35.0#25.0 #mm from drawing #35.0 #m irrelevant, large enough to not loose anything # needs to be mm #ok
-      RAYTRACER_FOCAL_LENGTH_XRT = 1500.0#1485.0 #mm is from llnl XRT https://iopscience.iop.org/article/10.1088/1475-7516/2015/12/008/pdf #1600.0 #mm was the Telescope of 2014 (MPE XRT) also: Aperatur changed #ok
-      distanceCBAxisXRTAxis = 0.0#62.1#58.44 #mm from XRT drawing #there is no difference in the axis even though the picture gets transfered 62,1mm down, but in the detector center
-      RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW = 0.0 #mm #no change, because don't know
-  
-      ## Measurements of the Telescope mirrors in the following, R1 are the radii of the mirror shells at the entrance of the mirror
-      
-      allR1 = @[60.7095, 63.006 , 65.606 , 68.305 , 71.105 , 74.011 , 77.027 , 80.157 , 83.405 , 86.775 , 90.272 , 93.902 , 97.668 , 101.576 , 105.632]  ## the radii of the shells
-      allXsep = @[4.0, 4.171, 4.140, 4.221, 4.190, 4.228, 4.245, 4.288, 4.284, 4.306, 4.324, 4.373, 4.387, 4.403, 4.481]
-      #allR2 = @[0.0, 60.731, 63.237, 65.838, 68.538, 71.339, 74.246, 77.263, 80.394, 83.642]
-      allAngles = @[0.0, 0.579, 0.603, 0.628, 0.654, 0.680, 0.708, 0.737, 0.767, 0.798, 0.830, 0.863, 0.898, 0.933, 0.970] ## the angles of the mirror shells coresponding to the radii above
-      lMirror = 225.0 #mm Mirror length
-      d = 0.0 #mm ## distance between center of colbore at XRT and center of XRT (where the focal point is on the minus x axis)
-      B = 2.0 #T magnetic field of magnet
+    ## Change:
+    RAYTRACER_LENGTH_COLDBORE = 10000.0 #mm not sure if this is true
+    RAYTRACER_LENGTH_COLDBORE_9T = 10000.0 #mm I know it's not 9T here should be the actual length of pipe with a stable magnetic field
+    RAYTRACER_LENGTH_PIPE_CB_VT3 = 300.0 #mm said Tobi
+    radiusPipeCBVT3 = 370.0 #mm smallest aperture between end of CB and VT4 # no Idea, I just made it wider than the coldbore
+    RAYTRACER_LENGTH_PIPE_VT3_XRT = 300.0 #mm said Tobi
+    radiusPipeVT3XRT = 370.0 #mm irrelevant, large enough to not loose anything # no idea
+    RAYTRACER_FOCAL_LENGTH_XRT = 7500.0 #mm # one possibility, the other is 5050 mm
+    distanceCBAxisXRTAxis = 0.0
+    RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW = 0.0 #mm #no change, because don't know
+    pipes_turned = 0.0 #degree
 
-      ##Telescope transmission needs to be changed as well
+    ## Measurements of the Telescope mirrors in the following, R1 are the radii of the mirror shells at the entrance of the mirror
+    ## It's again a Nustar telescope, but not just a fragment, so I suppose there are more than 13 Layers
+    ## Also the widest radius in CAST was 100 mm which is not enough, it should be about 350 mm
+    ## Also the angles need to be different... but I could figute them out...
+    
+    allR1 = @[60.7095, 63.006 , 65.606 , 68.305 , 71.105 , 74.011 , 77.027 , 80.157 , 83.405 , 86.775 , 90.272 , 93.902 , 97.668 , 101.576 , 105.632]  ## the radii of the shells
+    allXsep = @[4.0, 4.171, 4.140, 4.221, 4.190, 4.228, 4.245, 4.288, 4.284, 4.306, 4.324, 4.373, 4.387, 4.403, 4.481]
+    #allR2 = @[0.0, 60.731, 63.237, 65.838, 68.538, 71.339, 74.246, 77.263, 80.394, 83.642]
+    allAngles = @[0.0, 0.579, 0.603, 0.628, 0.654, 0.680, 0.708, 0.737, 0.767, 0.798, 0.830, 0.863, 0.898, 0.933, 0.970] ## the angles of the mirror shells coresponding to the radii above
+    lMirror = 225.0 #mm Mirror length
+    d = 0.0 #mm ## distance between center of colbore at XRT and center of XRT (where the focal point is on the minus x axis)
+    B = 2.0 #T magnetic field of magnet
+    tGas = 293.15 #K only Gas in BabyIAXO
+
+    ##Telescope transmission needs to be changed as well
 
 
 
@@ -647,7 +682,9 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     integralSilver = 0.0
     integralGold = 0.0
 
-  
+  var 
+    fluxes = newSeq[float](1000)
+    energiesflux = linspace(1.0, 10000.0, 1000)
   var
     pointdataX : seq[float]
     pointdataY : seq[float]
@@ -657,22 +694,19 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     pixvalsX : seq[float]
     pixvalsY : seq[float]
     radii : seq[float]
-    energies : seq[float]
-  ## Measurements of the Telescope mirrors in the following, R1 are the radii of the mirror shells at the entrance of the mirror
-  const
-    allR1 = @[60.7095, 63.006 , 65.606 , 68.305 , 71.105 , 74.011 , 77.027 , 80.157 , 83.405 , 86.775 , 90.272 , 93.902 , 97.668 , 101.576 , 105.632]  ## the radii of the shells
-    allXsep = @[4.0, 4.171, 4.140, 4.221, 4.190, 4.228, 4.245, 4.288, 4.284, 4.306, 4.324, 4.373, 4.387, 4.403, 4.481]
-    #allR2 = @[0.0, 60.731, 63.237, 65.838, 68.538, 71.339, 74.246, 77.263, 80.394, 83.642]
-    allAngles = @[0.0, 0.579, 0.603, 0.628, 0.654, 0.680, 0.708, 0.737, 0.767, 0.798, 0.830, 0.863, 0.898, 0.933, 0.970] ## the angles of the mirror shells coresponding to the radii above
-    lMirror = 225.0 #mm Mirror length
-    circleX = circleEdges( allR1)
-    circleY = circleEdges( allR1)
-    circleTotal = circleEdges( allR1)
-    d = 83.0 #mm ## distance between center of colbore at XRT and center of XRT (where the focal point is on the minus x axis)
-    g_agamma = 1e-12
-    B = 9.0 #T magnetic field of magnet
+    energiesAx : seq[float]
+    energiesAxAll : seq[float]
+    kinds : seq[string]
+    transProbWindow : seq[float]
+    transProbArgon : seq[float]
+    transProbDetector : seq[float]
+    transProbMagnet : seq[float]
+    deviationDet : seq[float]
+
+
   let
     energiesNew = linspace(1.0, 10000.0, 1112)
+    roomTemp = 293.15 #K
 
   var emratesNewSum : seq[float]
   let emratesNew = main(energiesNew)
@@ -756,12 +790,9 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     pointEntranceXRT[1] = pointExitPipeVT3XRT[1]
     pointEntranceXRT[2] = pointExitPipeVT3XRT[2]
 
-    if (getPixelValue(pointEntranceXRT)[0] > 1400.0 or getPixelValue(pointEntranceXRT)[1] > 1400.0): continue
-    if lineIntersectsCircleEdge(circleTotal, getPixelValue(pointEntranceXRT)): continue
+    #if (getPixelValue(pointEntranceXRT)[0] > 1400.0 or getPixelValue(pointEntranceXRT)[1] > 1400.0): continue
+    #if lineIntersectsCircleEdge(circleTotal, getPixelValue(pointEntranceXRT)): continue
 
-    #echo getPixelValue(pointEntranceXRT)
-    #echo lineIntersectsCircleEdge(circleTotal, getPixelValue(pointEntranceXRT))
-    # x and y is interchanged from this point on since it somehow is interchanged in the picture
     if  pointEntranceXRT[1] <= 1.0 and pointEntranceXRT[1] >= -1.0: continue #there is a 2mm wide graphit block between each glass mirror, to seperate them in the middle of the x-Ray telescope
 
     var
@@ -788,7 +819,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
 
     if vectorEntranceXRTCircular[0] > allR1[allR1.len - 1]: continue
     for j in 0..<allR1.len:
-      
+      # get rid of where the X-rays hit the glass frontal
       if vectorEntranceXRTCircular[0] > allR1[j] and vectorEntranceXRTCircular[0] < allR1[j] + 0.2:
         continue
       if allR1[j] - vectorEntranceXRTCircular[0] > 0.0:
@@ -841,6 +872,10 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     var n = (distDet - pointMirror2[2]) / vectorAfterMirrors[2]
 
     var pointDetectorWindow = pointMirror2 + n * vectorAfterMirrors
+    var pointEndDetector = pointMirror2 + (n + 30.0) * vectorAfterMirrors
+
+    #echo abs(sqrt(pointEndDetector[0] * pointEndDetector[0] + pointEndDetector[1] * pointEndDetector[1]) - sqrt(pointDetectorWindow[0] * pointDetectorWindow[0] + pointDetectorWindow[1] * pointDetectorWindow[1]))
+    deviationDet.add(abs(sqrt(pointEndDetector[0] * pointEndDetector[0] + pointEndDetector[1] * pointEndDetector[1]) - sqrt(pointDetectorWindow[0] * pointDetectorWindow[0] + pointDetectorWindow[1] * pointDetectorWindow[1])))
 
     var valuesPix = getPixelValue(pointEntranceXRT)
     pointdataXBefore.add(pointEntranceXRT[0])
@@ -878,11 +913,18 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
       
       distancePipe = (pointDetectorWindow[2] - pointExitCBZylKart[2]) * 1e-3 #m
       probConversionMagnetGas = axionConversionProb2(m_a, energyAx, pGas, tGas, (pathCB * 1e-3), radiusCB, g_agamma, B)  
-      absorbtionXrays = intensitySuppression2(energyAx, (pathCB * 1e-3) , distancePipe, pressGas, tempGas, 293.15) #room temperature in K
+      absorbtionXrays = intensitySuppression2(energyAx, (pathCB * 1e-3) , distancePipe, pGas, tGas, roomTemp) #room temperature in K
 
-      transmissionMagnet = cos(ya) * probConversionMagnet#1.0 # this is the transformation probability of an axion into a photon, if an axion flying straight through the magnet had one of 100%, angular dependency of the primakoff effect
+      transmissionMagnet : float = cos(ya) * probConversionMagnet#1.0 # this is the transformation probability of an axion into a photon, if an axion flying straight through the magnet had one of 100%, angular dependency of the primakoff effect
       transmissionMagnetGas = cos(ya) * probConversionMagnetGas * absorbtionXrays
       transmissionTelescopeEnergy : float
+    
+    case setup
+    of "CAST":
+      transmissionMagnet = cos(ya) * probConversionMagnet#1.0 # this is the transformation probability of an axion into a photon, if an axion flying straight through the magnet had one of 100%, angular dependency of the primakoff effect
+    of "BabyIAXO":
+      transmissionMagnet = transmissionMagnetGas
+    
     if energyAx < 2.0:
       transmissionTelescopeEnergy = (-0.013086145 * energyAx * energyAx * energyAx * energyAx + 0.250552655 * energyAx * energyAx * energyAx - 1.541426299 * energyAx * energyAx + 2.064933639 * energyAx + 7.625254445) / (14.38338 - (4.3 * 0.2)) #total eff area of telescope = 1438.338mm² = 14.38338cm² #the last thing are the mirror seperators
     elif energyAx >= 2.0 and energyAx < 8.0:
@@ -910,17 +952,41 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     var x = pointDetectorWindowTurned[0]
     var y = pointDetectorWindowTurned[1]
 
+    ## Get the detector Window transmission (The stripes in the window consist of a different material than the window itself):
+    var transWindow : float
     if abs(y) > stripDistWindow / 2.0 and abs(y) < stripDistWindow / 2.0 + stripWidthWindow or abs(y) > 1.5 * stripDistWindow + stripWidthWindow and abs(y) < 1.5 * stripDistWindow + 2.0 * stripWidthWindow:
-      #echo "yaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaay"
-      #echo pointDetectorWindow
-      weight *=  splineStrips.eval(energyAx * 1000.0)
-      #continue
+      transWindow = splineStrips.eval(energyAx * 1000.0)
+      weight *= transWindow 
+      transProbWindow.add(transWindow)
+      transProbDetector.add(transWindow)
+      energiesAxAll.add(energyAx)
+      kinds.add("Si3N4")
     else:
-      weight *= spline.eval(energyAx * 1000.0)
+      transWindow = spline.eval(energyAx * 1000.0)
+      weight *= transWindow
+      transprobWindow.add(transWindow)
+      transProbDetector.add(transWindow)
+      energiesAxAll.add(energyAx)
+      kinds.add("Si")
+
+    ## Get the total probability that the Xray will be absorbed by the detector and therefore detected:
+    var transDet = splineDet.eval(energyAx * 1000.0)
+    weight *= 1.0 - transDet
+    #echo splineDet.eval(energyAx * 1000.0)
+    transProbArgon.add(transDet)
+    transProbDetector.add(transDet)
+    energiesAxAll.add(energyAx)
+    kinds.add("Ar")
+
+    energiesAx.add(energyAx)
     ###detector COS has (0/0) at the bottom left corner of the chip
 
     pointDetectorWindow[0] = pointDetectorWindow[0] + CHIPREGIONS_CHIP_CENTER_X
     pointDetectorWindow[1] = pointDetectorWindow[1] + CHIPREGIONS_CHIP_CENTER_Y
+    
+    for i in 1..1000:
+      if energyAx * 1000.0 < 0.0 + i.float * 10.0 and energyAx * 1000.0 > 0.0 + i.float * 10.0 - 10.0:
+        fluxes[i] += weight
 
 
 
@@ -942,7 +1008,31 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     if(bronze and withinWindow): integralBronze = integralBronze + weight
     if(detector and withinWindow): integralDetector = integralDetector + weight
 
+  let dfTransProb = seqsToDf({ "Axion energy [keV]" : energiesAxAll,
+                              "Transmission Probability" : transProbDetector,
+                              "type" : kinds })
+  ggplot(dfTransProb, aes("Axion energy [keV]", "Transmission Probability", color = "type")) +
+    geom_point() +
+    ggtitle("The transmission probability for different detector parts") +
+    ggsave("TransProb.pdf")
 
+  let dfDet = seqsToDf({"Deviation [mm]" : deviationDet})
+  ggplot(dfDet, aes("Deviation [mm]")) +
+    geom_histogram() +
+    ggtitle("The deviation of the X-rays in the entrance of the detector to the end of the detector") +
+    ggsave("deviationDet.pdf")
+  
+  let dfFluxE = seqsToDf({ "Axion energy [keV]" : energiesflux,
+                              "Flux after experiment" : fluxes})
+  ggplot(dfFluxE, aes("Axion energy [keV]", "Flux after experiment")) +
+    geom_point() +
+    ggtitle("The fluf after the experiment") +
+    ggsave("FluxE.pdf")
+
+  #[ggplot(dfFluxE, aes("Axion energy [keV]")) +#, weights = "Flux after experiment")) +
+    geom_histogram() +
+    ggtitle("Energy dependeny") +
+    ggsave("energiesHisto.pdf")]#
 
   ## get the heatmaps out of the sequences of data X and data Y, first for the amount of data in one pixel ##
   ## compared to the overall amount and then the data in one pixel compared to the maximal amount of data in any pixel ##
@@ -960,14 +1050,14 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   echo (heatmaptable3[53][84]) * 100.0  #echo heatmaptable3[x][y]
 
   echo getMaxVal(heatmaptable2, 3000)
-  #echo drawfancydiagrams("AxionModelFluxfraction", heatmaptable2, 3000)
+  echo drawfancydiagrams("AxionModelFluxfraction", heatmaptable2, 3000)
   #echo drawfancydiagrams("AxionModelProbability", heatmaptable3, 3000) #Probabilities, that a photon, that hits a certain pixel could originate from an Axion, if the highest is 100%
   echo integralNormalisation # number of hits before the setup
   echo pointdataX.len # number of hits after the setup
 
   # get the heatmap of the data of a run for comparison
 
-
+  #[
   #let FILE = "likelihood_2018_2_all.h5"
   let h5file = "likelihood_2018_2.h5"
   var
@@ -998,7 +1088,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   #[var weightData1 : seq[float]
   for i in 0 ..< circleX.len:
     weightData1.add(1.0)
-
+  ]#
   var heatmaptable6 = prepareheatmap(140,140,0.0,33.0,0.0,33.0,circleX,circleY,weightData1,1.0)
   echo drawfancydiagrams("Mirrors", heatmaptable6, 140)]#
 
@@ -1045,7 +1135,7 @@ coldboreBlockedLength = 0.0
 var detectorWindowAperture : float64
 detectorWindowAperture = 14.0 #mm
 
-echo calculateFluxFractions(radiationCharacteristic, detectorWindowAperture, pressGas , tempGas,  mAxion,"CAST", "2018") # radiationCharacteristic = "axionRadiation::characteristic::sar"
+echo calculateFluxFractions(radiationCharacteristic, detectorWindowAperture, pressGas ,  mAxion,"CAST", "2018") # radiationCharacteristic = "axionRadiation::characteristic::sar"
 
 #type
 #    vector3 = ref object of Vec3
