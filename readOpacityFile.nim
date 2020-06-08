@@ -1,6 +1,7 @@
 import strscans, streams, strutils, math, os, tables, sequtils, strformat, hashes, polynumeric, macros
 
 import numericalnim, ggplotnim
+import arraymancer except readCsv
 
 
 import readSolarModel
@@ -204,11 +205,9 @@ proc parseOpacityFile(path: string, kind: OpacityFileKind): OpacityFile =
   ds.close()
 
 proc readMeshFile(fname: string): seq[float] =
-  var uValues : seq[float]
   var df = toDf(readCsv(fname))#, sep = ' ', header = "#"))
-  for i in 0..10000:
-    uValues.add(toFloat(df["u"][i]))
-  result = uValues
+  doAssert df.len == 10001
+  result = df["u"].toTensor(float).toRawSeq
   #[var
     f = open(fname) 
     line = ""
@@ -437,20 +436,20 @@ proc main*(energies : seq[float]) : seq[seq[float]] =
   let charges = [1.0, 2.0, 2.0, 6.0, 6.0, 7.0, 7.0, 8.0, 8.0, 8.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0] 
 
   for iRadius in 0..< df["Rho"].len:
-    n_Z[iRadius][1] = (df[elements[0]][iRadius].toFloat / atomicMass[0]) * (df["Rho"][iRadius].toFloat / amu) # Hydrogen
+    n_Z[iRadius][1] = (df[elements[0]][iRadius, float] / atomicMass[0]) * (df["Rho"][iRadius, float] / amu) # Hydrogen
     for iZmult in 1..3:
       if iZmult == 1:
-        n_Z[iRadius][iZmult * 2] = ((df[elements[iZmult * 2 - 1]][iRadius].toFloat + df[elements[iZmult * 2]][iRadius].toFloat) / ((atomicMass[iZmult * 2 - 1] * df[elements[iZmult * 2 - 1]][iRadius].toFloat / (df[elements[iZmult * 2 - 1]][iRadius].toFloat + df[elements[iZmult * 2]][iRadius].toFloat)) + (atomicMass[iZmult * 2] * df[elements[iZmult * 2]][iRadius].toFloat / (df[elements[iZmult * 2 - 1]][iRadius].toFloat + df[elements[iZmult * 2]][iRadius].toFloat)))) * (df["Rho"][iRadius].toFloat / amu)
-      else: n_Z[iRadius][iZmult + 4] = ((df[elements[iZmult * 2 - 1]][iRadius].toFloat + df[elements[iZmult * 2]][iRadius].toFloat) / ((atomicMass[iZmult * 2 - 1] * df[elements[iZmult * 2 - 1]][iRadius].toFloat / (df[elements[iZmult * 2 - 1]][iRadius].toFloat + df[elements[iZmult * 2]][iRadius].toFloat)) + (atomicMass[iZmult * 2] * df[elements[iZmult * 2]][iRadius].toFloat / (df[elements[iZmult * 2 - 1]][iRadius].toFloat + df[elements[iZmult * 2]][iRadius].toFloat)))) * (df["Rho"][iRadius].toFloat / amu) 
-    n_Z[iRadius][8] = ((df[elements[7]][iRadius].toFloat + df[elements[8]][iRadius].toFloat + df[elements[9]][iRadius].toFloat) / ((atomicMass[7] * df[elements[7]][iRadius].toFloat / (df[elements[7]][iRadius].toFloat + df[elements[8]][iRadius].toFloat + df[elements[9]][iRadius].toFloat)) + (atomicMass[8] * df[elements[8]][iRadius].toFloat / (df[elements[7]][iRadius].toFloat + df[elements[8]][iRadius].toFloat + df[elements[9]][iRadius].toFloat)) + (atomicMass[9] * df[elements[9]][iRadius].toFloat / (df[elements[7]][iRadius].toFloat + df[elements[8]][iRadius].toFloat + df[elements[9]][iRadius].toFloat)))) * (df["Rho"][iRadius].toFloat / amu)
+        n_Z[iRadius][iZmult * 2] = ((df[elements[iZmult * 2 - 1]][iRadius, float] + df[elements[iZmult * 2]][iRadius, float]) / ((atomicMass[iZmult * 2 - 1] * df[elements[iZmult * 2 - 1]][iRadius, float] / (df[elements[iZmult * 2 - 1]][iRadius, float] + df[elements[iZmult * 2]][iRadius, float])) + (atomicMass[iZmult * 2] * df[elements[iZmult * 2]][iRadius, float] / (df[elements[iZmult * 2 - 1]][iRadius, float] + df[elements[iZmult * 2]][iRadius, float])))) * (df["Rho"][iRadius, float] / amu)
+      else: n_Z[iRadius][iZmult + 4] = ((df[elements[iZmult * 2 - 1]][iRadius, float] + df[elements[iZmult * 2]][iRadius, float]) / ((atomicMass[iZmult * 2 - 1] * df[elements[iZmult * 2 - 1]][iRadius, float] / (df[elements[iZmult * 2 - 1]][iRadius, float] + df[elements[iZmult * 2]][iRadius, float])) + (atomicMass[iZmult * 2] * df[elements[iZmult * 2]][iRadius, float] / (df[elements[iZmult * 2 - 1]][iRadius, float] + df[elements[iZmult * 2]][iRadius, float])))) * (df["Rho"][iRadius, float] / amu) 
+    n_Z[iRadius][8] = ((df[elements[7]][iRadius, float] + df[elements[8]][iRadius, float] + df[elements[9]][iRadius, float]) / ((atomicMass[7] * df[elements[7]][iRadius, float] / (df[elements[7]][iRadius, float] + df[elements[8]][iRadius, float] + df[elements[9]][iRadius, float])) + (atomicMass[8] * df[elements[8]][iRadius, float] / (df[elements[7]][iRadius, float] + df[elements[8]][iRadius, float] + df[elements[9]][iRadius, float])) + (atomicMass[9] * df[elements[9]][iRadius, float] / (df[elements[7]][iRadius, float] + df[elements[8]][iRadius, float] + df[elements[9]][iRadius, float])))) * (df["Rho"][iRadius, float] / amu)
     for iZ in 10..<29:
-      n_Z[iRadius][iZ] = (df[elements[iZ]][iRadius].toFloat / atomicMass[iZ]) * (df["Rho"][iRadius].toFloat / amu) # The rest
+      n_Z[iRadius][iZ] = (df[elements[iZ]][iRadius, float] / atomicMass[iZ]) * (df["Rho"][iRadius, float] / amu) # The rest
     n_e = 0.0
     for Z in 0..<elements.len:
-      n_e += (df["Rho"][iRadius].toFloat/amu) * charges[Z] * df[elements[Z]][iRadius].toFloat / atomicMass[Z] # (g/cm³ /g) = 1/cm³
-    n_e_old = (df["Rho"][iRadius].toFloat/amu) * (1 + df[elements[0]][iRadius].toFloat/2)
+      n_e += (df["Rho"][iRadius, float]/amu) * charges[Z] * df[elements[Z]][iRadius, float] / atomicMass[Z] # (g/cm³ /g) = 1/cm³
+    n_e_old = (df["Rho"][iRadius, float]/amu) * (1 + df[elements[0]][iRadius, float]/2)
     for iTemp in 0..90:
-      distTemp = log(df["Temp"][iRadius].toFloat, 10.0) / 0.025 - float(140 + 2 * iTemp)
+      distTemp = log(df["Temp"][iRadius, float], 10.0) / 0.025 - float(140 + 2 * iTemp)
       if abs(distTemp) <= 1.0: 
         temperature = 140 + 2 * iTemp
     temperatures.add(temperature)
@@ -502,6 +501,7 @@ proc main*(energies : seq[float]) : seq[seq[float]] =
 
   var absCoefs = newSeqWith(df["Rho"].len, newSeq[float](1112)) #29 elements
   var emratesS = newSeqWith(df["Rho"].len, newSeq[float](1112))
+  var emratesInS = newSeqWith(df["Rho"].len, newSeq[float](1112))
   var term1s = newSeqWith(df["Rho"].len, newSeq[float](1112))
   var comptons = newSeqWith(df["Rho"].len, newSeq[float](1112))
   var term3s = newSeqWith(df["Rho"].len, newSeq[float](1112))
@@ -580,7 +580,7 @@ proc main*(energies : seq[float]) : seq[seq[float]] =
       ## making the same approximation as for n_e calculation 
 
       ##ion density weighted by charge^2 from Raffelt
-      let nZZ2_raffelt_keV = (df["Rho"][R].toFloat / amu) * 7.683e-24 #seems to be correct
+      let nZZ2_raffelt_keV = (df["Rho"][R, float] / amu) * 7.683e-24 #seems to be correct
       let ffterm = freefreeEmrate(alpha, g_ae, energy_keV, n_e_keV, m_e_keV, temp_keV, nZZ2_raffelt_keV, w, y) 
       ## includes contribution from ff, fb and bb processes and a part of the Comption contribution ## keV³ / keV² = keV :
       let term1 = term1(g_ae, energy_keV, (absCoefs[R][iEindex]), e_charge, m_e_keV, temp_keV)  
@@ -594,8 +594,9 @@ proc main*(energies : seq[float]) : seq[seq[float]] =
       ffterms[R][iEindex] = ffterm 
       primakoffs[R][iEindex] = primakoff
       let total_emrate = compton +  term1 + term3 + ffterm#) keV 
-      let total_emrate_s = total_emrate #/ (6.58e-19) # in 1/sec 
-      emratesS[R][iEindex] = total_emrate_s
+      let total_emrate_s = total_emrate / (6.58e-19) # in 1/sec 
+      emratesS[R][iEindex] = total_emrate
+      emratesInS[R][iEindex] = total_emrate_s
       # if want to have absorbtion coefficient of a radius and energy: R = (r (in % of sunR) - 0.0015) / 0.0005
       
       #if iEindex == 110:
@@ -678,4 +679,27 @@ proc main*(energies : seq[float]) : seq[seq[float]] =
   
   result = emratesS
 
-#echo main()
+when isMainModule:
+  var energies = linspace(1.0, 10000.0, 1112)
+  let solarModel = main(energies)
+
+  let smTensor = solarModel.toTensor
+  smTensor.to_csv("solar_model_tensor.csv")
+
+  when false:
+    ## TODO: better approach to store the full "solar model" as a CSV from a DF
+    var dfSolarModel = newDataFrame()
+    var radii = newSeq[string]()
+    for R in 0 ..< solarModel.len:
+      let r = $R
+      dfSolarModel[r] = solarModel[R]
+      radii.add r
+    dfSolarModel["Energy"] = energies
+
+    dfSolarModel = dfSolarModel.gather(radii, key = "Radii", value = "EmissionRates")
+    # energy / float, Radius / string!, emission rate / float
+    dfSolarModel = dfSolarModel.mutate(f{string -> int: "Radii" ~ parseInt(df["Radii"][idx])})
+      .mutate(f{int -> float: "Radii" ~ `Radii`.float * 0.0005 + 0.0015})
+    # energy / float, Radius / float, emission rate / float
+    echo dfSolarModel
+    dfSolarModel.write_csv("created_solar_model_em.csv")  
