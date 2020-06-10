@@ -653,7 +653,11 @@ proc main*(energies : seq[float]) : seq[seq[float]] =
     energieslong.add(e_keV)
     fluxes.add(50.0 * primakoffflux[iEindex])
     kinds.add("Primakoff Flux times 50")
-
+  
+  var totalFlux : float
+  for i in 0..<energies.len:
+    totalFlux += 0.009 * diff_fluxs[i]
+  echo "The total axion Flux in 1/(y m^2):", totalFlux
 
 
   let dfEmrate = seqsToDf({ "energy" : energies,
