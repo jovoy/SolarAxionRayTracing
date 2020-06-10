@@ -111,9 +111,8 @@ proc getRandomPointOnDisk(center: Vec3, radius:float64) : Vec3 =
   var
     x = 0.0
     y = 0.0
-    r = radius * sqrt(random(1.0))  #random(1.0)
-  # _randomGEnerator -> Circle(x,y,r)  is done through the following ### gives difference, since the root function Circle probably uses a differen random algorithm
-    angle = 360 * random(1.0)  #random angle
+    r = radius * sqrt(random(1.0))  
+    angle = 360 * random(1.0)  
   x = cos(degToRad(angle)) * r
   y = sin(degToRad(angle)) * r
   var vector = vec3(x,y,0.0)
