@@ -18,6 +18,7 @@ import streams, tables
 #import axionMass/axionMass
 import arraymancer except readCsv, linspace
 import seqmath except linspace
+import json 
 
 
 
@@ -529,7 +530,7 @@ proc drawfancydiagrams(diagramtitle : string, objectstodraw : seq[seq[float]], w
   let
     # The GL heatmap is also supported as HeatMapGL
     d = Trace[float32](mode: PlotMode.Lines, `type`: PlotType.HeatMap)
-
+  
   d.colormap = ColorMap.Viridis
   d.zs = newSeqWith(width, newSeq[float32](width))
   for x in 0 ..< width:
@@ -539,19 +540,33 @@ proc drawfancydiagrams(diagramtitle : string, objectstodraw : seq[seq[float]], w
           if x > 0:
             if y > 0:
               d.zs[y][x] = objectstodraw[y][x]
+  echo objectstodraw[1500][1500]
+  #let d = heatmap(zs).toPlotJson
+
 
   const
-    y = @[float32(CHIPREGIONS_GOLD_Y_MIN * 3000.0 / 14.0), float32(CHIPREGIONS_GOLD_Y_MIN * 3000.0 / 14.0),float32(CHIPREGIONS_GOLD_Y_MAX * 3000.0 / 14.0),float32(CHIPREGIONS_GOLD_Y_MAX * 3000.0 / 14.0),float32(CHIPREGIONS_GOLD_Y_MIN * 3000.0 / 14.0)]
-    x = @[float32(CHIPREGIONS_GOLD_X_MIN * 3000.0 / 14.0),float32(CHIPREGIONS_GOLD_X_MAX * 3000.0 / 14.0),float32(CHIPREGIONS_GOLD_X_MAX * 3000.0 / 14.0), float32(CHIPREGIONS_GOLD_X_MIN * 3000.0 / 14.0), float32(CHIPREGIONS_GOLD_X_MIN * 3000.0 / 14.0)]
+    a = @[float32(CHIPREGIONS_GOLD_Y_MIN * 3000.0 / 14.0), float32(CHIPREGIONS_GOLD_Y_MIN * 3000.0 / 14.0),float32(CHIPREGIONS_GOLD_Y_MAX * 3000.0 / 14.0),float32(CHIPREGIONS_GOLD_Y_MAX * 3000.0 / 14.0),float32(CHIPREGIONS_GOLD_Y_MIN * 3000.0 / 14.0)]
+    b = @[float32(CHIPREGIONS_GOLD_X_MIN * 3000.0 / 14.0),float32(CHIPREGIONS_GOLD_X_MAX * 3000.0 / 14.0),float32(CHIPREGIONS_GOLD_X_MAX * 3000.0 / 14.0), float32(CHIPREGIONS_GOLD_X_MIN * 3000.0 / 14.0), float32(CHIPREGIONS_GOLD_X_MIN * 3000.0 / 14.0)]
   let
-    d4 = Trace[float32](mode: PlotMode.LinesMarkers, `type`: PlotType.ScatterGL, ys: y, xs : x)
+    d4 = Trace[float32](mode: PlotMode.LinesMarkers, `type`: PlotType.ScatterGL, ys: a, xs : b)
 
 
   let
     layout = Layout(title: diagramtitle, width: 800, height: 800,
-                    xaxis: Axis(title: "x-axis [mm]"),#,  range: (0.0, 14.0)),
+                    xaxis: Axis(title: "x-axis [mm]"),  #range: (0.0, 14.0)),
                     yaxis: Axis(title: "y-axis [mm]"), autosize: false)
-    p = Plot[float32](layout: layout, traces: @[d, d4])
+  let p = Plot[float32](layout: layout, traces: @[d, d4]).toPlotJson
+  let values = arange(0, 3000, 750)
+  p.layout["xaxis"] = %* {
+    "tickvals" : values,
+    "ticktext" : values.mapIt(&"{it.float * 14.0 / 3000.0:.2f}"),
+    "title" : "x-axis [mm]"
+  }
+  p.layout["yaxis"] = %* {
+    "tickvals" : values,
+    "ticktext" : values.mapIt(&"{it.float * 14.0 / 3000.0:.2f}"),
+    "title" : "y-axis [mm]"
+  }
   #echo p.save()
   p.show("axion_image.svg")
 
@@ -760,7 +775,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   #let emratesNew = main(energiesNew)
   let emRatesDf = toDf(readCsv("solar_model_tensor.csv"))
   let emRatesTensor = emRatesDf["value"].toTensor(float)
-    .reshape([emRatesDf.filter(f{`dimension_1` == 0}).len, emRatesDf.filter(f{`dimension_2` == 0}).len])
+    .reshape([emRatesDf.filter(fn {`dimension_1` == 0}).len, emRatesDf.filter(fn {`dimension_2` == 0}).len])
   let emratesNew = emRatesTensor.toRawSeq.reshape2D([emRatesTensor.shape[0], emRatesTensor.shape[1]])
   var sum2 = 0.0
   for rI in 0..<emratesNew.len:
@@ -926,8 +941,8 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     var n3 : float
     case setup
     of "CAST":
-      pointDetectorWindow = getPointDetectorWindow(pointMirror2, pointAfterMirror2 , RAYTRACER_FOCAL_LENGTH_XRT, lMirror, allXsep[8], 62.1, d, degToRad(2.8))
-      pointEndDetector = getPointDetectorWindow(pointMirror2, pointAfterMirror2 , (RAYTRACER_FOCAL_LENGTH_XRT + 30.0), lMirror, allXsep[8], 62.1, d, degToRad(2.8) )
+      pointDetectorWindow = getPointDetectorWindow(pointMirror2, pointAfterMirror2 , RAYTRACER_FOCAL_LENGTH_XRT, lMirror, allXsep[8], 62.1, d, degToRad(2.75))
+      pointEndDetector = getPointDetectorWindow(pointMirror2, pointAfterMirror2 , (RAYTRACER_FOCAL_LENGTH_XRT + 30.0), lMirror, allXsep[8], 62.1, d, degToRad(2.75) )
     of "BabyIAXO":
       distDet = distanceMirrors - 0.5 * allXsep[8] * cos(beta) + RAYTRACER_FOCAL_LENGTH_XRT - RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW
       n = (distDet - pointMirror2[2]) / vectorAfterMirrors[2]
@@ -970,7 +985,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     var ya = vectorBeforeXRTPolar[2]
     var
       transmissionTelescopePitch = (0.0008*p*p*p*p + 1e-04*p*p*p - 0.4489*p*p - 0.3116*p + 96.787) / 100.0
-      transmissionTelescopeYaw = (6e-7 * pow(6.0, ya) - 1.0e-5* pow(5.0, ya) - 0.0001* pow(4.0, ya) + 0.0034* pow(3.0, ya) - 0.0292* pow(2.0, ya) - 0.1534* ya + 99.959) / 100.0
+      transmissionTelescopeYaw = (6.0e-7 * pow(6.0, ya) - 1.0e-5* pow(5.0, ya) - 0.0001* pow(4.0, ya) + 0.0034* pow(3.0, ya) - 0.0292* pow(2.0, ya) - 0.1534* ya + 99.959) / 100.0
       probConversionMagnet = 0.025 * B * B * g_agamma * g_agamma * (1 / (1.44 * 1.2398)) * (1 / (1.44 * 1.2398)) * (pathCB * 1e-3) * (pathCB * 1e-3) #g_agamma= 1e-12
       
       distancePipe = (pointDetectorWindow[2] - pointExitCBZylKart[2]) * 1e-3 #m
@@ -980,7 +995,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
       transmissionMagnet : float = cos(ya) * probConversionMagnet#1.0 # this is the transformation probability of an axion into a photon, if an axion flying straight through the magnet had one of 100%, angular dependency of the primakoff effect
       #transmissionMagnetGas = cos(ya) * probConversionMagnetGas * absorbtionXrays
       transmissionTelescopeEnergy : float
-    
+    #echo probConversionMagnet
     case setup
     of "CAST":
       transmissionMagnet = cos(ya) * probConversionMagnet#1.0 # this is the transformation probability of an axion into a photon, if an axion flying straight through the magnet had one of 100%, angular dependency of the primakoff effect
@@ -1000,11 +1015,13 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
       transmissionTelescopeEnergy = 0.0
     #echo transmissionTelescopePitch
 
-    var prob = (radiusCB * radiusCB) / (4 * pointInSun[2] * pointInSun[2]) ##Flux fraction. Is this correct??* 
+    var prob = (radiusCB * radiusCB) / (4 * pointInSun[2] * pointInSun[2]) ##Flux fraction. Is this correct??* * prob * emissionRateAxPerH
+    #doesnt have to be multiplied by those two as it is already time and space determined through having 1000000 axions and multiplying the total flux (produced by readOpacityFile) of axions with the entrance area of the coldbore 
+    # 1000000 axions that reach the coldbore then are reached after an operating time of 2.789 \times 10^{-5}\,\si{\second}
     var emissionRateAxPerH = emissionRateAx * 3600.00 
-    var weight =  1e+80 * prob * emissionRateAxPerH *(transmissionTelescopeEnergy* transmissionTelescopePitch*transmissionTelescopeYaw* transmissionMagnet) #transmission probabilities times axion emission rate times the flux fraction
+    var weight = (transmissionTelescopeEnergy * transmissionTelescopePitch*transmissionTelescopeYaw* transmissionMagnet) #transmission probabilities times axion emission rate times the flux fraction
 
-    integralTotal = integralTotal + weight
+    
 
     ##Detector window:##
     if sqrt(pointDetectorWindow[0] * pointDetectorWindow[0] + pointDetectorWindow[1] * pointDetectorWindow[1]) > 7.0: continue
@@ -1051,15 +1068,15 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     energiesAx.add(energyAx)
     ###detector COS has (0/0) at the bottom left corner of the chip
 
-    pointDetectorWindow[0] = pointDetectorWindow[0] + CHIPREGIONS_CHIP_CENTER_X
+    pointDetectorWindow[0] = - pointDetectorWindow[0] + CHIPREGIONS_CHIP_CENTER_X # for the view from the detector to the sun
     pointDetectorWindow[1] = pointDetectorWindow[1] + CHIPREGIONS_CHIP_CENTER_Y
     
     for i in 1..1000:
       if energyAx * 1000.0 < 0.0 + i.float * 10.0 and energyAx * 1000.0 > 0.0 + i.float * 10.0 - 10.0:
         fluxes[i] += weight
 
+    integralTotal = integralTotal + weight
 
-    #echo weight
     pointdataX.add(pointDetectorWindow[0])
     pointdataY.add(pointDetectorWindow[1])
     weights.add(weight)
@@ -1101,14 +1118,14 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     ggtitle("The deviation of the X-rays in the entrance of the detector to the end of the detector") +
     ggsave("deviationDet.pdf")
   
-  let dfFluxE = seqsToDf({ "Axion energy [keV]" : energiesflux,
+  let dfFluxE = seqsToDf({ "Axion energy [eV]" : energiesflux,
                               "Flux after experiment" : fluxes})
-  ggplot(dfFluxE, aes("Axion energy [keV]", "Flux after experiment")) +
+  ggplot(dfFluxE, aes("Axion energy [eV]", "Flux after experiment")) +
     geom_point() +
     ggtitle("The fluf after the experiment") +
     ggsave("FluxE.pdf")
 
-  let dfFluxE2 = seqsToDf({ "Axion energy [keV]" : energiesflux,
+  let dfFluxE2 = seqsToDf({ "Axion energy [eV]" : energiesflux,
                             "Flux after experiment" : weights})
 
   dfFluxE2.write_csv("weights_per_axion_energy.csv")  
@@ -1134,7 +1151,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   echo (heatmaptable3[53][84]) * 100.0  #echo heatmaptable3[x][y]
 
   echo getMaxVal(heatmaptable2, 3000)
-  echo drawfancydiagrams("Axion Model Fluxfraction * 10^80", heatmaptable2, 3000)
+  echo drawfancydiagrams("Axion Model Fluxfraction", heatmaptable2, 3000)
   #echo drawfancydiagrams("AxionModelProbability", heatmaptable3, 3000) #Probabilities, that a photon, that hits a certain pixel could originate from an Axion, if the highest is 100%
   echo integralNormalisation # number of hits before the setup
   echo pointdataX.len # number of hits after the setup
@@ -1198,14 +1215,16 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   # path the particle would have traveled through the magnet) and divide it through the number of all events
 
 
-  fluxFractionTotal    = integralTotal    / integralNormalisation
-  fluxFractionDetector = integralDetector / integralNormalisation
-  fluxFractionBronze   = integralBronze   / integralNormalisation
-  fluxFractionSilver   = integralSilver   / integralNormalisation
-  fluxFractionGold     = integralGold     / integralNormalisation
+  fluxFractionTotal    = integralTotal    #/ integralNormalisation
+  fluxFractionDetector = integralDetector #/ integralNormalisation
+  fluxFractionBronze   = integralBronze   #/ integralNormalisation
+  fluxFractionSilver   = integralSilver   #/ integralNormalisation
+  fluxFractionGold     = integralGold     #/ integralNormalisation
 
   echo "Flux fraction for the gold region:"
   echo getFluxFraction("region: gold")  
+  echo "Flux fraction total"
+  echo fluxFractionTotal
 
 
 
