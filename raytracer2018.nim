@@ -22,7 +22,6 @@ import json
 
 
 
-
 ##################rayTracer###############################
 
 #degToRad(angle has to be done in Raytracer2014 for cos and sin
@@ -61,7 +60,6 @@ const
   CHIPREGIONS_BRONZE_RADIUS_MAX = 5.5
 
 ################################
-
 
 
 var fluxFractionGold = 0.0 #dies muss eine globale var sein
@@ -150,7 +148,6 @@ proc getRandomPointFromSolarModel(center : Vec3, radius : float64 , emRateVecSum
 
   result = vector
 
-
 proc getRandomEnergyFromSolarModel(emRateVecSums : seq[float], vectorInSun: Vec3, center : Vec3, radius : float64, energies :  seq[float],emissionRates: seq[seq[float]], energyOrEmRate : string) : float =
 
   ## This function gives a random energy for an event at a given radius, biased by the emissionrates at that radius. This only works if the energies to choose from are evenly distributed ##
@@ -204,7 +201,6 @@ proc lineIntersectsCircle(point_1 : Vec3, point_2 : Vec3, center : Vec3, radius 
     return true
   else:
     return false
-
 
 
 proc lineIntersectsCylinderOnce(point_1 : Vec3, point_2 : Vec3, centerBegin : Vec3, centerEnd : Vec3, radius : float64, intersect : Vec3) : bool =
