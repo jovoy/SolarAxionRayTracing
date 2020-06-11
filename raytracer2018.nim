@@ -206,78 +206,46 @@ proc lineIntersectsCircle(point_1 : Vec3, point_2 : Vec3, center : Vec3, radius 
 proc lineIntersectsCylinderOnce(point_1 : Vec3, point_2 : Vec3, centerBegin : Vec3, centerEnd : Vec3, radius : float64, intersect : Vec3) : bool =
 
   ## Also a function to know if the line intersected at least the whole magnet, and then only once, because else the axions would have just flown through ##
-
-  var vector = vec3(0.0)
-  var intersect = vec3(0.0)
-  vector = point_2 - point_1
-  var lambda_dummy : float64
-  lambda_dummy = ( -1000.0 - point_1[2] ) / vector[2]
-  var dummy = vec3(0.0)
-  dummy = point_1 + lambda_dummy * vector
-  var vector_dummy = vec3(0.0)
-  vector_dummy = point_2 - dummy
-  var factor : float64
-  factor = (vector_dummy[0]*vector_dummy[0] + vector_dummy[1]*vector_dummy[1])
-  var p : float64
-  p = 2.0 * (dummy[0] * vector_dummy[0] + dummy[1]*vector_dummy[1]) / factor
-  var q : float64
-  q = (dummy[0]*dummy[0] + dummy[1]*dummy[1] - radius*radius) / factor
-  var lambda_1 : float64
-  var lambda_2 : float64
-  lambda_1 = -p/2.0 + sqrt( p*p/4.0 - q)
-  lambda_2 = -p/2.0 - sqrt( p*p/4.0 - q)
-  var intersect_1 = vec3(0.0)
-  intersect_1 = dummy + lambda_1 * vector_dummy
-  var intersect_2 = vec3(0.0)
-  intersect_2 = dummy + lambda_2 * vector_dummy
-  var intersect_1_valid : bool
-  var intersect_2_valid : bool
-  intersect_1_valid = (intersect_1[2] > centerBegin[2] ) and (intersect_1[2] < centerEnd[2])
-  intersect_2_valid = (intersect_2[2] > centerBegin[2] ) and (intersect_2[2] < centerEnd[2])
+  
+  let
+    vector = point_2 - point_1
+    lambda_dummy = (-1000.0 - point_1[2]) / vector[2]
+    dummy = point_1 + lambda_dummy * vector
+    vector_dummy = point_2 - dummy
+    factor = (vector_dummy[0]*vector_dummy[0] + vector_dummy[1]*vector_dummy[1])
+    p = 2.0 * (dummy[0] * vector_dummy[0] + dummy[1]*vector_dummy[1]) / factor
+    q = (dummy[0]*dummy[0] + dummy[1]*dummy[1] - radius*radius) / factor
+    lambda_1 = -p/2.0 + sqrt( p*p/4.0 - q)
+    lambda_2 = -p/2.0 - sqrt( p*p/4.0 - q)
+    intersect_1 = dummy + lambda_1 * vector_dummy
+    intersect_2 = dummy + lambda_2 * vector_dummy
+    intersect_1_valid = (intersect_1[2] > centerBegin[2]) and (intersect_1[2] < centerEnd[2])
+    intersect_2_valid = (intersect_2[2] > centerBegin[2]) and (intersect_2[2] < centerEnd[2])
   if ( (intersect_1_valid and intersect_2_valid) or (not intersect_1_valid and not intersect_2_valid) ):
     return false
   elif (intersect_1_valid):
-    intersect = intersect_1
+    #intersect = intersect_1
     return true
   else:
-    intersect = intersect_2
+    #intersect = intersect_2
     return true
 
 proc getIntersectLineIntersectsCylinderOnce(point_1 : Vec3, point_2 : Vec3, centerBegin : Vec3, centerEnd : Vec3, radius : float64, intersect : Vec3) : Vec3 =
-  var vector = vec3(0.0)
-  var intersect = vec3(0.0)
-  vector = point_2 - point_1
-  var lambda_dummy : float64
-  lambda_dummy = ( -1000.0 - point_1[2] ) / vector[2]
-  var dummy = vec3(0.0)
-  dummy = point_1 + lambda_dummy * vector
-  var vector_dummy = vec3(0.0)
-  vector_dummy = point_2 - dummy
-  var factor : float64
-  factor = (vector_dummy[0]*vector_dummy[0] + vector_dummy[1]*vector_dummy[1])
-  var p : float64
-  p = 2.0 * (dummy[0] * vector_dummy[0] + dummy[1]*vector_dummy[1]) / factor
-  var q : float64
-  q = (dummy[0]*dummy[0] + dummy[1]*dummy[1] - radius*radius) / factor
-  var lambda_1 : float64
-  var lambda_2 : float64
-  lambda_1 = -p/2.0 + sqrt( p*p/4.0 - q)
-  lambda_2 = -p/2.0 - sqrt( p*p/4.0 - q)
-  var intersect_1 = vec3(0.0)
-  intersect_1 = dummy + lambda_1 * vector_dummy
-  var intersect_2 = vec3(0.0)
-  intersect_2 = dummy + lambda_2 * vector_dummy
-  var intersect_1_valid : bool
-  var intersect_2_valid : bool
-  intersect_1_valid = (intersect_1[2] > centerBegin[2] ) and (intersect_1[2] < centerEnd[2])
-  intersect_2_valid = (intersect_2[2] > centerBegin[2] ) and (intersect_2[2] < centerEnd[2])
-  if (intersect_1_valid):
-    intersect = intersect_1
-  else:
-    intersect = intersect_2
-  result = intersect
-
-
+  let
+    vector = point_2 - point_1
+    lambda_dummy = (-1000.0 - point_1[2]) / vector[2]
+    dummy = point_1 + lambda_dummy * vector
+    vector_dummy = point_2 - dummy
+    factor = (vector_dummy[0]*vector_dummy[0] + vector_dummy[1]*vector_dummy[1])
+    p = 2.0 * (dummy[0] * vector_dummy[0] + dummy[1]*vector_dummy[1]) / factor
+    q = (dummy[0]*dummy[0] + dummy[1]*dummy[1] - radius*radius) / factor
+    lambda_1 = -p/2.0 + sqrt( p*p/4.0 - q)
+    lambda_2 = -p/2.0 - sqrt( p*p/4.0 - q)
+    intersect_1 = dummy + lambda_1 * vector_dummy
+    intersect_2 = dummy + lambda_2 * vector_dummy
+    intersect_1_valid = (intersect_1[2] > centerBegin[2]) and (intersect_1[2] < centerEnd[2])
+    intersect_2_valid = (intersect_2[2] > centerBegin[2]) and (intersect_2[2] < centerEnd[2])
+  result = if (intersect_1_valid): intersect_1 else: intersect_2
 
 proc circleEdges( theR1 : seq[float]): seq[seq[float]] =
 
@@ -971,13 +939,15 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
 
     var vectorBeforeXRTPolar = vec3(0.0)  #(r,theta,phi)
     vectorBeforeXRTPolar[0] = sqrt(vectorBeforeXRT[0]*vectorBeforeXRT[0]+vectorBeforeXRT[1]*vectorBeforeXRT[1]+vectorBeforeXRT[2]*vectorBeforeXRT[2])
-    vectorBeforeXRTPolar[1] = radToDeg(arctan2(vectorBeforeXRT[2], (vectorBeforeXRT[1])))
-    vectorBeforeXRTPolar[2] = radToDeg(arccos(vectorBeforeXRT[0]/vectorBeforeXRTPolar[0]))
+    vectorBeforeXRTPolar[1] = radToDeg(arccos(vectorBeforeXRT[0]/vectorBeforeXRTPolar[0]))
+    vectorBeforeXRTPolar[2] = radToDeg(arctan2(vectorBeforeXRT[2], (vectorBeforeXRT[1])))
     
-    vectorBeforeXRTPolar[1] = vectorBeforeXRTPolar[1] + 90.0 #this is the pitch angle # not sure why plus 90 
+    vectorBeforeXRTPolar[1] = vectorBeforeXRTPolar[1] - 90.0 #this is the pitch angle # not sure why plus 90 
     var p = vectorBeforeXRTPolar[1]
-    vectorBeforeXRTPolar[2] =  vectorBeforeXRTPolar[2] - 90.0 #this is the yaw angle, floor to roof
+    vectorBeforeXRTPolar[2] =  vectorBeforeXRTPolar[2] + 90.0 #this is the yaw angle, floor to roof
     var ya = vectorBeforeXRTPolar[2]
+    echo "pitch", p
+    echo "yaw", ya
     var
       transmissionTelescopePitch = (0.0008*p*p*p*p + 1e-04*p*p*p - 0.4489*p*p - 0.3116*p + 96.787) / 100.0
       transmissionTelescopeYaw = (6.0e-7 * pow(6.0, ya) - 1.0e-5* pow(5.0, ya) - 0.0001* pow(4.0, ya) + 0.0034* pow(3.0, ya) - 0.0292* pow(2.0, ya) - 0.1534* ya + 99.959) / 100.0
