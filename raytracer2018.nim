@@ -12,14 +12,14 @@ import nimhdf5 except linspace
 import chroma
 #import ingrid/[tos_helpers, likelihood, ingrid_types]
 import readOpacityFile
-import numericalnim, ggplotnim, strformat
+import numericalnim, strformat
 import strscans
 import streams, tables
 #import axionMass/axionMass
 import arraymancer except readCsv, linspace
 import seqmath except linspace
 import json 
-
+import ggplotnim 
 
 
 ##################rayTracer###############################
@@ -33,7 +33,7 @@ import json
 const
   RAYTRACER_DISTANCE_SUN_EARTH =  1.5e14  #mm #ok
   radiusSun = 6.9e11 #mm #ok
-  numberOfPointsSun = 1000000 #100000 for statistics
+  numberOfPointsSun = 10000 #100000 for statistics
 
   pressGas = 14.3345 #for example P = 14.3345 mbar (corresponds to 1 bar at room temperature).
   
@@ -61,6 +61,7 @@ const
 
 ################################
 
+randomize(299792458)
 
 var fluxFractionGold = 0.0 #dies muss eine globale var sein
 proc getFluxFractionGold(): float64 =
@@ -129,7 +130,7 @@ proc getRandomPointFromSolarModel(center : Vec3, radius : float64 , emRateVecSum
     r :float
     angle1 = 360 * random(1.0)
     angle2 = 180 * random(1.0)
-    i = random(emRateVecSums[emRateVecSums.len - 1])
+    i = random(emRateVecSums.sum)
     prevSum = 0.0
   
   for iRad in 0..<emRateVecSums.len - 1:
@@ -148,7 +149,7 @@ proc getRandomPointFromSolarModel(center : Vec3, radius : float64 , emRateVecSum
 
   result = vector
 
-proc getRandomEnergyFromSolarModel(emRateVecSums : seq[float], vectorInSun: Vec3, center : Vec3, radius : float64, energies :  seq[float],emissionRates: seq[seq[float]], energyOrEmRate : string) : float =
+proc getRandomEnergyFromSolarModel(vectorInSun: Vec3, center : Vec3, radius : float64, energies :  seq[float],emissionRates: seq[seq[float]], energyOrEmRate : string) : float =
 
   ## This function gives a random energy for an event at a given radius, biased by the emissionrates at that radius. This only works if the energies to choose from are evenly distributed ##
 
@@ -156,29 +157,30 @@ proc getRandomEnergyFromSolarModel(emRateVecSums : seq[float], vectorInSun: Vec3
     rad = sqrt(vectorInSun[0]*vectorInSun[0]+vectorInSun[1]*vectorInSun[1]+ (vectorInSun[2]-center[2])*(vectorInSun[2]-center[2]))
     r = rad / radius
     iRad : int
-    energy : float
-    emissionRate : float
     emRateEnergySum : float
-    emRateEnergySumPrev : float
-    i : float
-    emRateEnergySumAll : float
     indexRad = (r - 0.0015) / 0.0005
 
   if indexRad - 0.5 > floor(indexRad):
     iRad = int(ceil(indexRad))
   else: iRad = int(floor(indexRad))
 
-  for iE in 0..<energies.len:
-    emRateEnergySumAll += emissionRates[iRad][iE]
+  let ffRate = toSeq(0 ..< energies.len).mapIt(emissionRates[iRad][it] * energies[it] * energies[it])
+  
+  #let emRateEnergySumAll = emissionRates[iRad].sum
+  let ffSumAll = ffRate.sum
+  let sampleEmRate = random(1.0) * ffSumAll #emRateEnergySumAll
 
-  i = random(emRateEnergySumAll)
-
-  for iEnergy in 0..<energies.len: 
-    emRateEnergySumPrev = emRateEnergySum
-    emRateEnergySum = emRateEnergySumPrev + emissionRates[iRad][iEnergy]
-    if i > emRateEnergySumPrev and i <= emRateEnergySum:
-      energy = energies[iEnergy] * 0.001 #in keV
-      emissionRate = emissionRates[iRad][iEnergy]
+  #echo "emissionrates", emissionRates[iRad].len
+  #let emRateCumSum = cumSum(emissionRates[iRad])
+  let ffCumSum = cumSum(ffRate)
+  #let idx = emRateCumSum.lowerBound(sampleEmRate)
+  let idx = ffCumSum.lowerBound(sampleEmRate)
+  echo "IDX ", idx, " ffSumAll ", ffSumAll#emRateEnergySumAll
+  let energy = energies[idx] * 0.001
+  echo "Energy ", energy
+  echo energies.len
+  let emissionRate = emissionRates[iRad][idx]
+      
   case energyOrEmRate
   of "energy":
     result = energy
@@ -359,8 +361,8 @@ proc getVectoraAfterMirror*(pointXRT : Vec3, pointCB : Vec3, pointMirror : Vec3,
       
   var alphaMirror = arcsin(abs(normalVec[0] * vectorBeforeMirror[0] + normalVec[1] * vectorBeforeMirror[1] + normalVec[2] * vectorBeforeMirror[2]) / (sqrt((normalVec[0] * normalVec[0] + normalVec[1] * normalVec[1] + normalVec[2] * normalVec[2])) * sqrt((vectorBeforeMirror[0] * vectorBeforeMirror[0] + vectorBeforeMirror[1] * vectorBeforeMirror[1] + vectorBeforeMirror[2] * vectorBeforeMirror[2]))))
       
-  vectorAxis = vectorAxis / (sqrt((vectorAxis[0] * vectorAxis[0] + vectorAxis[1] * vectorAxis[1] + vectorAxis[2] * vectorAxis[2])))
-  vectorBeforeMirror = vectorBeforeMirror / (sqrt((vectorBeforeMirror[0] * vectorBeforeMirror[0] + vectorBeforeMirror[1] * vectorBeforeMirror[1] + vectorBeforeMirror[2] * vectorBeforeMirror[2])))
+  vectorAxis = normalize(vectorAxis)
+  vectorBeforeMirror = normalize(vectorBeforeMirror)
   var vectorAfterMirror = vec3(0.0)
   vectorAfterMirror[0] = vectorBeforeMirror[0] * cos(2.0 * alphaMirror) - (vectorBeforeMirror[1] * vectorAxis[2] - vectorBeforeMirror[2] * vectorAxis[1]) * sin( 2.0 * alphaMirror)
   vectorAfterMirror[1] = vectorBeforeMirror[1] * cos(2.0 * alphaMirror) - (vectorBeforeMirror[2] * vectorAxis[0] - vectorBeforeMirror[0] * vectorAxis[2]) * sin( 2.0 * alphaMirror)
@@ -369,7 +371,8 @@ proc getVectoraAfterMirror*(pointXRT : Vec3, pointCB : Vec3, pointMirror : Vec3,
   var alphaTest = arccos((abs(vectorAfterMirror[0] * vectorBeforeMirror[0] + vectorAfterMirror[1] * vectorBeforeMirror[1] + vectorAfterMirror[2] * vectorBeforeMirror[2])) / (sqrt((vectorAfterMirror[0] * vectorAfterMirror[0] + vectorAfterMirror[1] * vectorAfterMirror[1] + vectorAfterMirror[2] * vectorAfterMirror[2])) * sqrt((vectorBeforeMirror[0] * vectorBeforeMirror[0] + vectorBeforeMirror[1] * vectorBeforeMirror[1] + vectorBeforeMirror[2] * vectorBeforeMirror[2]))))
   var pointAfterMirror = pointMirror + 200.0 * vectorAfterMirror
   var alphaVec = vec3(0.0)
-  alphaVec[0] = radToDeg(alphaTest)
+  alphaVec[0] = radToDeg(alphaTest) / 2.0
+  alphaVec[1] = radToDeg(alphaMirror)
   case pointOrAngle
   of "angle":
     result = alphaVec
@@ -505,8 +508,8 @@ proc drawfancydiagrams(diagramtitle : string, objectstodraw : seq[seq[float]], w
               d.zs[y][x] = objectstodraw[y][x]
   echo objectstodraw[1500][1500]
   #let d = heatmap(zs).toPlotJson
-
-
+  d.zmin = -5e-22
+  d.zmax = 10e-22
   const
     a = @[float32(CHIPREGIONS_GOLD_Y_MIN * 3000.0 / 14.0), float32(CHIPREGIONS_GOLD_Y_MIN * 3000.0 / 14.0),float32(CHIPREGIONS_GOLD_Y_MAX * 3000.0 / 14.0),float32(CHIPREGIONS_GOLD_Y_MAX * 3000.0 / 14.0),float32(CHIPREGIONS_GOLD_Y_MIN * 3000.0 / 14.0)]
     b = @[float32(CHIPREGIONS_GOLD_X_MIN * 3000.0 / 14.0),float32(CHIPREGIONS_GOLD_X_MAX * 3000.0 / 14.0),float32(CHIPREGIONS_GOLD_X_MAX * 3000.0 / 14.0), float32(CHIPREGIONS_GOLD_X_MIN * 3000.0 / 14.0), float32(CHIPREGIONS_GOLD_X_MIN * 3000.0 / 14.0)]
@@ -728,26 +731,36 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     transProbDetector : seq[float]
     transProbMagnet : seq[float]
     deviationDet : seq[float]
+    shellNumber = newSeqOfCap[string](numberOfPointsSun)
+    energiesPre = newSeqOfCap[float](numberOfPointsSun)
 
 
   let
     energiesNew = linspace(1.0, 10000.0, 1112)
     roomTemp = 293.15 #K
 
-  var emratesNewSum : seq[float]
+  #var emratesNewSum : seq[float]
   #let emratesNew = main(energiesNew)
   let emRatesDf = toDf(readCsv("solar_model_tensor.csv"))
   let emRatesTensor = emRatesDf["value"].toTensor(float)
     .reshape([emRatesDf.filter(fn {`dimension_1` == 0}).len, emRatesDf.filter(fn {`dimension_2` == 0}).len])
-  let emratesNew = emRatesTensor.toRawSeq.reshape2D([emRatesTensor.shape[0], emRatesTensor.shape[1]])
+  let emratesNew = emRatesTensor
+    .toRawSeq
+    .reshape2D([emRatesTensor.shape[0], emRatesTensor.shape[1]])
+    .transpose
+
+  echo emRatesNew[0] 
+  doAssert emRatesNew[0].len == 1112
   var sum2 = 0.0
-  for rI in 0..<emratesNew.len:
+  let emRatesNewSum = emRatesNew.mapIt(it.sum)
+
+  #[for rI in 0..<emratesNew.len:
     var sum = 0.0
     for eI in 0..<emratesNew[rI].len:
       sum += emratesNew[rI][eI]
     emratesNewSum.add(sum)
     sum2 += sum
-  emratesNewSum.add(sum2)
+  emratesNewSum.add(sum2)]#
 
 
   ## Detector Window##
@@ -776,14 +789,14 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     var pointExitCBMagneticField = getRandomPointOnDisk(centerExitCBMagneticField, radiusCB)
 
     ## Get a random energy for the axion biased by the emission rate ##
-    var energyAx = getRandomEnergyFromSolarModel(emratesNewSum, pointInSun, centerSun, radiusSun, energiesNew, emratesNew, "energy")
-    var emissionRateAx = getRandomEnergyFromSolarModel(emratesNewSum, pointInSun, centerSun, radiusSun, energiesNew, emratesNew, "emissionRate")
+    var energyAx = getRandomEnergyFromSolarModel(pointInSun, centerSun, radiusSun, energiesNew, emratesNew, "energy")
+    var emissionRateAx = getRandomEnergyFromSolarModel(pointInSun, centerSun, radiusSun, energiesNew, emratesNew, "emissionRate")
     ## Throw away all the axions, that don't make it through the piping system and therefore exit the system at some point ##
     var intersect = vec3(0.0)
     var pathCB : float64
     var intersectsEntranceCB = lineIntersectsCircle(pointInSun, pointExitCBMagneticField, centerEntranceCB, radiusCB, intersect)
     var intersectsCB = false
-
+    energiesPre.add(energyAx)
     if (not intersectsEntranceCB):
       intersectsCB = lineIntersectsCylinderOnce(pointInSun,pointExitCBMagneticField,centerEntranceCB,centerExitCBMagneticField,radiusCB,intersect)
 
@@ -846,6 +859,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
       beta = 0.0 ## in degree
       r1Zyl = 0.0
       xSep = 0.0
+      h : int
 
     if vectorEntranceXRTCircular[0] > allR1[allR1.len - 1]: continue
     for j in 0..<allR1.len:
@@ -863,6 +877,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
         r3 = r2 - 0.5 * xSep * tan(beta)
         r4 = r3 - 0.5 * xSep * tan(3.0 * beta)
         r5 = r4 - lMirror * sin(3.0 * beta)
+        h = k
     if r1 == allR1[0]: continue
     
     var pointEntranceXRTZylKart = vec3(0.0)
@@ -888,7 +903,6 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     var pointMirror2 = findPosXRT(pointAfterMirror1, pointMirror1, r4, r5, beta3, lMirror, distanceMirrors, 0.01, 0.0, 2.5)
     var t = getVectoraAfterMirror(pointAfterMirror1, pointMirror1, pointMirror2, beta3, "angle")
     if pointMirror2[0] == 0.0 and pointMirror2[1] == 0.0 and pointMirror2[2] == 0.0: continue ## with more uncertainty, 10% of the 0.1% we loose here can be recovered, but it gets more uncertain
-    
     var vectorAfterMirrors = getVectoraAfterMirror(pointAfterMirror1, pointMirror1, pointMirror2, beta3, "vectorAfter")
     var pointAfterMirror2 = pointMirror2 + 200.0 * vectorAfterMirrors
 
@@ -904,8 +918,8 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     var n3 : float
     case setup
     of "CAST":
-      pointDetectorWindow = getPointDetectorWindow(pointMirror2, pointAfterMirror2 , RAYTRACER_FOCAL_LENGTH_XRT, lMirror, allXsep[8], 62.1, d, degToRad(2.75))
-      pointEndDetector = getPointDetectorWindow(pointMirror2, pointAfterMirror2 , (RAYTRACER_FOCAL_LENGTH_XRT + 30.0), lMirror, allXsep[8], 62.1, d, degToRad(2.75) )
+      pointDetectorWindow = getPointDetectorWindow(pointMirror2, pointAfterMirror2 , RAYTRACER_FOCAL_LENGTH_XRT, lMirror, allXsep[8], 62.1, d, degToRad(2.8))
+      pointEndDetector = getPointDetectorWindow(pointMirror2, pointAfterMirror2 , (RAYTRACER_FOCAL_LENGTH_XRT + 30.0), lMirror, allXsep[8], 62.1, d, degToRad(2.8) )
     of "BabyIAXO":
       distDet = distanceMirrors - 0.5 * allXsep[8] * cos(beta) + RAYTRACER_FOCAL_LENGTH_XRT - RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW
       n = (distDet - pointMirror2[2]) / vectorAfterMirrors[2]
@@ -916,7 +930,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     
     #echo abs(sqrt(pointEndDetector[0] * pointEndDetector[0] + pointEndDetector[1] * pointEndDetector[1]) - sqrt(pointDetectorWindow[0] * pointDetectorWindow[0] + pointDetectorWindow[1] * pointDetectorWindow[1]))
     deviationDet.add(abs(sqrt(pointEndDetector[0] * pointEndDetector[0] + pointEndDetector[1] * pointEndDetector[1]) - sqrt(pointDetectorWindow[0] * pointDetectorWindow[0] + pointDetectorWindow[1] * pointDetectorWindow[1])))
-
+    shellNumber.add($h)
     var valuesPix = getPixelValue(pointEntranceXRT)
     pointdataXBefore.add(pointEntranceXRT[0])
     pointdataYBefore.add(pointEntranceXRT[1])
@@ -946,8 +960,6 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     var p = vectorBeforeXRTPolar[1]
     vectorBeforeXRTPolar[2] =  vectorBeforeXRTPolar[2] + 90.0 #this is the yaw angle, floor to roof
     var ya = vectorBeforeXRTPolar[2]
-    echo "pitch", p
-    echo "yaw", ya
     var
       transmissionTelescopePitch = (0.0008*p*p*p*p + 1e-04*p*p*p - 0.4489*p*p - 0.3116*p + 96.787) / 100.0
       transmissionTelescopeYaw = (6.0e-7 * pow(6.0, ya) - 1.0e-5* pow(5.0, ya) - 0.0001* pow(4.0, ya) + 0.0034* pow(3.0, ya) - 0.0292* pow(2.0, ya) - 0.1534* ya + 99.959) / 100.0
@@ -1063,11 +1075,15 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   let dfTransProb = seqsToDf({ "Axion energy [keV]" : energiesAxAll,
                               "Transmission Probability" : transProbDetector,
                               "type" : kinds })
+  echo energiesAxAll
+  echo transProbDetector
+  echo kinds
+  echo dfTransProb                              
   ggplot(dfTransProb.arrange("Axion energy [keV]"), 
          aes("Axion energy [keV]", "Transmission Probability", color = "type")) +
     geom_line() +
     ggtitle("The transmission probability for different detector parts") +
-    ggsave("TransProb.pdf")
+    ggsave("TransProb.png")
   
   let dfTransProbAr = seqsToDf({ "Axion energy [keV]" : energiesAx,
                               "Transmission Probability" : transProbArgon})
@@ -1075,25 +1091,54 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
          aes("Axion energy [keV]", "Transmission Probability")) +
     geom_line() +
     ggtitle("The transmission probability for the detector gas") +
-    ggsave("TransProbAr.pdf")
+    ggsave("TransProbAr.png")
 
-  let dfDet = seqsToDf({"Deviation [mm]" : deviationDet})
-  ggplot(dfDet, aes("Deviation [mm]")) +
-    geom_histogram() +
+  let dfDet = seqsToDf({"Deviation [mm]" : deviationDet,
+                        "Shell" : shellNumber})
+  echo dfDet
+  ggplot(dfDet, aes("Deviation [mm]", fill = "Shell")) +
+    geom_histogram(binWidth = 0.001) +
     ggtitle("The deviation of the X-rays in the entrance of the detector to the end of the detector") +
     ggsave("deviationDet.pdf")
+  
+  ggplot(dfDet, aes("Deviation [mm]", fill = "Shell")) +
+    ggridges("Shell", overlap = 1.0) + 
+    geom_histogram(binWidth = 0.001, position = "identity") +
+    ggtitle("The deviation of the X-rays in the entrance of the detector to the end of the detector") +
+    ggsave("deviationDet_ridges.pdf", height = 1200)
   
   let dfFluxE = seqsToDf({ "Axion energy [eV]" : energiesflux,
                               "Flux after experiment" : fluxes})
   ggplot(dfFluxE, aes("Axion energy [eV]", "Flux after experiment")) +
     geom_point() +
     ggtitle("The fluf after the experiment") +
-    ggsave("FluxE.pdf")
+    ggsave("FluxE.png")
 
-  let dfFluxE2 = seqsToDf({ "Axion energy [eV]" : energiesflux,
-                            "Flux after experiment" : weights})
+  let fname2 = "extracted_from_aznar2015_llnl_telescope_eff_plot.csv"
+  let dfEnergyEff = toDf(readCsv(fname2, sep = ','))
+    .mutate(fn {"Energies [keV]" ~ `xVals` * 8.0 + 1.0}, 
+            fn {"Effective Area [cm^2]" ~ `yVals` * 8.5}) #.mutate(f{int -> float: "Radii" ~ `Radii`.float * 0.0005 + 0.0015})
 
-  dfFluxE2.write_csv("weights_per_axion_energy.csv")  
+  ggplot(dfEnergyEff, aes("Energies [keV]", "Effective Area [cm^2]")) +
+    geom_line() +
+    ggtitle("The telescope energy efficiency") +
+    ggsave("EnergyEff.png")
+  echo dfEnergyEff
+
+  let dfFluxE2 = seqsToDf({ "Axion energy [keV]" : energiesAx,
+                            "Flux after experiment" : weights}) 
+
+  ggplot(dfFluxE2, aes("Axion energy [keV]", weight = "Flux after experiment")) + 
+    geom_histogram(binWidth = 0.05) + 
+    ylab("The fluf after the experiment") + 
+    ggsave("FluxEnice.png")
+
+  let dfFluxE3 = seqsToDf({ "Axion energy [keV]" : energiesPre}) 
+
+  ggplot(dfFluxE3, aes("Axion energy [keV]")) + 
+    geom_histogram(binWidth = 0.05) + 
+    ylab("The fluf before the experiment") + 
+    ggsave("FluxE_before_experiment.png")
 
   #[ggplot(dfFluxE, aes("Axion energy [keV]")) +#, weights = "Flux after experiment")) +
     geom_histogram() +
