@@ -397,7 +397,7 @@ proc main*(energies : seq[float]) : seq[seq[float]] =
   ## First lets access the solar model and calculate some necessary values
   const solarModel = "./ReadSolarModel/resources/AGSS09_solar_model_stripped.dat"
   var df = readSolarModel(solarModel)
-  #df = df.filter(f{"Radius" <= 0.2})
+  df = df.filter(f{`Radius` <= 0.2})
   echo df.pretty(precision = 10)
 
   ## now let's plot radius against temperature colored by density
@@ -661,8 +661,9 @@ proc main*(energies : seq[float]) : seq[seq[float]] =
 
 
   let dfEmrate = seqsToDf({ "energy" : energies,
-                            "emrate" : emratesS[200] })
-  ggplot(dfEmrate, aes("energy", "emrate")) +
+                            "emrate" : emratesS[4] })
+    .mutate(f{"flux" ~ `emrate` * `energy` * `energy` * 0.5 / Pi / Pi})
+  ggplot(dfEmrate, aes("energy", "flux")) +
     geom_line() +
     ggsave("emrate_R10.pdf")
 
@@ -688,7 +689,7 @@ when isMainModule:
   let solarModel = main(energies)
 
   let smTensor = solarModel.toTensor
-  smTensor.to_csv("solar_model_tensor.csv")
+  #smTensor.to_csv("solar_model_tensor.csv")
 
   when false:
     ## TODO: better approach to store the full "solar model" as a CSV from a DF
