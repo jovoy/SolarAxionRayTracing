@@ -519,6 +519,9 @@ proc getLenght(table : seq[seq[float]], numberofrows : int): int =
   length = lengths.len
   result = length
 
+proc serializePlot(plt: PlotJson, fname: string) =
+  ## serializes a plotly plot so that we can run it elsewhere
+  writeFile(fname, (% plt).pretty)
 
 proc drawfancydiagrams(diagramtitle: string,
                        objectstodraw: seq[seq[float]],
@@ -567,8 +570,9 @@ proc drawfancydiagrams(diagramtitle: string,
   yFields["ticktext"] = % values.mapIt(&"{it.float * 14.0 / 3000.0:.2f}")
   yFields["title"] = % "y-axis [mm]"
   p.layout["yaxis"] = yFields
-  echo p.save()
-  p.show("axion_image.svg")
+  p.serializePlot(&"axionImage_{year}.json")
+  # echo p.save()
+  # p.show(&"axion_image_{year}.svg")
 
 proc drawgraph(diagramtitle : string, data_X : seq[float], data_Y: seq[float], energyOrRadius: string): float =
 
