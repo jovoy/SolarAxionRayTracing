@@ -904,6 +904,8 @@ proc traceAxion(res: var Axion,
   ## Get the detector Window transmission (The stripes in the window consist of a different material than the window itself):
   var transWindow : float
   var energyAxTransWindow : int
+  # TODO: assignment here of the different kinds is obviously broken. Instead of having
+  # one kinds field + the others we should have some additional field or something
   if abs(y) > stripDistWindow / 2.0 and abs(y) < stripDistWindow / 2.0 + stripWidthWindow or abs(y) > 1.5 * stripDistWindow + stripWidthWindow and abs(y) < 1.5 * stripDistWindow + 2.0 * stripWidthWindow:
     energyAxTransWindow = dfTab["siFile"]["PhotonEnergy(eV)"].toTensor(float).toRawSeq.lowerBound(energyAx * 1000.0)
     transWindow = dfTab["siFile"]["Transmission"].toTensor(float)[energyAxTransWindow]
