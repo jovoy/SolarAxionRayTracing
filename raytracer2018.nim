@@ -519,8 +519,11 @@ proc getLenght(table : seq[seq[float]], numberofrows : int): int =
   length = lengths.len
   result = length
 
-proc drawfancydiagrams(diagramtitle : string, objectstodraw : seq[seq[float]], width : int): float =
 
+proc drawfancydiagrams(diagramtitle: string,
+                       objectstodraw: seq[seq[float]],
+                       width: int,
+                       year: string) =
   ## this function draws a hdiagram out a given heatmap ##
 
   let
@@ -981,8 +984,8 @@ proc traceAxionWrapper(axBuf: ptr UncheckedArray[Axion],
                            dfTab)
 
 proc calculateFluxFractions(axionRadiationCharacteristic: string,
-                            detectorWindowAperture :float, pGas : float, m_a : float, setup : string,
-                            year : string): int = #The year is only for the way the window in front of the detector was turned.
+                            detectorWindowAperture: float, pGas: float, m_a: float, setup: string,
+                            year: string) = #The year is only for the way the window in front of the detector was turned.
   var
     distanceCBAxisXRTAxis = 0.0
     pipes_turned = 0.0
@@ -1126,60 +1129,79 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   #echo axionsPass[0 ..< 100]
   #echo axionsPass[0 ..< 100]
 
+  template extractPass(n: untyped): untyped =
+    let n = axionsPass.mapIt(it.n)
+  extractPass(deviationDet)
+  extractPass(energiesAx)
+  extractPass(shellNumber)
+
+  extractPass(transProbArgon)
+
+  template extractAll(n: untyped): untyped =
+    let n = axions.mapIt(it.n)
+  extractPass(energiesAxAll)
+  extractPass(transProbDetector)
+  extractPass(kinds)
+
   ################################################################################
   ################################################################################
   ################################################################################
+
+  let dfTransProb = seqsToDf({ "Axion energy [keV]" : energiesAxAll,
+                               "Transmission Probability" : transProbDetector,
+                               "type" : kinds.mapIt($it) })
+  #echo energiesAxAll
+  #echo transProbDetector
+  #echo kinds
+  #echo dfTransProb
+  ggplot(dfTransProb.arrange("Axion energy [keV]"),
+         aes("Axion energy [keV]", "Transmission Probability", color = "type")) +
+    geom_line() +
+    ggtitle("The transmission probability for different detector parts") +
+    ggsave(&"TransProb_{year}.pdf")
+
+  let dfTransProbAr = seqsToDf({ "Axion energy [keV]" : energiesAx,
+                              "Transmission Probability" : transProbArgon})
+  ggplot(dfTransProbAr.arrange("Axion energy [keV]"),
+         aes("Axion energy [keV]", "Transmission Probability")) +
+    geom_line() +
+    ggtitle("The transmission probability for the detector gas") +
+    ggsave(&"TransProbAr_{year}.pdf")
+
+  let dfDet = seqsToDf({ "Deviation [mm]" : deviationDet,
+                         "Energies" : energiesAx,
+                         "Shell" : shellNumber})
+    .filter(f{Value: isNull(df["Shell"][idx]).toBool == false})
+
+  ggplot(dfDet, aes("Deviation [mm]")) +
+    geom_histogram(binWidth = 0.001) +
+    ggtitle("Deviation of X-rays detector entrance to readout") +
+    ggsave(&"deviationDet_{year}.pdf")
+
+  ggplot(dfDet, aes("Deviation [mm]", fill = "Shell")) +
+    geom_histogram(binWidth = 0.001) +
+    ggtitle("Deviation of X-rays - detector entrance to readout") +
+    ggsave(&"deviationDet_stacked_{year}.pdf")
+
+  ggplot(dfDet, aes("Energies", fill = "Shell")) +
+    ggridges("Shell", overlap = 1.8) +
+    geom_histogram(binWidth = 0.1, position = "identity") +
+    ggtitle("X-ray energy distributions at detector") +
+    ggsave(&"energies_by_shell_{year}.pdf", height = 600)
+
+  ggplot(dfDet, aes("Deviation [mm]", fill = "Shell")) +
+    ggridges("Shell", overlap = 1.8) +
+    geom_histogram(binWidth = 0.001, position = "identity") +
+    ggtitle("Deviation of X-rays - detector entrance to readout") +
+    ggsave(&"deviationDet_ridges_{year}.pdf", height = 600)
 
   when false:
-    let dfTransProb = seqsToDf({ "Axion energy [keV]" : energiesAxAll,
-                                 "Transmission Probability" : transProbDetector,
-                                 "type" : kinds })
-    #echo energiesAxAll
-    #echo transProbDetector
-    #echo kinds
-    #echo dfTransProb
-    ggplot(dfTransProb.arrange("Axion energy [keV]"),
-           aes("Axion energy [keV]", "Transmission Probability", color = "type")) +
-      geom_line() +
-      ggtitle("The transmission probability for different detector parts") +
-      ggsave("TransProb.png")
-
-    let dfTransProbAr = seqsToDf({ "Axion energy [keV]" : energiesAx,
-                                "Transmission Probability" : transProbArgon})
-    ggplot(dfTransProbAr.arrange("Axion energy [keV]"),
-           aes("Axion energy [keV]", "Transmission Probability")) +
-      geom_line() +
-      ggtitle("The transmission probability for the detector gas") +
-      ggsave("TransProbAr.png")
-
-    let dfDet = seqsToDf({ "Deviation [mm]" : deviationDet,
-                           "Energies" : energiesAx,
-                           "Shell" : shellNumber})
-      .filter(f{Value: isNull(df["Shell"][idx]).toBool == false})
-
-    ggplot(dfDet, aes("Deviation [mm]")) +
-      geom_histogram(binWidth = 0.03) +
-      ggtitle("The deviation of the X-rays in the entrance of the detector to the end of the detector") +
-      ggsave("deviationDet.pdf")
-
-    ggplot(dfDet, aes("Energies", fill = "Shell")) +
-      ggridges("Shell", overlap = 1.2) +
-      geom_histogram(binWidth = 0.1, position = "identity") +
-      ggtitle("The deviation of the X-rays in the entrance of the detector to the end of the detector") +
-      ggsave("deviationDet_by_shell.pdf", height = 1200)
-
-    ggplot(dfDet, aes("Deviation [mm]", fill = "Shell")) +
-      ggridges("Shell", overlap = 1.2) +
-      geom_histogram(binWidth = 0.001, position = "identity") +
-      ggtitle("The deviation of the X-rays in the entrance of the detector to the end of the detector") +
-      ggsave("deviationDet_ridges.pdf", height = 1200)
-
     let dfFluxE = seqsToDf({ "Axion energy [eV]" : energiesflux,
                                 "Flux after experiment" : fluxes})
     ggplot(dfFluxE, aes("Axion energy [eV]", "Flux after experiment")) +
       geom_point() +
       ggtitle("The fluf after the experiment") +
-      ggsave("FluxE.pdf")
+      ggsave(&"FluxE_{year}.pdf")
 
     let fname2 = "extracted_from_aznar2015_llnl_telescope_eff_plot.csv"
     let dfEnergyEff = toDf(readCsv(fname2, sep = ','))
@@ -1189,7 +1211,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     ggplot(dfEnergyEff, aes("Energies [keV]", "Effective Area [cm^2]")) +
       geom_line() +
       ggtitle("The telescope energy efficiency") +
-      ggsave("EnergyEff.pdf")
+      ggsave(&"EnergyEff_{year}.pdf")
 
     let dfFluxE2 = seqsToDf({ "Axion energy [keV]" : energiesAx,
                               "Flux after experiment" : weights})
@@ -1197,14 +1219,14 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     ggplot(dfFluxE2, aes("Axion energy [keV]", weight = "Flux after experiment")) +
       geom_histogram(binWidth = 0.1) +
       ylab("The fluf after the experiment") +
-      ggsave("FluxEnice.pdf")
+      ggsave(&"FluxEnice_{year}.pdf")
 
     let dfFluxE3 = seqsToDf({ "Axion energy [keV]" : energiesPre})
 
     ggplot(dfFluxE3, aes("Axion energy [keV]")) +
       geom_histogram(binWidth = 0.1) +
       ylab("The fluf before the experiment") +
-      ggsave("FluxE_before_experiment.pdf")
+      ggsave(&"FluxE_before_experiment_{year}.pdf")
 
     #[ggplot(dfFluxE, aes("Axion energy [keV]")) +#, weights = "Flux after experiment")) +
       geom_histogram() +
@@ -1227,11 +1249,10 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   #echo heatmaptable2 #= 5417.0
   #echo getMaxVal(heatmaptable2, 3000)
   var heatmaptable3 = prepareheatmap(3000, 3000, beginX, endX, beginY, endY, pointdataX, pointdataY, weights, getMaxVal(heatmaptable2, 3000)) # if change number of rows: has to be in the maxVal as well
-  echo "Probability of it originating from an axion if a photon hits at x = 5,3mm and y = 8,4mm (in this model):"
-  echo (heatmaptable3[53][84]) * 100.0  #echo heatmaptable3[x][y]
+  # echo "Probability of it originating from an axion if a photon hits at x = 5,3mm and y = 8,4mm (in this model):"
+  # echo (heatmaptable3[53][84]) * 100.0  #echo heatmaptable3[x][y]
 
-  #echo getMaxVal(heatmaptable2, 3000)
-  echo drawfancydiagrams("Axion Model Fluxfraction", heatmaptable2, 3000)
+  drawfancydiagrams("Axion Model Fluxfraction", heatmaptable2, 3000, year)
 
   when false:
     #echo drawfancydiagrams("AxionModelProbability", heatmaptable3, 3000) #Probabilities, that a photon, that hits a certain pixel could originate from an Axion, if the highest is 100%
@@ -1320,7 +1341,7 @@ coldboreBlockedLength = 0.0
 var detectorWindowAperture : float64
 detectorWindowAperture = 14.0 #mm
 
-echo calculateFluxFractions(radiationCharacteristic, detectorWindowAperture, pressGas, mAxion, "CAST", "2017") # radiationCharacteristic = "axionRadiation::characteristic::sar"
+calculateFluxFractions(radiationCharacteristic, detectorWindowAperture, pressGas, mAxion, "CAST", "2018") # radiationCharacteristic = "axionRadiation::characteristic::sar"
 
 #type
 #    vector3 = ref object of Vec3
