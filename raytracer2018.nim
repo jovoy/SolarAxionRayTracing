@@ -807,8 +807,8 @@ proc traceAxion(res: var Axion,
     n3 : float
   case setup
   of "CAST":
-    pointDetectorWindow = getPointDetectorWindow(pointMirror2, pointAfterMirror2 , expSetup.RAYTRACER_FOCAL_LENGTH_XRT, expSetup.lMirror, expSetup.allXsep[8], 62.1, expSetup.d, degToRad(2.8))
-    pointEndDetector = getPointDetectorWindow(pointMirror2, pointAfterMirror2 , (expSetup.RAYTRACER_FOCAL_LENGTH_XRT + 30.0), expSetup.lMirror, expSetup.allXsep[8], 62.1, expSetup.d, degToRad(2.8))
+    pointDetectorWindow = getPointDetectorWindow(pointMirror2, pointAfterMirror2 , expSetup.RAYTRACER_FOCAL_LENGTH_XRT, expSetup.lMirror, expSetup.allXsep[8], 62.1, expSetup.d, degToRad(2.75))
+    pointEndDetector = getPointDetectorWindow(pointMirror2, pointAfterMirror2 , (expSetup.RAYTRACER_FOCAL_LENGTH_XRT + 30.0), expSetup.lMirror, expSetup.allXsep[8], 62.1, expSetup.d, degToRad(2.75))
   of "BabyIAXO":
     distDet = distanceMirrors - 0.5 * expSetup.allXsep[8] * cos(beta) + expSetup.RAYTRACER_FOCAL_LENGTH_XRT - expSetup.RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW
     n = (distDet - pointMirror2[2]) / vectorAfterMirrors[2]
