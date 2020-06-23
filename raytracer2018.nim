@@ -817,9 +817,8 @@ proc traceAxion(res: var Axion,
     pointEndDetector = pointMirror2 + n3 * vectorAfterMirrors
   #var epsilon = arctan(d / distDet)
 
-  #echo abs(sqrt(pointEndDetector[0] * pointEndDetector[0] + pointEndDetector[1] * pointEndDetector[1]) - sqrt(pointDetectorWindow[0] * pointDetectorWindow[0] + pointDetectorWindow[1] * pointDetectorWindow[1]))
-  res.deviationDet = abs(sqrt(pointEndDetector[0] * pointEndDetector[0] + pointEndDetector[1] * pointEndDetector[1]) - sqrt(pointDetectorWindow[0] * pointDetectorWindow[0] + pointDetectorWindow[1] * pointDetectorWindow[1]))
-  #shellNumber.add($h)
+  res.deviationDet = sqrt(pow(2.0, (pointEndDetector[0] - pointDetectorWindow[0])) + pow(2.0, (pointEndDetector[1] - pointDetectorWindow[1])))
+
   var valuesPix = getPixelValue(pointEntranceXRT)
   res.pointdataXBefore = pointEntranceXRT[0]
   res.pointdataYBefore = pointEntranceXRT[1]
