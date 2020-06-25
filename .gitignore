@@ -3,3 +3,6 @@ OPCD_3.3/*
 raytracer2018
 energy_opacity_density.pdf
 radius_temp_density.pdf
+**/*.json
+emrates.txt
+**/*.csv
