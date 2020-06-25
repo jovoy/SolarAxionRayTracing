@@ -16,3 +16,6 @@ radius_temp_density.pdf
 **/*.json
 emrates.txt
 **/*.csv
+
+# ignore results
+results/*
