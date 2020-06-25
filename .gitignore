@@ -1,3 +1,13 @@
+# Ignore all
+*
+
+# Unignore all with extensions
+!*.*
+
+# Unignore all dirs
+!*/
+
+nimdoc.out.css
 settings.json
 OPCD_3.3/*
 raytracer2018
