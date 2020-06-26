@@ -157,13 +157,13 @@ proc getFluxFraction(chipRegionstring: string): float64 =
 
   else: echo "Error: Unknown chip region!"
 
-########################################### some functions we're gonna need later#################################################
-# Now let's get some functions for a random point on a disk, a biased random point from the solar model and a biased random energy ##
+#### some functions for later########
+# Now let's get some functions for a random point on a disk, a biased random
+# point from the solar model and a biased random energy
 
 proc getRandomPointOnDisk(center: Vec3, radius: float64): Vec3 =
-
-  ## This function gets a random point on a disk --> in this case this would be the exit of the coldbore ##
-
+  ## This function gets a random point on a disk --> in this case this would
+  ## be the exit of the coldbore ##
   var
     x = 0.0
     y = 0.0
@@ -177,10 +177,9 @@ proc getRandomPointOnDisk(center: Vec3, radius: float64): Vec3 =
 
 
 proc getRandomPointFromSolarModel(center: Vec3, radius: float64,
-    emRateVecSums: seq[float]): Vec3 =
-
-  ## This function gives the coordinates of a random point in the sun, biased by the emissionrates (which depend on the radius and the energy) ##
-
+                                  emRateVecSums: seq[float]): Vec3 =
+  ## This function gives the coordinates of a random point in the sun, biased
+  ## by the emissionrates (which depend on the radius and the energy) ##
   var
     x = 0.0
     y = 0.0
@@ -207,12 +206,14 @@ proc getRandomPointFromSolarModel(center: Vec3, radius: float64,
 
   result = vector
 
-proc getRandomEnergyFromSolarModel(vectorInSun: Vec3, center: Vec3, radius: float64, energies: seq[float],
+proc getRandomEnergyFromSolarModel(vectorInSun, center: Vec3, radius: float64,
+                                   energies: seq[float],
                                    emissionRates: seq[seq[float]],
-                                       energyOrEmRate: string): float =
+                                   energyOrEmRate: string): float =
 
-  ## This function gives a random energy for an event at a given radius, biased by the emissionrates at that radius. This only works if the energies to choose from are evenly distributed ##
-
+  ## This function gives a random energy for an event at a given radius, biased
+  ## by the emissionrates at that radius. This only works if the energies to
+  ## choose from are evenly distributed ##
   var
     rad = sqrt(vectorInSun[0]*vectorInSun[0]+vectorInSun[1]*vectorInSun[1] + (
         vectorInSun[2]-center[2])*(vectorInSun[2]-center[2]))
@@ -244,13 +245,12 @@ proc getRandomEnergyFromSolarModel(vectorInSun: Vec3, center: Vec3, radius: floa
   of "emissionRate":
     result = emissionRate
 
-## The following are some functions to determine inetersection of the rays with the geometry (pipes, magnet, mirrors) of the setup ##
-
-proc lineIntersectsCircle(point_1: Vec3, point_2: Vec3, center: Vec3,
-    radius: float64, intersect: Vec3): bool =
-
-  ## Now a function to see if the lines from the sun will actually intersect the circle area from the magnet entrance (called coldbore) etc. ##
-
+## The following are some functions to determine inetersection of the rays with the
+## geometry (pipes, magnet, mirrors) of the setup ##
+proc lineIntersectsCircle(point_1, point_2, center: Vec3,
+                          radius: float64, intersect: Vec3): bool =
+  ## Now a function to see if the lines from the sun will actually intersect
+  ## the circle area from the magnet entrance (called coldbore) etc. ##
   var vector = vec3(0.0)
   vector = point_2 - point_1
   var lambda1 = (center[2] - point_1[2]) / vector[2]
@@ -262,9 +262,8 @@ proc lineIntersectsCircle(point_1: Vec3, point_2: Vec3, center: Vec3,
 
 proc lineIntersectsCylinderOnce(point_1: Vec3, point_2: Vec3, centerBegin: Vec3,
     centerEnd: Vec3, radius: float64, intersect: Vec3): bool =
-
-  ## Also a function to know if the line intersected at least the whole magnet, and then only once, because else the axions would have just flown through ##
-
+  ## Also a function to know if the line intersected at least the whole magnet,
+  ## and then only once, because else the axions would have just flown through ##
   let
     vector = point_2 - point_1
     lambda_dummy = (-1000.0 - point_1[2]) / vector[2]
@@ -306,16 +305,16 @@ proc getIntersectLineIntersectsCylinderOnce(point_1: Vec3, point_2: Vec3,
     lambda_2 = -p/2.0 - sqrt(p*p/4.0 - q)
     intersect_1 = dummy + lambda_1 * vector_dummy
     intersect_2 = dummy + lambda_2 * vector_dummy
-    intersect_1_valid = (intersect_1[2] > centerBegin[2]) and (intersect_1[2] <
-        centerEnd[2])
-    intersect_2_valid = (intersect_2[2] > centerBegin[2]) and (intersect_2[2] <
-        centerEnd[2])
+    intersect_1_valid = (intersect_1[2] > centerBegin[2]) and
+                        (intersect_1[2] < centerEnd[2])
+    intersect_2_valid = (intersect_2[2] > centerBegin[2]) and
+                        (intersect_2[2] < centerEnd[2])
   result = if (intersect_1_valid): intersect_1 else: intersect_2
 
 proc circleEdges(theR1: seq[float]): seq[seq[float]] =
-
-  ## A function to create the coordinates of the mirrors of the telescope (they're made of glass) to substract from the overall picture, because Xrays in that range don't pass through glass ##
-
+  ## A function to create the coordinates of the mirrors of the telescope
+  ## (they're made of glass) to substract from the overall picture, because
+  ## Xrays in that range don't pass through glass ##
   const
     sizeViewfield = 48.0 #mm
     d = 83.0             #mm
@@ -370,7 +369,7 @@ proc lineIntersectsArea(R1: float64, prevR1: float64, intersect: Vec3): bool =
 
 ## Some functions to include files from outside like the run file and the emissionrate/energy files ##
 
-#proc getXandY( h5file : string , dsetgrp1 :string, numFirstRun : int, numLastRun : int, chip : string, xOrY : string): seq[float] =
+#proc getXandY( h5file: string , dsetgrp1 :string, numFirstRun: int, numLastRun: int, chip: string, xOrY: string): seq[float] =
 #  ## get the x and y values from the run-file to compare them to our model ##
 #  echo fileExists(h5file)
 #  var h5f = H5file(h5file, "r")
@@ -465,7 +464,7 @@ proc getPointDetectorWindow(pointMirror2: Vec3, pointAfterMirror2: Vec3,
   pointAfterMirror2Turned[1] = pointAfterMirror2[1]
   pointAfterMirror2Turned[2] = (pointAfterMirror2[2] * cos(pipeAngle) -
       pointAfterMirror2[0] * sin(pipeAngle)) - (lMirror + xsepMiddle / 2.0)
-  var vectorAfterMirror2 = pointAfterMirror2Turned - pointMirror2Turned
+  let vectorAfterMirror2 = pointAfterMirror2Turned - pointMirror2Turned
   ## Then the distance from the middle of the telescope to the detector can be calculated with the focal length
   ## Then n can be calculated as hown many times the vector has to be applied to arrive at the detector
 
@@ -700,7 +699,8 @@ proc traceAxion(res: var Axion,
                 detectorWindowAperture: float,
                 dfTab: Table[string, DataFrame]
                ) =
-  ## Get a random point in the sun, biased by the emission rate, which is higher at smalller radii, so this will give more points in the center of the sun ##
+  ## Get a random point in the sun, biased by the emission rate, which is higher
+  ## at smalller radii, so this will give more points in the center of the sun ##
   let pointInSun = getRandomPointFromSolarModel(centerVecs.centerSun, radiusSun, emratesSum)
 
   ## Get a random point at the end of the coldbore of the magnet to take all axions into account that make it to this point no matter where they enter the magnet ##
@@ -1164,7 +1164,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     energies = linspace(1.0, 10000.0, 1112)
     roomTemp = 293.15 #K
 
-  #var emratesNewSum : seq[float]
+  #var emratesNewSum: seq[float]
   #let emratesNew = main(energiesNew)
   let emRatesDf = toDf(readCsv("solar_model_tensor.csv"))
   let emRatesTensor = emRatesDf["value"].toTensor(float)
