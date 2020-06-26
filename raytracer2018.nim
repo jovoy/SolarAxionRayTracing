@@ -389,12 +389,11 @@ proc lineIntersectsArea(R1: float64, prevR1: float64, intersect: Vec3): bool =
   #else: return @[0.0]
 
 
-proc findPosXRT*(pointXRT: Vec3, pointCB: Vec3, r1: float, r2: float,
-    angle: float, lMirror: float, distMirr: float, uncer: float, sMin: float,
-    sMax: float): Vec3 =
-
-  ##this is to find the position the ray hits the mirror shell of r1. it is after transforming the ray into a coordinate system, that has the middle of the beginning of the mirror cones as its origin
-
+proc findPosXRT*(pointXRT: Vec3, pointCB: Vec3,
+                 r1, r2, angle, lMirror, distMirr, uncer, sMin, sMax: float): Vec3 =
+  ## this is to find the position the ray hits the mirror shell of r1. it is after
+  ## transforming the ray into a coordinate system, that has the middle of the
+  ## beginning of the mirror cones as its origin
   var
     point = pointCB
     s: float
@@ -404,65 +403,37 @@ proc findPosXRT*(pointXRT: Vec3, pointCB: Vec3, r1: float, r2: float,
     pointMirror = vec3(0.0)
   let direc = pointXRT - pointCB
 
-
   for i in sMinHigh..sMaxHigh:
     s = i.float / 100000.0
     term = sqrt((point[0] + s * direc[0]) * (point[0] + s * direc[0]) + (point[
         1] + s * direc[1]) * (point[1] + s * direc[1])) - ((r2 - r1) * (point[
         2] + s * direc[2] - distMirr) / (cos(angle) * lMirror))
 
-    if r1 < term + uncer and r1 > term - uncer:
+    if abs(r1 - term) < 2.0 * uncer:
       pointMirror = point + s * direc ## sometimes there are 3 different s for which this works, in that case the one with the highest value is taken
       result = pointMirror
 
-
-proc getVectoraAfterMirror*(pointXRT: Vec3, pointCB: Vec3, pointMirror: Vec3,
-    angle: float, pointOrAngle: string): Vec3 =
-
+proc getVectoraAfterMirror*(pointXRT, pointCB, pointMirror: Vec3,
+                            angle: float, pointOrAngle: string): Vec3 =
   ## this is to find the vector after the reflection on the respective mirror
-
   var normalVec = vec3(0.0)
   normalVec[0] = pointMirror[0]
   normalVec[1] = pointMirror[1]
   normalVec[2] = tan(angle) * sqrt(pointMirror[0] * pointMirror[0] +
       pointMirror[1] * pointMirror[1])
-  var vectorBeforeMirror = pointXRT - pointCB
-  var vectorAxis = vec3(0.0) ## this is the vector product of the normal vector on pointMirror pointing in the direction of the radius of the cylinder and the vector of the ray
-  vectorAxis[0] = normalVec[1] * vectorBeforeMirror[2] - normalVec[2] *
-      vectorBeforeMirror[1]
-  vectorAxis[1] = normalVec[2] * vectorBeforeMirror[0] - normalVec[0] *
-      vectorBeforeMirror[2]
-  vectorAxis[2] = normalVec[0] * vectorBeforeMirror[1] - normalVec[1] *
-      vectorBeforeMirror[0]
+  let vectorBeforeMirror = normalize(pointXRT - pointCB)
+  # this is the vector product of the normal vector on pointMirror pointing
+  # in the direction of the radius of the cylinder and the vector of the ray
+  let vectorAxis = normalize(normalVec.cross vectorBeforeMirror)
+  let alphaMirror = arcsin(abs(normalVec.dot(vectorBeforeMirror) /
+                               normalVec.length))
+  let vecBeforeAxis = cross(vectorBeforeMirror, vectorAxis)
+  let vectorAfterMirror = vectorBeforeMirror * cos(2.0 * alphaMirror) -
+      vecBeforeAxis * sin(2.0 * alphaMirror)
 
-  var alphaMirror = arcsin(abs(normalVec[0] * vectorBeforeMirror[0] + normalVec[
-      1] * vectorBeforeMirror[1] + normalVec[2] * vectorBeforeMirror[2]) / (
-      sqrt((normalVec[0] * normalVec[0] + normalVec[1] * normalVec[1] +
-      normalVec[2] * normalVec[2])) * sqrt((vectorBeforeMirror[0] *
-      vectorBeforeMirror[0] + vectorBeforeMirror[1] * vectorBeforeMirror[1] +
-      vectorBeforeMirror[2] * vectorBeforeMirror[2]))))
-
-  vectorAxis = normalize(vectorAxis)
-  vectorBeforeMirror = normalize(vectorBeforeMirror)
-  var vectorAfterMirror = vec3(0.0)
-  vectorAfterMirror[0] = vectorBeforeMirror[0] * cos(2.0 * alphaMirror) - (
-      vectorBeforeMirror[1] * vectorAxis[2] - vectorBeforeMirror[2] *
-      vectorAxis[1]) * sin(2.0 * alphaMirror)
-  vectorAfterMirror[1] = vectorBeforeMirror[1] * cos(2.0 * alphaMirror) - (
-      vectorBeforeMirror[2] * vectorAxis[0] - vectorBeforeMirror[0] *
-      vectorAxis[2]) * sin(2.0 * alphaMirror)
-  vectorAfterMirror[2] = vectorBeforeMirror[2] * cos(2.0 * alphaMirror) - (
-      vectorBeforeMirror[0] * vectorAxis[1] - vectorBeforeMirror[1] *
-      vectorAxis[0]) * sin(2.0 * alphaMirror)
-
-  var alphaTest = arccos((abs(vectorAfterMirror[0] * vectorBeforeMirror[0] +
-      vectorAfterMirror[1] * vectorBeforeMirror[1] + vectorAfterMirror[2] *
-      vectorBeforeMirror[2])) / (sqrt((vectorAfterMirror[0] * vectorAfterMirror[
-      0] + vectorAfterMirror[1] * vectorAfterMirror[1] + vectorAfterMirror[2] *
-      vectorAfterMirror[2])) * sqrt((vectorBeforeMirror[0] * vectorBeforeMirror[
-      0] + vectorBeforeMirror[1] * vectorBeforeMirror[1] + vectorBeforeMirror[
-      2] * vectorBeforeMirror[2]))))
-  var pointAfterMirror = pointMirror + 200.0 * vectorAfterMirror
+  let alphaTest = arccos(abs(vectorAfterMirror.dot(vectorBeforeMirror) /
+      (vectorAfterMirror.length * vectorBeforeMirror.length))
+  )
   var alphaVec = vec3(0.0)
   alphaVec[0] = radToDeg(alphaTest) / 2.0
   alphaVec[1] = radToDeg(alphaMirror)
@@ -472,7 +443,7 @@ proc getVectoraAfterMirror*(pointXRT: Vec3, pointCB: Vec3, pointMirror: Vec3,
   of "pointMirror":
     result = pointMirror
   of "pointAfter":
-    result = pointAfterMirror
+    result = pointMirror + 200.0 * vectorAfterMirror
   of "vectorAfter":
     result = vectorAfterMirror
 
