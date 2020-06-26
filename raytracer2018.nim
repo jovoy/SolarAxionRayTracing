@@ -1244,18 +1244,18 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     ggtitle("Deviation of X-rays detector entrance to readout") +
     ggsave(&"deviationDet_{year}.pdf")
 
-  ggplot(dfDet, aes("Deviation [mm]", fill = "Shell")) +
+  ggplot(dfDet, aes("Deviation [mm]", fill = factor("Shell"))) +
     geom_histogram(binWidth = 0.001) +
     ggtitle("Deviation of X-rays - detector entrance to readout") +
     ggsave(&"deviationDet_stacked_{year}.pdf")
 
-  ggplot(dfDet, aes("Energies", fill = "Shell")) +
+  ggplot(dfDet, aes("Energies", fill = factor("Shell"))) +
     ggridges("Shell", overlap = 1.8) +
     geom_histogram(binWidth = 0.1, position = "identity") +
     ggtitle("X-ray energy distributions at detector") +
     ggsave(&"energies_by_shell_{year}.pdf", height = 600)
 
-  ggplot(dfDet, aes("Deviation [mm]", fill = "Shell")) +
+  ggplot(dfDet, aes("Deviation [mm]", fill = factor("Shell"))) +
     ggridges("Shell", overlap = 1.8) +
     geom_histogram(binWidth = 0.001, position = "identity") +
     ggtitle("Deviation of X-rays - detector entrance to readout") +
