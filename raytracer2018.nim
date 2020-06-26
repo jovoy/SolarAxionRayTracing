@@ -526,21 +526,8 @@ proc prepareheatmap(numberofrows: int, numberofcolumns: int,
                 coord_Y)][int(coord_X)] + 1*weight1[i]/norm
   result = heatmaptable
 
-proc getMaxVal(table: seq[seq[float]], numberofrows: int): float =
-  var maxVals: seq[float]
-  var maxVal: float64
-  for i in 0 ..< numberofrows:
-    maxVals.add(max(table[i]))
-  maxVal = max(maxVals)
-  result = maxVal
-
-proc getLenght(table: seq[seq[float]], numberofrows: int): int =
-  var lengths: seq[float]
-  var length: int
-  for i in 0 ..< numberofrows:
-    lengths.add(max(table[i]))
-  length = lengths.len
-  result = length
+proc getMaxVal(table: seq[seq[float]]): float =
+  result = table.mapIt(max(it)).max
 
 proc serializePlot(plt: PlotJson, fname: string) =
   ## serializes a plotly plot so that we can run it elsewhere
