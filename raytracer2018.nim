@@ -478,14 +478,7 @@ proc interpTrans(fname: string): CubicSpline[float] =
   result = newCubicSpline(df["PhotonEnergy(eV)"].toTensor(float).toRawSeq,
                           df["Transmission"].toTensor(float).toRawSeq)
 
-proc seqTrans(fname: string, energyOrTrans: string): Tensor[float] =
-  let df = toDf(readCsv(fname, sep = ' '))
-  case energyOrTrans
-  of "energy":
-    result = df["PhotonEnergy(eV)"].toTensor(float)
-  of "transmission":
-    result = df["Transmission"].toTensor(float)
-
+# TODO: move elsewhere!
 let siNfile = "./resources/Si3N4Density=3.44Thickness=0.3microns"
 let spline = interpTrans(siNfile)
 let siFile = "./resources/SiDensity=2.33Thickness=200.microns"
@@ -514,6 +507,7 @@ proc prepareheatmap(numberofrows: int, numberofcolumns: int,
     |-------|-------|-------|
   ]#
   var heatmaptable = newSeqWith(numberofrows, newSeq[float](numberofcolumns))
+  # TODO: clean up!
   for i, value in data_X:
     var coord_X = floor((data_X[i] - start_x) / stepsize_X)
     var coord_Y = floor((data_Y[i] - start_y) / stepsize_Y)
@@ -592,43 +586,11 @@ proc drawfancydiagrams(diagramtitle: string,
   # echo p.save()
   # p.show(&"axion_image_{year}.svg")
 
-proc drawgraph(diagramtitle: string, data_X: seq[float], data_Y: seq[float],
-    energyOrRadius: string): float =
-
-  ## This function draws a graph out of given x and y values ##
-
-  var
-    #colors : seq[Color]
-    #colors = new_seq[Color](data_X.len)
-    size = @[16.0]
-    color = @[Color(r: 0.9, g: 0.1, b: 0.1, a: 1.0)]
-    layout = Layout()
-    #sizes = new_seq[float64](data_X.len)
-  #for i in 0..<data_X.len:
-    #sizes[i] = (10.0)
-    #colors[i] = Color(r: 0.9, g: 0.1, b: 0.1, a: 1.0)#0xFAF0E6)#
-
-  let d = Trace[float64](mode: PlotMode.Markers, `type`: PlotType.ScatterGL,
-                             xs: data_X, ys: data_Y)
-  #d.marker = Marker[float64](size: size, color: color)
-  if energyOrRadius == "energy":
-    layout = Layout(title: diagramtitle, width: 800, height: 800,
-                      xaxis: Axis(title: "Energy [keV]"),
-                      yaxis: Axis(title: "Emission Rate"),
-                          autosize: false) #Fluxfraction [10^20 m^-2 year^-1 keV^-1]
-
-  elif energyOrRadius == "radius":
-    layout = Layout(title: diagramtitle, width: 800, height: 800,
-                      xaxis: Axis(title: "Radius [% of the radius of the sun]"),
-                      yaxis: Axis(title: "Fluxfraction [10^20 m^-2 year^-1 keV^-1]"),
-                          autosize: false)
-  let p = Plot[float](layout: layout, traces: @[d])
-  #echo p.save()
-  p.show("axion_image2.svg")
-
 ############done with the functions, let's use them############
 
 proc getVarsForSetup(setup: string): ExperimentSetup =
+  # TODO: clean up, possibly make this into a toml file where one can
+  # input different settings!
   result = new ExperimentSetup
   case setup
   of "CAST":
@@ -1164,8 +1126,6 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     energies = linspace(1.0, 10000.0, 1112)
     roomTemp = 293.15 #K
 
-  #var emratesNewSum: seq[float]
-  #let emratesNew = main(energiesNew)
   let emRatesDf = toDf(readCsv("solar_model_tensor.csv"))
   let emRatesTensor = emRatesDf["value"].toTensor(float)
     .reshape([emRatesDf.filter(fn {`dimension_1` == 0}).len, emRatesDf.filter(
@@ -1173,22 +1133,8 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   let emrates = emRatesTensor
     .toRawSeq
     .reshape2D([emRatesTensor.shape[1], emRatesTensor.shape[0]])
-    #.transpose
-  echo emRates[0]
-  #echo emRatesNew[0].len
-  #if true: quit()
   doAssert emRates[0].len == 1112
-  #var sum2 = 0.0
   let emRatesSum = emRates.mapIt(it.sum)
-
-  #[for rI in 0..<emratesNew.len:
-    var sum = 0.0
-    for eI in 0..<emratesNew[rI].len:
-      sum += emratesNew[rI][eI]
-    emratesNewSum.add(sum)
-    sum2 += sum
-  emratesNewSum.add(sum2)]#
-
 
   ## Detector Window##
   #theta angle between window strips and horizontal x axis
@@ -1270,7 +1216,8 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   #echo energiesAxAll
   #echo transProbDetector
   #echo kinds
-  echo dfTransProb.pretty(-1)
+
+  # echo dfTransProb.pretty(-1)
 
   ggplot(dfTransProb.arrange("Axion energy [keV]"),
          aes("Axion energy [keV]", "Transmission Probability",
@@ -1397,10 +1344,9 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
       dataValuesX = getXandY(h5file,"likelihood",240, 306, "chip_3","X")
       dataValuesY = getXandY(h5file,"likelihood",240, 306, "chip_3","Y")
 
-    var weightData : seq[float]
+    var weightData: seq[float]
 
-    var weightProb : seq[float]
-    echo getLenght(heatmaptable3, 3000)
+    var weightProb: seq[float]
     #echo dataValuesX.len
     for i in 0 ..< dataValuesX.len:
       weightData.add(1.0)
@@ -1415,7 +1361,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     #echo drawfancydiagrams("AxionModelDataRaw", heatmaptable4, 3000) # the normal data of a run of chip 3
     var heatmaptable5 = prepareheatmap(3000,3000,0.0,14.0,0.0,14.0,dataValuesX,dataValuesY,weightProb,1.0)
     #echo drawfancydiagrams("AxionModelProbability in %", heatmaptable5, 3000) #the probability distribution of being an axion of the data of a run of chip 3
-    #[var weightData1 : seq[float]
+    #[var weightData1: seq[float]
     for i in 0 ..< circleX.len:
       weightData1.add(1.0)
     ]#
