@@ -1,27 +1,19 @@
-import glm/vec
-import math
-# kompilieren und ausführen: nim cpp -r aEL.nim, nim c -r --threads:on --showAllMismatches:on aEL.nim # nim cpp -r --gc:boehm --verbosity:3 Raytracer2018.nim ##hdfview likelihood_2018_2.h5
-# NOTE: Nein, einfach mit:
-# nim c -d:danger -d:H5_FUTURE Raytracer2018.nim
-import strutils
-import algorithm
-import plotly
-import random
-import sequtils, os
-# import nimhdf5 except linspace
-import chroma
-#import ingrid/[tos_helpers, likelihood, ingrid_types]
-import readOpacityFile
-import numericalnim, strformat
-import strscans
-import streams, tables
-#import axionMass/axionMass
-import arraymancer except readCsv, linspace
-import seqmath except linspace
+# stdlib
+import math, strutils, algorithm, random, sequtils, os, strformat, tables
 import json except `{}`
-import ggplotnim
-import weave
 
+# this project
+import readOpacityFile
+# TODO: axionMass will be minified and the important stuff extracted
+# import axionMass/axionMass
+
+# nimble
+import seqmath except linspace
+import arraymancer except readCsv, linspace
+import numericalnim
+import glm/vec
+import plotly, ggplotnim
+import weave
 
 ##################rayTracer###############################
 
@@ -368,25 +360,6 @@ proc lineIntersectsArea(R1: float64, prevR1: float64, intersect: Vec3): bool =
     return false
 
 ## Some functions to include files from outside like the run file and the emissionrate/energy files ##
-
-#proc getXandY( h5file: string , dsetgrp1 :string, numFirstRun: int, numLastRun: int, chip: string, xOrY: string): seq[float] =
-#  ## get the x and y values from the run-file to compare them to our model ##
-#  echo fileExists(h5file)
-#  var h5f = H5file(h5file, "r")
-#  for grp in items(h5f, start_path = dsetgrp1):
-#    if grp.name / chip in h5f:
-#      echo grp
-#      #var energy = h5f[(grp.name / chip / "energyFromCharge"), float64]
-#      if xOrY == "X":
-#        result.add h5f[(grp.name / chip / "centerX"), float64]
-#      else:
-#        result.add h5f[(grp.name / chip / "centerY"), float64]
-  #if xOrY == "X":
-  #  result = valuesX
-  #elif xOrY == "Y":
-  #  result = valuesY
-  #else: return @[0.0]
-
 
 proc findPosXRT*(pointXRT: Vec3, pointCB: Vec3,
                  r1, r2, angle, lMirror, distMirr, uncer, sMin, sMax: float): Vec3 =
@@ -871,23 +844,22 @@ proc traceAxion(res: var Axion,
   vectorBeforeXRT = - vectorBeforeXRT # because we have to get the angles from the perspective of the XRT
 
   var vectorBeforeXRTPolar = vec3(0.0) #(r,theta,phi)
-  vectorBeforeXRTPolar[0] = sqrt(vectorBeforeXRT[0]*vectorBeforeXRT[
-      0]+vectorBeforeXRT[1]*vectorBeforeXRT[1]+vectorBeforeXRT[
-      2]*vectorBeforeXRT[2])
+  vectorBeforeXRTPolar[0] = vectorBeforeXRT.length
   vectorBeforeXRTPolar[1] = radToDeg(arccos(vectorBeforeXRT[
       0]/vectorBeforeXRTPolar[0]))
   vectorBeforeXRTPolar[2] = radToDeg(arctan2(vectorBeforeXRT[2], (
       vectorBeforeXRT[1])))
 
-  vectorBeforeXRTPolar[1] = vectorBeforeXRTPolar[1] -
-      90.0 #this is the pitch angle # not sure why plus 90
+  #this is the pitch angle # not sure why plus 90
+  vectorBeforeXRTPolar[1] = vectorBeforeXRTPolar[1] - 90.0
   let p = vectorBeforeXRTPolar[1]
-  vectorBeforeXRTPolar[2] = vectorBeforeXRTPolar[2] +
-      90.0 #this is the yaw angle, floor to roof
+  #this is the yaw angle, floor to roof
+  vectorBeforeXRTPolar[2] = vectorBeforeXRTPolar[2] + 90.0
   let ya = vectorBeforeXRTPolar[2]
   let
     transmissionTelescopePitch = (0.0008*p*p*p*p + 1e-04*p*p*p - 0.4489*p*p -
         0.3116*p + 96.787) / 100.0
+    # TODO: wait, is this really 6^ya etc ?
     transmissionTelescopeYaw = (6.0e-7 * pow(6.0, ya) - 1.0e-5 * pow(5.0, ya) -
         0.0001 * pow(4.0, ya) + 0.0034 * pow(3.0, ya) - 0.0292 * pow(2.0, ya) -
         0.1534 * ya + 99.959) / 100.0
@@ -896,17 +868,22 @@ proc traceAxion(res: var Axion,
         1e-3) * (pathCB * 1e-3) #g_agamma= 1e-12
 
     distancePipe = (pointDetectorWindow[2] - pointExitCBZylKart[2]) * 1e-3 #m
-                                                                                                           #probConversionMagnetGas = axionConversionProb2(m_a, energyAx, pGas, tGas, (pathCB * 1e-3), expSetup.radiusCB, g_agamma, B)
-                                                                                                           #absorbtionXrays = intensitySuppression2(energyAx, (pathCB * 1e-3) , distancePipe, pGas, tGas, roomTemp) #room temperature in K
-  var
-    transmissionMagnet: float = cos(ya) *
-        probConversionMagnet #1.0 # this is the transformation probability of an axion into a photon, if an axion flying straight through the magnet had one of 100%, angular dependency of the primakoff effect
- #transmissionMagnetGas = cos(ya) * probConversionMagnetGas * absorbtionXrays
+    # for setup including gas
+    #probConversionMagnetGas = axionConversionProb2(m_a, energyAx, pGas, tGas, (pathCB * 1e-3),
+    #                                               expSetup.radiusCB, g_agamma, B)
+    #absorbtionXrays = intensitySuppression2(energyAx, (pathCB * 1e-3) , distancePipe,
+    #                                        pGas, tGas, roomTemp) #room temperature in K
+
+  # this is the transformation probability of an axion into a photon, if an axion
+  # flying straight through the magnet had one of 100%, angular dependency of the primakoff effect
+  var transmissionMagnet: float = cos(ya) * probConversionMagnet #1.0
+  # for setup with gas
+  #transmissionMagnetGas = cos(ya) * probConversionMagnetGas * absorbtionXrays
   var transmissionTelescopeEnergy: float
   #echo probConversionMagnet
   case setup
   of "CAST":
-    transmissionMagnet = cos(ya) * probConversionMagnet #1.0 # this is the transformation probability of an axion into a photon, if an axion flying straight through the magnet had one of 100%, angular dependency of the primakoff effect
+    transmissionMagnet = cos(ya) * probConversionMagnet #1.0
   of "BabyIAXO":
     transmissionMagnet = 0.0 #transmissionMagnetGas
 
