@@ -937,9 +937,10 @@ proc traceAxion(res: var Axion,
   var energyAxTransWindow: int
   # TODO: assignment here of the different kinds is obviously broken. Instead of having
   # one kinds field + the others we should have some additional field or something
-  if abs(y) > stripDistWindow / 2.0 and abs(y) < stripDistWindow / 2.0 +
-      stripWidthWindow or abs(y) > 1.5 * stripDistWindow + stripWidthWindow and
-      abs(y) < 1.5 * stripDistWindow + 2.0 * stripWidthWindow:
+  if abs(y) > stripDistWindow / 2.0 and
+     abs(y) < stripDistWindow / 2.0 + stripWidthWindow or
+     abs(y) > 1.5 * stripDistWindow + stripWidthWindow and
+     abs(y) < 1.5 * stripDistWindow + 2.0 * stripWidthWindow:
     energyAxTransWindow = dfTab["siFile"]["PhotonEnergy(eV)"].toTensor(
         float).toRawSeq.lowerBound(energyAx * 1000.0)
     transWindow = dfTab["siFile"]["Transmission"].toTensor(float)[energyAxTransWindow]
@@ -1177,13 +1178,18 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   extractPass(energiesAx)
   extractPass(shellNumber)
 
+  extractPass(weights)
   extractPass(transProbArgon)
+
+  extractPass(pointDataX)
+  extractPass(pointDataY)
 
   template extractAll(n: untyped): untyped =
     let n = axions.mapIt(it.n)
-  extractPass(energiesAxAll)
-  extractPass(transProbDetector)
-  extractPass(kinds)
+  extractAll(energiesAxAll)
+  extractAll(energiesPre)
+  extractAll(transProbDetector)
+  extractAll(kinds)
 
   ################################################################################
   ################################################################################
@@ -1240,57 +1246,51 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     ggtitle("Deviation of X-rays - detector entrance to readout") +
     ggsave(&"deviationDet_ridges_{year}.pdf", height = 600)
 
-  when false:
-    let dfFluxE = seqsToDf({"Axion energy [eV]": energiesflux,
-                                "Flux after experiment": fluxes})
-    ggplot(dfFluxE, aes("Axion energy [eV]", "Flux after experiment")) +
-      geom_point() +
-      ggtitle("The fluf after the experiment") +
-      ggsave(&"FluxE_{year}.pdf")
+  let dfFluxE = seqsToDf({"Axion energy [eV]": energiesflux,
+                              "Flux after experiment": fluxes})
+  ggplot(dfFluxE, aes("Axion energy [eV]", "Flux after experiment")) +
+    geom_point() +
+    ggtitle("The fluf after the experiment") +
+    ggsave(&"FluxE_{year}.pdf")
 
-    let fname2 = "extracted_from_aznar2015_llnl_telescope_eff_plot.csv"
-    let dfEnergyEff = toDf(readCsv(fname2, sep = ','))
-      .mutate(fn {"Energies [keV]" ~ `xVals` * 8.0 + 1.0},
-              fn {"Effective Area [cm^2]" ~ `yVals` *
-                  8.5}) #.mutate(f{int -> float: "Radii" ~ `Radii`.float * 0.0005 + 0.0015})
+  #let fname2 = "extracted_from_aznar2015_llnl_telescope_eff_plot.csv"
+  #let dfEnergyEff = toDf(readCsv(fname2, sep = ','))
+  #  .mutate(fn {"Energies [keV]" ~ `xVals` * 8.0 + 1.0},
+  #          fn {"Effective Area [cm^2]" ~ `yVals` *
+  #              8.5}) #.mutate(f{int -> float: "Radii" ~ `Radii`.float * 0.0005 + 0.0015})
 
-    ggplot(dfEnergyEff, aes("Energies [keV]", "Effective Area [cm^2]")) +
-      geom_line() +
-      ggtitle("The telescope energy efficiency") +
-      ggsave(&"EnergyEff_{year}.pdf")
+  #ggplot(dfEnergyEff, aes("Energies [keV]", "Effective Area [cm^2]")) +
+  #  geom_line() +
+  #  ggtitle("The telescope energy efficiency") +
+  #  ggsave(&"EnergyEff_{year}.pdf")
 
-    let dfFluxE2 = seqsToDf({"Axion energy [keV]": energiesAx,
-                              "Flux after experiment": weights})
+  let dfFluxE2 = seqsToDf({"Axion energy [keV]": energiesAx,
+                            "Flux after experiment": weights})
 
-    ggplot(dfFluxE2, aes("Axion energy [keV]",
-        weight = "Flux after experiment")) +
-      geom_histogram(binWidth = 0.1) +
-      ylab("The fluf after the experiment") +
-      ggsave(&"FluxEnice_{year}.pdf")
+  ggplot(dfFluxE2, aes("Axion energy [keV]", weight = "Flux after experiment")) +
+    geom_histogram(binWidth = 0.1) +
+    ylab("The fluf after the experiment") +
+    ggsave(&"FluxEnice_{year}.pdf")
 
-    let dfFluxE3 = seqsToDf({"Axion energy [keV]": energiesPre})
+  let dfFluxE3 = seqsToDf({"Axion energy [keV]": energiesPre})
 
-    ggplot(dfFluxE3, aes("Axion energy [keV]")) +
-      geom_histogram(binWidth = 0.1) +
-      ylab("The fluf before the experiment") +
-      ggsave(&"FluxE_before_experiment_{year}.pdf")
+  ggplot(dfFluxE3, aes("Axion energy [keV]")) +
+    geom_histogram(binWidth = 0.1) +
+    ylab("The fluf before the experiment") +
+    ggsave(&"FluxE_before_experiment_{year}.pdf")
 
-    #[ggplot(dfFluxE, aes("Axion energy [keV]")) +#, weights = "Flux after experiment")) +
-      geom_histogram() +
-      ggtitle("Energy dependeny") +
-      ggsave("energiesHisto.pdf")]#
+  #[ggplot(dfFluxE, aes("Axion energy [keV]")) +#, weights = "Flux after experiment")) +
+    geom_histogram() +
+    ggtitle("Energy dependeny") +
+    ggsave("energiesHisto.pdf")]#
 
-    ## get the heatmaps out of the sequences of data X and data Y, first for the amount of data in one pixel ##
-    ## compared to the overall amount and then the data in one pixel compared to the maximal amount of data in any pixel ##
+  ## get the heatmaps out of the sequences of data X and data Y, first for the amount of data in one pixel ##
+  ## compared to the overall amount and then the data in one pixel compared to the maximal amount of data in any pixel ##
   var
     beginX = 0.0 #- distanceCBAxisXRTAxis * 0.01
     endX = 14.0  #- distanceCBAxisXRTAxis * 0.01
     beginY = 0.0 #- distanceCBAxisXRTAxis * 0.01
     endY = 14.0  #- distanceCBAxisXRTAxis * 0.01
-  let
-    pointdataX = axionsPass.mapIt(it.pointDataX)
-    pointdataY = axionsPass.mapIt(it.pointDataY)
-    weights = axionsPass.mapIt(it.weights)
   var heatmaptable1 = prepareheatmap(3000, 3000, beginX, endX, beginY, endY,
       pointdataX, pointdataY, weights,
       numberOfPointsSun) #colour scale is now the number of points in one pixel divided by the the number of all events
