@@ -276,10 +276,10 @@ proc lineIntersectsCylinderOnce(point_1: Vec3, point_2: Vec3, centerBegin: Vec3,
     lambda_2 = -p/2.0 - sqrt(p*p/4.0 - q)
     intersect_1 = dummy + lambda_1 * vector_dummy
     intersect_2 = dummy + lambda_2 * vector_dummy
-    intersect_1_valid = (intersect_1[2] > centerBegin[2]) and (intersect_1[2] <
-        centerEnd[2])
-    intersect_2_valid = (intersect_2[2] > centerBegin[2]) and (intersect_2[2] <
-        centerEnd[2])
+    intersect_1_valid = (intersect_1[2] > centerBegin[2]) and
+                        (intersect_1[2] < centerEnd[2])
+    intersect_2_valid = (intersect_2[2] > centerBegin[2]) and
+                        (intersect_2[2] < centerEnd[2])
   if ( (intersect_1_valid and intersect_2_valid) or (not intersect_1_valid and
       not intersect_2_valid)):
     return false
@@ -911,18 +911,20 @@ proc traceAxion(res: var Axion,
     transmissionMagnet = 0.0 #transmissionMagnetGas
 
   if energyAx < 2.0:
-    transmissionTelescopeEnergy = (-0.013086145 * energyAx * energyAx *
-        energyAx * energyAx + 0.250552655 * energyAx * energyAx * energyAx -
-        1.541426299 * energyAx * energyAx + 2.064933639 * energyAx +
-        7.625254445) / (14.38338 - (4.3 *
-        0.2)) #total eff area of telescope = 1438.338mm² = 14.38338cm² #the last thing are the mirror seperators
+    #total eff area of telescope = 1438.338mm² = 14.38338cm² #the last thing are the mirror seperators
+    transmissionTelescopeEnergy = (-0.013086145 * pow(energyAx, 4) +
+                                   0.250552655 * pow(energyAx, 3) -
+                                   1.541426299 * energyAx * energyAx +
+                                   2.064933639 * energyAx +
+                                   7.625254445) / (14.38338 - (4.3 * 0.2))
   elif energyAx >= 2.0 and energyAx < 8.0:
-    transmissionTelescopeEnergy = (0.0084904 * energyAx * energyAx * energyAx *
-        energyAx * energyAx * energyAx - 0.199553 * energyAx * energyAx *
-        energyAx * energyAx * energyAx + 1.75302 * energyAx * energyAx *
-        energyAx * energyAx - 7.05939 * energyAx * energyAx * energyAx +
-        12.6706 * energyAx * energyAx - 9.23947 * energyAx + 9.96953) / (
-        14.38338 - (4.3 * 0.2))
+    transmissionTelescopeEnergy = (0.0084904 * pow(energyAx, 6) -
+                                   0.199553 * pow(energyAx, 5) +
+                                   1.75302 * pow(energyAx, 4) -
+                                   7.05939 * pow(energyAx, 3) +
+                                   12.6706 * energyAx * energyAx -
+                                   9.23947 * energyAx +
+                                   9.96953) / (14.38338 - (4.3 * 0.2))
   else:
     transmissionTelescopeEnergy = 0.0
   #echo "Without gas", probConversionMagnet
