@@ -1182,12 +1182,12 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
                     detectorWindowAperture,
                     dfTab)
   exit(Weave)
+
   # walk the axions and determine `integralTotal` and `integral*`
   #if(gold and withinWindow): integralGold = integralGold + weight
   #if(silver and withinWindow): integralSilver = integralSilver + weight
   #if(bronze and withinWindow): integralBronze = integralBronze + weight
   #if(detector and withinWindow): integralDetector = integralDetector + weight
-
 
   let axionsPass = axions.filterIt(it.passed)
   echo "Passed axions ", axionsPass.len
@@ -1319,79 +1319,14 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
       numberOfPointsSun) #colour scale is now the number of points in one pixel divided by the the number of all events
   var heatmaptable2 = prepareheatmap(3000, 3000, beginX, endX, beginY, endY,
       pointdataX, pointdataY, weights, 1.0)
-  #echo heatmaptable2 #= 5417.0
-  #echo getMaxVal(heatmaptable2, 3000)
   var heatmaptable3 = prepareheatmap(3000, 3000, beginX, endX, beginY, endY,
-      pointdataX, pointdataY, weights, getMaxVal(heatmaptable2,
-      3000)) # if change number of rows: has to be in the maxVal as well
+      pointdataX, pointdataY, weights, getMaxVal(heatmaptable2)) # if change number of rows: has to be in the maxVal as well
  # echo "Probability of it originating from an axion if a photon hits at x = 5,3mm and y = 8,4mm (in this model):"
  # echo (heatmaptable3[53][84]) * 100.0  #echo heatmaptable3[x][y]
 
   drawfancydiagrams("Axion Model Fluxfraction", heatmaptable2, 3000, year)
 
   when false:
-    #echo drawfancydiagrams("AxionModelProbability", heatmaptable3, 3000) #Probabilities, that a photon, that hits a certain pixel could originate from an Axion, if the highest is 100%
-    #echo integralNormalisation # number of hits before the setup
-    #echo pointdataX.len # number of hits after the setup
-
-    # get the heatmap of the data of a run for comparison
-
-    #[
-    #let FILE = "likelihood_2018_2_all.h5"
-    let h5file = "likelihood_2018_2.h5"
-    var
-      dataValuesX: seq[float]
-      dataValuesY: seq[float]
-    if fileExists(h5file):
-      dataValuesX = getXandY(h5file,"likelihood",240, 306, "chip_3","X")
-      dataValuesY = getXandY(h5file,"likelihood",240, 306, "chip_3","Y")
-
-    var weightData: seq[float]
-
-    var weightProb: seq[float]
-    #echo dataValuesX.len
-    for i in 0 ..< dataValuesX.len:
-      weightData.add(1.0)
-      var X = int(floor(dataValuesX[i]*100.0))
-      var Y = int(floor(dataValuesY[i]*100.0))
-      #echo heatmaptable3[X][Y] * 10.0
-      weightProb.add(heatmaptable3[X][Y] * 100.0)
-
-    #echo dataValuesX
-    #echo dataValuesY
-    var heatmaptable4 = prepareheatmap(3000,3000,0.0,14.0,0.0,14.0,dataValuesX,dataValuesY,weightData,1.0)
-    #echo drawfancydiagrams("AxionModelDataRaw", heatmaptable4, 3000) # the normal data of a run of chip 3
-    var heatmaptable5 = prepareheatmap(3000,3000,0.0,14.0,0.0,14.0,dataValuesX,dataValuesY,weightProb,1.0)
-    #echo drawfancydiagrams("AxionModelProbability in %", heatmaptable5, 3000) #the probability distribution of being an axion of the data of a run of chip 3
-    #[var weightData1: seq[float]
-    for i in 0 ..< circleX.len:
-      weightData1.add(1.0)
-    ]#
-    var heatmaptable6 = prepareheatmap(140,140,0.0,33.0,0.0,33.0,circleX,circleY,weightData1,1.0)
-    echo drawfancydiagrams("Mirrors", heatmaptable6, 140)]#
-
-    var weightData2: seq[float]
-    for i in 0 ..< pixvalsY.len:
-      weightData2.add(1.0)
-
-    #var heatmaptable7 = prepareheatmap(1400,1400,0.0,1400.0,0.0,1400.0,pixvalsX,pixvalsY,weightData2,1.0)
-    #echo drawfancydiagrams("Mirrors", heatmaptable7, 1400)
-    #echo drawfancydiagrams("Mirrors",circleTotal , 1400)
-
-    ##################################  Graphs  #######################################################
-
-    #echo drawgraph("Energy142", radii, fluxfractionrad, "radius")
-    #echo drawgraph("Radius 0%, 10% and 20%", energies, fluxfractionen, "energy") #Biased random energy distribution
-    #echo drawgraph("RadiusInt", energies, fluxfracints, "energy")
-
-    #echo drawgraph("EmissionsRates",emrates, emratesGl, "energy")
-    ##echo drawgraph("EmissionsRates",energiesGl, emratesGl, "energy")
-    #echo drawgraph("EmissionsRates",energies, emrates, "energy")
-
-    #### now let's get the fluxfraction of the gold region by getting the weight of each event (probability of transition, dependend on the XRay-telescope transmission and the lenth of the
-    # path the particle would have traveled through the magnet) and divide it through the number of all events
-
-
     fluxFractionTotal = integralTotal #/ integralNormalisation
     fluxFractionDetector = integralDetector #/ integralNormalisation
     fluxFractionBronze = integralBronze #/ integralNormalisation
@@ -1403,31 +1338,24 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     echo "Flux fraction total"
     echo fluxFractionTotal
 
+when isMainModule:
+  # TODO: make these characteristics a mix of enums + something part of
+  # `ExperimentSetup` object
+  var radiationCharacteristic: string ##axionRadiation::characteristic radiationCharacteristic(axionRadiation::characteristic::sar);
+  radiationCharacteristic = "axionRadiation::characteristic::sar"
+  var coldboreBlockedLength: float64
+  coldboreBlockedLength = 0.0
+  var detectorWindowAperture: float64
+  detectorWindowAperture = 14.0 #mm
 
+  calculateFluxFractions(radiationCharacteristic, detectorWindowAperture,
+                         pressGas, mAxion, "CAST",
+                         "2018") # radiationCharacteristic = "axionRadiation::characteristic::sar"
 
-
-
-
-var radiationCharacteristic: string ##axionRadiation::characteristic radiationCharacteristic(axionRadiation::characteristic::sar);
-radiationCharacteristic = "axionRadiation::characteristic::sar"
-var coldboreBlockedLength: float64
-coldboreBlockedLength = 0.0
-var detectorWindowAperture: float64
-detectorWindowAperture = 14.0 #mm
-
-calculateFluxFractions(radiationCharacteristic, detectorWindowAperture,
-    pressGas, mAxion, "CAST",
-    "2018") # radiationCharacteristic = "axionRadiation::characteristic::sar"
-
-#type
-#    vector3 = ref object of Vec3
-
-## things changed##
-
-# weight (telescopetransmission)
-# VT4 -> VT3
-# XRT Focal length 1600.0 -> 1500.0
-# RAYTRACER_RADIUS_PIPE_CB_VT3 = 33.6 #mm from drawing #30.0 #mm (original)
-# RAYTRACER_LENGTH_PIPE_VT3_XRT = 264.7 #mm from picture #198.2 #mm (original)
-# RAYTRACER_RADIUS_PIPE_VT3_XRT = 25.0 #mm from drawing #35.0 #m (original)
-# 265x265 Pixel
+  # weight (telescopetransmission)
+  # VT4 -> VT3
+  # XRT Focal length 1600.0 -> 1500.0
+  # RAYTRACER_RADIUS_PIPE_CB_VT3 = 33.6 #mm from drawing #30.0 #mm (original)
+  # RAYTRACER_LENGTH_PIPE_VT3_XRT = 264.7 #mm from picture #198.2 #mm (original)
+  # RAYTRACER_RADIUS_PIPE_VT3_XRT = 25.0 #mm from drawing #35.0 #m (original)
+  # 265x265 Pixel
