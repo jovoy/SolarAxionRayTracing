@@ -11,7 +11,7 @@ import readOpacityFile
 import seqmath except linspace
 import arraymancer except readCsv, linspace
 import numericalnim
-import glm/vec
+import glm
 import plotly, ggplotnim
 import weave
 
@@ -504,60 +504,37 @@ proc drawfancydiagrams(diagramtitle: string,
                        width: int,
                        year: string) =
   ## this function draws a hdiagram out a given heatmap ##
-
-  let
-    # The GL heatmap is also supported as HeatMapGL
-    d = Trace[float32](mode: PlotMode.Lines, `type`: PlotType.HeatMap)
-
-  d.colormap = ColorMap.Viridis
-  d.zs = newSeqWith(width, newSeq[float32](width))
-  for x in 0 ..< width:
-    for y in 0 ..< width:
-      if x < width:
-        if y < width:
-          if x > 0:
-            if y > 0:
-              d.zs[y][x] = objectstodraw[y][x]
-  echo objectstodraw[1500][1500]
-  #let d = heatmap(zs).toPlotJson
-  d.zmin = 0.0
-  d.zmax = 5e-22
-  const
-    a = @[float32(CHIPREGIONS_GOLD_Y_MIN * 3000.0 / 14.0), float32(
-        CHIPREGIONS_GOLD_Y_MIN * 3000.0 / 14.0), float32(
-        CHIPREGIONS_GOLD_Y_MAX * 3000.0 / 14.0), float32(
-        CHIPREGIONS_GOLD_Y_MAX * 3000.0 / 14.0), float32(
-        CHIPREGIONS_GOLD_Y_MIN * 3000.0 / 14.0)]
-    b = @[float32(CHIPREGIONS_GOLD_X_MIN * 3000.0 / 14.0), float32(
-        CHIPREGIONS_GOLD_X_MAX * 3000.0 / 14.0), float32(
-        CHIPREGIONS_GOLD_X_MAX * 3000.0 / 14.0), float32(
-        CHIPREGIONS_GOLD_X_MIN * 3000.0 / 14.0), float32(
-        CHIPREGIONS_GOLD_X_MIN * 3000.0 / 14.0)]
-  let
-    d4 = Trace[float32](mode: PlotMode.LinesMarkers, `type`: PlotType.ScatterGL,
-        ys: a, xs: b)
-
-
-  let
-    layout = Layout(title: diagramtitle, width: 800, height: 800,
-                    xaxis: Axis(title: "x-axis [mm]"), #range: (0.0, 14.0)),
-      yaxis: Axis(title: "y-axis [mm]"), autosize: false)
-  let p = Plot[float32](layout: layout, traces: @[d, d4]).toPlotJson
-  let values = arange(0, 3000, 750)
   var
-    xFields = newJObject()
-    yFields = newJObject()
-  xFields["tickvals"] = % values
-  xFields["ticktext"] = % values.mapIt(&"{it.float * 14.0 / 3000.0:.2f}")
-  xFields["title"] = % "x-axis [mm]"
-  p.layout["xaxis"] = xFields
-  yFields["tickvals"] = % values
-  yFields["ticktext"] = % values.mapIt(&"{it.float * 14.0 / 3000.0:.2f}")
-  yFields["title"] = % "y-axis [mm]"
-  p.layout["yaxis"] = yFields
-  p.serializePlot(&"axionImage_{year}.json")
-  # echo p.save()
-  # p.show(&"axion_image_{year}.svg")
+    xs = newSeq[int](width * width)
+    ys = newSeq[int](width * width)
+    zs = newSeq[float](width * width)
+  for y in 0 ..< width:
+    for x in 0 ..< width:
+      xs[y * width] = x
+      ys[y * width] = y
+      zs[y * width] = objectstodraw[y][x]
+  #d.zmin = 0.0
+  #d.zmax = 5e-22
+  var df = seqsToDf({ "x" : xs,
+                      "y" : ys,
+                      "z" : zs })
+    .mutate(f{float: "x-axis [mm]" ~ `x` * 14.0 / 3000.0},
+            f{float: "y-axis [mm]" ~ `y` * 14.0 / 3000.0})
+  template makeMinMax(knd, ax: untyped): untyped =
+    template `knd ax`(): untyped =
+      `CHIPREGIONS_GOLD ax knd` * 3000.0 / 14.0
+  makeMinMax(min, X)
+  makeMinMax(max, X)
+  makeMinMax(min, Y)
+  makeMinMax(max, Y)
+
+  ggplot(df, aes("x-axis [mm]", "y-axis [mm]", "z")) +
+    geom_raster() +
+    geom_line(aes = aes(xMin = minX(), xMax = maxX(), y = minY())) +
+    geom_line(aes = aes(xMin = minX(), xMax = maxX(), y = maxY())) +
+    geom_line(aes = aes(yMin = minY(), yMax = maxY(), x = minX())) +
+    geom_line(aes = aes(yMin = minY(), yMax = maxY(), x = maxX())) +
+    ggsave(&"axion_image_{year}.pdf")
 
 ############done with the functions, let's use them############
 
