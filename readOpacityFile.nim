@@ -67,6 +67,20 @@ type
 
   ZTempDensity = tuple[Z: int, temp: int, density: int]
 
+const atomicMass =
+  [1.0078, 4.0026, 3.0160, 12.0000, 13.0033, 14.0030, 15.0001, 15.9949, 16.9991,
+   17.9991, 20.1797, 22.9897, 24.3055, 26.9815, 28.085, 30.9737, 32.0675,
+   35.4515, 39.8775, 39.0983, 40.078, 44.9559, 47.867, 50.9415, 51.9961,
+   54.9380, 55.845, 58.9331, 58.6934] #all the 29 elements from the solar model file
+const elements =
+  ["H1", "He4","He3", "C12", "C13", "N14", "N15", "O16", "O17", "O18", "Ne",
+   "Na", "Mg", "Al", "Si", "P", "S", "Cl", "Ar", "K", "Ca", "Sc", "Ti", "V",
+   "Cr", "Mn", "Fe", "Co", "Ni"]
+const charges =
+  [1.0, 2.0, 2.0, 6.0, 6.0, 7.0, 7.0, 8.0, 8.0, 8.0, 10.0, 11.0, 12.0, 13.0,
+   14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0,
+   26.0, 27.0, 28.0]
+
 macro iterEnum(en: typed): untyped =
   result = nnkBracket.newTree()
   let impl = en.getImpl
@@ -211,8 +225,8 @@ proc readMeshFile(fname: string): seq[float] =
   #[var
     f = open(fname)
     line = ""
-    ustring : string
-    uValues : seq[float]
+    ustring: string
+    uValues: seq[float]
 
   while f.readLine(line):
     let ustring = line
@@ -227,7 +241,7 @@ let dfMesh = readMeshFile(meshFile)
 
 let spline = newCubicSpline(dfMesh, lineNumbers )
 
-proc lagEval(n : int, x : float) : float =
+proc lagEval(n: int, x: float): float =
   if(n>0):
     result  = (2.0 * n.float - 1.0 - x) * lagEval(n-1,x) - (1.0 - (1.0 / n.float))* lagEval(n-2,x)
   elif(n==1):
@@ -236,18 +250,18 @@ proc lagEval(n : int, x : float) : float =
     result =  1.0
   else: result= 0.0
 
-proc lagDeriv(m : int, x : float) : float =
+proc lagDeriv(m: int, x: float): float =
   if(m>0):
     result = lagDeriv(m-1,x) - lagEval(m-1,x)
   elif(m==0):
     result = 0.0
-  else : result = 0.0
+  else: result = 0.0
 
-proc quadWeight(x : float): float =
+proc quadWeight(x: float): float =
   let N = 5
   result = 1.0 / (x * pow(lagDeriv(N,x),2) )
 
-proc inner_integral(t : float, y: float) : float =
+proc inner_integral(t: float, y: float): float =
   result = (1.0/2.0) * ( ((y * y) / (t * t + y * y)) + ln( t * t + y * y ) )
 
 proc outer(x, w, y: float): float =
@@ -262,7 +276,7 @@ proc outer(x, w, y: float): float =
 
   result = coeff * integral
 
-proc fNew(w : float, y : float) : float =
+proc fNew(w: float, y: float): float =
   # integrate `outer` frm `0` to `inf`
   # rewrite via
   # int_a^infty dx f(x) = int_0^1 f(a + (1 - t) / t) / t^2
@@ -279,7 +293,7 @@ proc fNew(w : float, y : float) : float =
   result = adaptiveGauss(fnToInt, 0.0, 1.0)
 
 
-proc quadFunc(x : float, y : float, w : float): float =
+proc quadFunc(x: float, y: float, w: float): float =
   var up_lim = sqrt(x * x + w) + x # sqrt(x  +w) + sqrt(x)
   var lo_lim = sqrt(x * x + w) - x # sqrt(x  +w) - sqrt(x)
   result = inner_integral(up_lim, y) - inner_integral(lo_lim, y);
@@ -287,12 +301,12 @@ proc quadFunc(x : float, y : float, w : float): float =
 
 
 
-proc f(w : float, y : float) : float =
+proc f(w: float, y: float): float =
   let N = 5
   var
-    res_coef : seq[float]
+    res_coef: seq[float]
     lcoef = newSeqWith(N + 1, newSeq[float](N + 1))
-    weights_vec : seq[float]
+    weights_vec: seq[float]
   lcoef[0][0] = 1.0
   lcoef[1][0] = 1.0
   lcoef[1][1]  = -1.0 # coeffs of the first two polynomials
@@ -319,30 +333,44 @@ proc f(w : float, y : float) : float =
 
 ## The functions for all the parts of the emission rate ##
 
-proc comptonEmrate(alpha : float, gae : float, energy : float, ne : float, me : float, temp : float) : float =
-  result = (alpha * gae * gae * energy * energy * ne) / (3.0 * me * me * me * me * (exp(energy / temp) - 1.0))
+proc comptonEmrate(alpha, gae, energy, ne, me, temp: float): float =
+  result = (alpha * gae * gae * energy * energy * ne) /
+           (3.0 * pow(me, 4) * (exp(energy / temp) - 1.0))
 
-proc bremsEmrate(alpha : float, gae : float, energy : float, ne : float, me : float, temp : float, w : float, y : float) : float =
-  result = (alpha * alpha * gae * gae * 4.0 * sqrt(PI) * ne * ne * exp(- energy / temp) * fNew(w, sqrt(2.0) * y)) / (3.0 * sqrt(temp) * pow(me, 3.5) * energy)
+proc bremsEmrate(alpha, gae, energy, ne, me, temp, w, y: float): float =
+  result = (alpha * alpha * gae * gae * 4.0 * sqrt(PI) * ne * ne *
+              exp(- energy / temp) * fNew(w, sqrt(2.0) * y)) /
+           (3.0 * sqrt(temp) * pow(me, 3.5) * energy)
 
-proc term1(gae : float, energy : float, abscoef : float, echarge : float, me : float, temp : float) : float =
-  result = (gae * gae * energy * energy * abscoef) / (2.0 * echarge * echarge * me * me * (exp(energy / temp) - 1.0))
+proc term1(gae, energy, abscoef, echarge, me, temp: float): float =
+  result = (gae * gae * energy * energy * abscoef) /
+           (2.0 * echarge * echarge * me * me * (exp(energy / temp) - 1.0))
 
-proc term2(alpha : float, gae : float, energy : float, ne : float, me : float, temp : float) : float =
-  result = ((exp(energy / temp) - 2.0) * comptonEmrate(alpha, gae, energy, ne, me, temp)) / (2.0 * (exp(energy / temp) - 1.0))
+proc term2(alpha, gae, energy, ne, me, temp: float): float =
+  result = ((exp(energy / temp) - 2.0) *
+               comptonEmrate(alpha, gae, energy, ne, me, temp)) /
+           (2.0 * (exp(energy / temp) - 1.0))
 
-proc freefreeEmrate(alpha : float, gae : float, energy : float, ne : float, me : float, temp : float, nzZ2 :float, w:float, y:float) : float =
-  result = (fNew(w, y) * alpha * alpha * gae * gae  * 8.0 * sqrt(PI) * ne * nzZ2 * exp(-energy/temp)) / (3.0 * sqrt(2.0 * temp) * pow(me, 3.5) * energy)
+proc freefreeEmrate(alpha, gae, energy, ne, me, temp, nzZ2, w, y: float): float =
+  result = (fNew(w, y) * alpha * alpha * gae * gae  * 8.0 * sqrt(PI) * ne * nzZ2 *
+                exp(-energy/temp)) /
+           (3.0 * sqrt(2.0 * temp) * pow(me, 3.5) * energy)
 
-proc primakoff(temp : float, energy : float, gagamma : float, ks2 : float, alpha : float, ne : float, me : float) : float = # from Raffelt 2006 dont know if this is the newest
-  if (4.0 * PI * ne) / (me * energy * energy) > 1.0 or  energy == 0.0  :
+proc primakoff(temp, energy, gagamma, ks2, alpha, ne, me: float): float =
+  ## from Raffelt 2006 dont know if this is the newest
+  if (4.0 * PI * ne) / (me * energy * energy) > 1.0 or energy == 0.0:
     result = 0.0
-  #echo "now ", (4.0 * PI * ne) / (me * energy * energy)
   else:
-    result = (gagamma * gagamma * 1e-12 * temp * ks2) / (32.0 * PI) * ((1.0 + (ks2 / (4.0 * energy * energy))) * ln(1.0 + (4.0 * energy * energy) / ks2) - 1.0) * 2.0 * sqrt(1.0 - (4.0 * PI * ne) / (me * energy * energy)) / (exp(energy/temp) - 1.0)
+    result = (gagamma * gagamma * 1e-12 * temp * ks2) /
+             (32.0 * PI) *
+             ((1.0 + (ks2 / (4.0 * energy * energy))) *
+                 ln(1.0 + (4.0 * energy * energy) / ks2) - 1.0) *
+             2.0 * sqrt(1.0 - (4.0 * PI * ne) / (me * energy * energy)) /
+             (exp(energy/temp) - 1.0)
 
-
-proc getFluxFraction(energies : seq[float], df : DataFrame, n_es : seq[int], temperatures : seq[int], emratesS : seq[seq[float]]) : seq[float] =
+proc getFluxFraction(energies: seq[float], df: DataFrame,
+                     n_es, temperatures: seq[int],
+                     emratesS: seq[seq[float]]): seq[float] =
   const
     alpha = 1.0 / 137.0
     g_ae = 1e-13 # Redondo 2013: 0.511e-10
@@ -354,30 +382,35 @@ proc getFluxFraction(energies : seq[float], df : DataFrame, n_es : seq[int], tem
     hbar = 6.582119514e-25 # in GeV * s
     keV2cm = 1.97327e-8 # cm per keV^-1
     amu = 1.6605e-24 #grams
-  var diff_fluxs : seq[float]
-  let factor =   pow( r_sun * 0.1 / (keV2cm), 3.0) / ( pow( 0.1 * r_sunearth, 2.0) * (1.0e6 * hbar)) / (3.1709791983765E-8 * 1.0e-4) # for units of 1/(keV y m²)
-
+  var diff_fluxs: seq[float]
+  let factor = pow(r_sun * 0.1 / (keV2cm), 3.0) /
+               (pow(0.1 * r_sunearth, 2.0) * (1.0e6 * hbar)) /
+               (3.1709791983765E-8 * 1.0e-4) # for units of 1/(keV y m²)
   for e in energies:
-
     var iEindexx = ((e - 1.0) / 9.0).toInt
     var diff_flux = 0.0
-
     var r_last = 0.0
     var summm = 0.0
     var sum = 0.0
     for r in 0..<df["Rho"].len:
-      var n_e_keV = pow(10.0, (n_es[r].toFloat * 0.25)) * 7.683e-24 # was 1/cm³ #correct conversion
-
-      var t_keV = pow(10.0, (temperatures[r].toFloat * 0.025)) * 8.617e-8 # was K # correct conversion
-      var e_keV = e * 0.001
-      let r_mm = (r.float * 0.0005 + 0.0015) * r_sun
-      let r_perc = (r.float * 0.0005 + 0.0015)
+      let
+        n_e_keV = pow(10.0, (n_es[r].toFloat * 0.25)) * 7.683e-24 # was 1/cm³ #correct conversion
+        t_keV = pow(10.0, (temperatures[r].toFloat * 0.025)) * 8.617e-8 # was K # correct conversion
+        e_keV = e * 0.001
+        r_mm = (r.float * 0.0005 + 0.0015) * r_sun
+        r_perc = (r.float * 0.0005 + 0.0015)
       if e_keV > 0.4:
-        let k = sqrt((e_keV * e_keV) - ((4.0 * PI * alpha * n_e_keV) / m_e_keV)) #However, at energies near and below a typical solar plasma frequency, i.e., for energies near or below 0.3 keV,this calculation is not appropriate because the charged particles were treated as staticsources of electric fields, neglecting both recoil effects and collective motions.
-        diff_flux +=  emratesS[r][iEindexx]  * (r_perc - r_last)  *  r_perc * r_perc * e_keV * e_keV * 0.5 / (PI * PI) #k instead of e
-
+        # However, at energies near and below a typical solar plasma frequency,
+        # i.e., for energies near or below 0.3 keV,this calculation is not
+        # appropriate because the charged particles were treated as static
+        # sources of electric fields, neglecting both recoil effects and collective motions.
+        ## TODO: what the heck is this? `k` is nowhere to be seen
+        let k = sqrt((e_keV * e_keV) - ((4.0 * PI * alpha * n_e_keV) / m_e_keV))
+        diff_flux += emratesS[r][iEindexx] * (r_perc - r_last) * r_perc * r_perc *
+                     e_keV * e_keV * 0.5 / (PI * PI) #k instead of e
       else :
-        diff_flux +=  emratesS[r][iEindexx]  * (r_perc - r_last)  *  r_perc * r_perc * e_keV * e_keV * 0.5 / (PI * PI)
+        diff_flux += emratesS[r][iEindexx] * (r_perc - r_last) * r_perc * r_perc *
+                     e_keV * e_keV * 0.5 / (PI * PI)
       summm = summm + (r_perc - r_last)
       sum += (r_perc - r_last)
 
@@ -392,7 +425,7 @@ proc hash(x: ElementKind): Hash =
   result = h !& int(x)
   result = !$result
 
-proc main*(energies : seq[float]) : seq[seq[float]] =
+proc main*(energies: seq[float]): seq[seq[float]] =
 
   ## First lets access the solar model and calculate some necessary values
   const solarModel = "./ReadSolarModel/resources/AGSS09_solar_model_stripped.dat"
@@ -408,15 +441,15 @@ proc main*(energies : seq[float]) : seq[seq[float]] =
 
   var
     n_Z = newSeqWith(df["Rho"].len, newSeq[float](29)) #29 elements
-    n_e : float
-    n_e_old : float
-    n_es : seq[int]
-    n_eInt : int
-    distNe : float
-    distTemp : float
-    temperature : int
-    temperatures : seq[int]
-    rs3 : seq[float]
+    n_e: float
+    n_e_old: float
+    n_es: seq[int]
+    n_eInt: int
+    distNe: float
+    distTemp: float
+    temperature: int
+    temperatures: seq[int]
+    rs3: seq[float]
 
   let noElement = @[3, 4, 5, 9, 15, 17, 19, 21, 22, 23, 27]
   const
@@ -431,19 +464,32 @@ proc main*(energies : seq[float]) : seq[seq[float]] =
     hbar = 6.582119514e-25 # in GeV * s
     keV2cm = 1.97327e-8 # cm per keV^-1
     amu = 1.6605e-24 #grams
-  let atomicMass = [1.0078,4.0026,3.0160,12.0000,13.0033,14.0030,15.0001,15.9949,16.9991,17.9991,20.1797,22.9897,24.3055,26.9815,28.085,30.9737,32.0675,35.4515,39.8775,39.0983,40.078,44.9559,47.867,50.9415,51.9961,54.9380,55.845,58.9331,58.6934] #all the 29 elements from the solar model file
-  let elements = ["H1", "He4","He3", "C12", "C13", "N14", "N15", "O16", "O17", "O18", "Ne", "Na", "Mg", "Al", "Si", "P", "S", "Cl", "Ar", "K", "Ca", "Sc", "Ti", "V", "Cr", "Mn", "Fe", "Co", "Ni"]
-  let charges = [1.0, 2.0, 2.0, 6.0, 6.0, 7.0, 7.0, 8.0, 8.0, 8.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0]
+  # send halp
 
   for iRadius in 0..< df["Rho"].len:
-    n_Z[iRadius][1] = (df[elements[0]][iRadius, float] / atomicMass[0]) * (df["Rho"][iRadius, float] / amu) # Hydrogen
+    template eAt(arg: untyped): untyped = df[elements[arg]][iRadius, float]
+    template aAt(arg: untyped): untyped = atomicMass[arg]
+    template n(idx: int): untyped =
+      (eAt(idx) / aAt(idx)) * (df["Rho"][iRadius, float] / amu)
+
+    n_Z[iRadius][1] = n(0) # Hydrogen
     for iZmult in 1..3:
+      let iz = iZmult * 2
+      let nVal = (eAt(iz - 1) + eAt(iz)) /
+                 ((aAt(iz - 1) * eAt(iz - 1) + aAt(iz) * eAt(iz)) /
+                  (eAt(iz - 1) + eAt(iz))) *
+                 df["Rho"][iRadius, float] / amu
       if iZmult == 1:
-        n_Z[iRadius][iZmult * 2] = ((df[elements[iZmult * 2 - 1]][iRadius, float] + df[elements[iZmult * 2]][iRadius, float]) / ((atomicMass[iZmult * 2 - 1] * df[elements[iZmult * 2 - 1]][iRadius, float] / (df[elements[iZmult * 2 - 1]][iRadius, float] + df[elements[iZmult * 2]][iRadius, float])) + (atomicMass[iZmult * 2] * df[elements[iZmult * 2]][iRadius, float] / (df[elements[iZmult * 2 - 1]][iRadius, float] + df[elements[iZmult * 2]][iRadius, float])))) * (df["Rho"][iRadius, float] / amu)
-      else: n_Z[iRadius][iZmult + 4] = ((df[elements[iZmult * 2 - 1]][iRadius, float] + df[elements[iZmult * 2]][iRadius, float]) / ((atomicMass[iZmult * 2 - 1] * df[elements[iZmult * 2 - 1]][iRadius, float] / (df[elements[iZmult * 2 - 1]][iRadius, float] + df[elements[iZmult * 2]][iRadius, float])) + (atomicMass[iZmult * 2] * df[elements[iZmult * 2]][iRadius, float] / (df[elements[iZmult * 2 - 1]][iRadius, float] + df[elements[iZmult * 2]][iRadius, float])))) * (df["Rho"][iRadius, float] / amu)
-    n_Z[iRadius][8] = ((df[elements[7]][iRadius, float] + df[elements[8]][iRadius, float] + df[elements[9]][iRadius, float]) / ((atomicMass[7] * df[elements[7]][iRadius, float] / (df[elements[7]][iRadius, float] + df[elements[8]][iRadius, float] + df[elements[9]][iRadius, float])) + (atomicMass[8] * df[elements[8]][iRadius, float] / (df[elements[7]][iRadius, float] + df[elements[8]][iRadius, float] + df[elements[9]][iRadius, float])) + (atomicMass[9] * df[elements[9]][iRadius, float] / (df[elements[7]][iRadius, float] + df[elements[8]][iRadius, float] + df[elements[9]][iRadius, float])))) * (df["Rho"][iRadius, float] / amu)
+        n_Z[iRadius][iz] = nVal
+      else:
+        n_Z[iRadius][iZmult + 4] = nVal
+
+    n_Z[iRadius][8] = (eAt(7) + eAt(8) + eAt(9)) /
+                       ((eAt(7) * aAt(7) + eAt(8) * aAt(8) + eAt(9) * aAt(9)) /
+                        (eAt(7) + eAt(8) + eAt(9))) *
+                      df["Rho"][iRadius, float] / amu
     for iZ in 10..<29:
-      n_Z[iRadius][iZ] = (df[elements[iZ]][iRadius, float] / atomicMass[iZ]) * (df["Rho"][iRadius, float] / amu) # The rest
+      n_Z[iRadius][iZ] = n(iZ)
     n_e = 0.0
     for Z in 0..<elements.len:
       n_e += (df["Rho"][iRadius, float]/amu) * charges[Z] * df[elements[Z]][iRadius, float] / atomicMass[Z] # (g/cm³ /g) = 1/cm³
@@ -460,9 +506,9 @@ proc main*(energies : seq[float]) : seq[seq[float]] =
     n_es.add(n_eInt)
     rs3.add(iRadius.float * 0.0005 + 0.0015)
 
-  var dfTemp = seqsToDf({ "Radius" : rs3,
-                        "Temp" : temperatures,
-                        "Ne" : n_es})
+  var dfTemp = seqsToDf({ "Radius": rs3,
+                        "Temp": temperatures,
+                        "Ne": n_es})
   echo dfTemp
 
   ggplot(dfTemp, aes("Radius", "Ne", color = "Temp")) +
@@ -509,15 +555,15 @@ proc main*(energies : seq[float]) : seq[seq[float]] =
   var primakoffs = newSeqWith(df["Rho"].len, newSeq[float](1112))
 
   var posOP = newSeqWith(df["Rho"].len, newSeq[int](1112))
-  var ironOpE : seq[float]
-  var n_e_keV : float
+  var ironOpE: seq[float]
+  var n_e_keV: float
   echo df["Rho"].len
-  var zs : seq[int]
-  var rs : seq[float]
-  var rs2 : seq[float]
-  var nZs : seq[float]
-  var engs : seq[float]
-  var ops : seq[float]
+  var zs: seq[int]
+  var rs: seq[float]
+  var rs2: seq[float]
+  var nZs: seq[float]
+  var engs: seq[float]
+  var ops: seq[float]
 
   for R in 0..<df["Rho"].len:
     n_eInt = n_es[R]
@@ -526,17 +572,21 @@ proc main*(energies : seq[float]) : seq[seq[float]] =
       var sum = 0.0
       var absCoef = 0.0
       n_e_keV = pow(10.0, (n_es[R].toFloat * 0.25)) * 7.683e-24 # was 1/cm³ #correct conversion
-      var temp_keV = pow(10.0, (temperatures[R].toFloat * 0.025)) * 8.617e-8 # was K # correct conversion
+      let temp_keV = pow(10.0, (temperatures[R].toFloat * 0.025)) * 8.617e-8 # was K # correct conversion
       var temp_K = pow(10.0, (temperatures[R].toFloat * 0.025))
 
-      var energy_keV = iE * 0.001 #w * temp_keV
+      let energy_keV = iE * 0.001 #w * temp_keV
       var energy_J = 1.60218e-16 * energy_keV
       var w = energy_keV / temp_keV #toFloat(dfMesh["u"][iE.int])
       var iEindex = ((iE - 1.0) / 9.0).toInt
       var table = 1.0
       var prevMesh = 1.0
-      let debye_scale = sqrt( (4.0 * PI * alpha / temp_keV) * (n_e_keV + n_Z[R][1] * 7.645e-24 + 4.0 * n_Z[R][2] * 7.645e-24 ))
-      let debye_scale_squared = (4.0 * PI * alpha / temp_keV) * (n_e_keV + n_Z[R][1] * 7.645e-24 + 4.0 * n_Z[R][2] * 7.645e-24 )
+      let debye_scale = sqrt( (4.0 * PI * alpha / temp_keV) *
+                              (n_e_keV + n_Z[R][1] * 7.645e-24 +
+                               4.0 * n_Z[R][2] * 7.645e-24 ))
+      let debye_scale_squared = (4.0 * PI * alpha / temp_keV) *
+                                (n_e_keV + n_Z[R][1] * 7.645e-24 +
+                                 4.0 * n_Z[R][2] * 7.645e-24 )
 
       let y = debye_scale / (sqrt( 2.0 * m_e_keV * temp_keV))
       if w >= 20.0 or w <= 0.0732: #because the tables dont go beyond that, apparently because the axion production beyond that is irrelevant #except for He, maybe find a better solution
@@ -544,9 +594,9 @@ proc main*(energies : seq[float]) : seq[seq[float]] =
           if Z in noElement:
             continue
           sum = sum + n_Z[R][Z] * 0.0
-        absCoefs[R][iEindex] = sum * 1.97327e-8 * 0.528e-8 * 0.528e-8 * (1.0 - exp(-energy_keV / temp_keV))
+        absCoefs[R][iEindex] = sum * 1.97327e-8 * 0.528e-8 * 0.528e-8 *
+                               (1.0 - exp(-energy_keV / temp_keV))
       else :
-
         for (Z_str, Z) in iterEnum(ElementKind):
           if Z in noElement:
             continue
@@ -557,11 +607,17 @@ proc main*(energies : seq[float]) : seq[seq[float]] =
             nZs.add(n_Z[R][Z])
 
 
-          if Z == 1 and (iEindex == 12 or iEindex == 68 or iEindex == 140 or iEindex == 239 or iEindex == 599): #and (iEindex == 12 or iEindex == 68) :
+          if Z == 1 and (iEindex == 12 or
+                         iEindex == 68 or
+                         iEindex == 140 or
+                         iEindex == 239 or
+                         iEindex == 599): #and (iEindex == 12 or iEindex == 68) :
             rs2.add((R.float * 0.0005 + 0.0015))
             engs.add(energy_keV)
             #ops.add(opElNew[(Z, temperature, n_eInt)].densityOp.interp.eval(energy_keV))
           #let opacityL = opElNew[(Z, temperature, n_eInt)].densityOp.interp.eval(energy_keV)
+          echo opElements
+
           let opacity = opElements[ElementKind(Z)][temperature].densityTab[n_eInt].interp.eval(table)
 
 
@@ -605,18 +661,18 @@ proc main*(energies : seq[float]) : seq[seq[float]] =
 
 
 
-  var dfNZ = seqsToDf({ "Radius" : rs,
-                        "nZ" : nZs,
-                        "Z" : zs})
+  var dfNZ = seqsToDf({ "Radius": rs,
+                        "nZ": nZs,
+                        "Z": zs})
   echo dfNZ
   ggplot(dfNZ, aes("Radius", "nZ", color = "Z")) +
     geom_point() +
     ggtitle("Radius versus atomic density for different Z") +
     ggsave("radius_nZ_Z.pdf")
 
-  #var dfOp = seqsToDf({ "Radius" : rs2,
-  #                      "opacity" : ops,
-  #                      "energies" : engs})
+  #var dfOp = seqsToDf({ "Radius": rs2,
+  #                      "opacity": ops,
+  #                      "energies": engs})
   #echo dfOp
   #ggplot(dfOp, aes("Radius", "opacity", color = "energies")) +
   #  geom_point() +
@@ -629,9 +685,9 @@ proc main*(energies : seq[float]) : seq[seq[float]] =
   let term3flux = getFluxFraction(energies, df, n_es, temperatures, term3s)
   let fftermflux = getFluxFraction(energies, df, n_es, temperatures, ffterms)
   let primakoffflux = getFluxFraction(energies, df, n_es, temperatures, primakoffs)
-  var energieslong : seq[float]
-  var fluxes : seq[float]
-  var kinds : seq[string]
+  var energieslong: seq[float]
+  var fluxes: seq[float]
+  var kinds: seq[string]
   for E in energies:
     var e_keV = E * 0.001
     var iEindex = ((E - 1.0) / 9.0).toInt
@@ -654,29 +710,29 @@ proc main*(energies : seq[float]) : seq[seq[float]] =
     fluxes.add(50.0 * primakoffflux[iEindex])
     kinds.add("Primakoff Flux times 50")
 
-  var totalFlux : float
+  var totalFlux: float
   for i in 0..<energies.len:
     totalFlux += 0.009 * diff_fluxs[i]
   echo "The total axion Flux in 1/(y m^2):", totalFlux
 
 
-  let dfEmrate = seqsToDf({ "energy" : energies,
-                            "emrate" : emratesS[4] })
+  let dfEmrate = seqsToDf({ "energy": energies,
+                            "emrate": emratesS[4] })
     .mutate(f{"flux" ~ `emrate` * `energy` * `energy` * 0.5 / Pi / Pi})
   ggplot(dfEmrate, aes("energy", "flux")) +
     geom_line() +
     ggsave("emrate_R10.pdf")
 
-  let dfAbscoef = seqsToDf({ "energy" : energies,
-                            "absCoefs" : absCoefs[10] })
+  let dfAbscoef = seqsToDf({ "energy": energies,
+                            "absCoefs": absCoefs[10] })
   ggplot(dfAbscoef, aes("energy", "absCoefs")) +
     geom_line() +
     ggsave("abscoefs_R10.pdf")
 
 
-  let dfDiffflux = seqsToDf({ "Axion energy [eV]" : energieslong,
-                              "Fluxfraction [keV⁻¹y⁻¹m⁻²]" : fluxes,
-                              "type" : kinds })
+  let dfDiffflux = seqsToDf({ "Axion energy [eV]": energieslong,
+                              "Fluxfraction [keV⁻¹y⁻¹m⁻²]": fluxes,
+                              "type": kinds })
   ggplot(dfDiffflux, aes("Axion energy [eV]", "Fluxfraction [keV⁻¹y⁻¹m⁻²]", color = "type")) +
     geom_line() +
     ggtitle("The flux fraction of axions from the sun") +
