@@ -282,7 +282,7 @@ proc fNew(w: float, y: float): float =
   # int_a^infty dx f(x) = int_0^1 f(a + (1 - t) / t) / t^2
   # in our case a = 0
   # so express by wrapping `outer` in a new proc
-  let fnToInt = proc(t: float, optional: seq[float]): float =
+  let fnToInt = proc(t: float, optional: NumContext[float]): float =
     #echo t
     if t != 0:
       result = outer(x = (1 - t) / t, w = w, y = y) / (t * t)
