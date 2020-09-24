@@ -234,6 +234,9 @@ proc getRandomEnergyFromSolarModel(vectorInSun, center: Vec3, radius: float64,
   let energy = energies[idx] * 0.001
   let emissionRate = emissionRates[iRad][idx]
 
+  ## TODO: this is horrible. Returning a physically different function from the same
+  ## proc is extremely confusing! Especially given that we even calculate both at the
+  ## same time!
   case energyOrEmRate
   of "energy":
     result = energy
@@ -532,12 +535,14 @@ proc drawfancydiagrams(diagramtitle: string,
   makeMinMax(min, Y)
   makeMinMax(max, Y)
 
-  ggplot(df, aes("x-axis [mm]", "y-axis [mm]", "z")) +
+  ggplot(df, aes("x-axis [mm]", "y-axis [mm]", fill = "z")) +
     geom_raster() +
-    geom_line(aes = aes(xMin = minX(), xMax = maxX(), y = minY())) +
-    geom_line(aes = aes(xMin = minX(), xMax = maxX(), y = maxY())) +
-    geom_line(aes = aes(yMin = minY(), yMax = maxY(), x = minX())) +
-    geom_line(aes = aes(yMin = minY(), yMax = maxY(), x = maxX())) +
+    scale_x_continuous() + scale_y_continuous() + scale_fill_continuous("z") +
+    # geom_line(aes = aes(xMin = minX(), xMax = maxX(), y = minY())) +
+    # geom_line(aes = aes(xMin = minX(), xMax = maxX(), y = maxY())) +
+    # geom_line(aes = aes(yMin = minY(), yMax = maxY(), x = minX())) +
+    # geom_line(aes = aes(yMin = minY(), yMax = maxY(), x = maxX())) +
+    ggtitle("Solar axion image for axion electron flux") +
     ggsave(&"axion_image_{year}.pdf")
 
 ############done with the functions, let's use them############
