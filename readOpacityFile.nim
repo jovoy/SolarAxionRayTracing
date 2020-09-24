@@ -298,9 +298,6 @@ proc quadFunc(x: float, y: float, w: float): float =
   var lo_lim = sqrt(x * x + w) - x # sqrt(x  +w) - sqrt(x)
   result = inner_integral(up_lim, y) - inner_integral(lo_lim, y);
 
-
-
-
 proc f(w: float, y: float): float =
   let N = 5
   var
@@ -718,13 +715,13 @@ proc main*(): Tensor[float] =
     kinds.add("FF Flux")
     energieslong.add(e_keV)
     fluxes.add(50.0 * primakoffflux[iEindex])
-    kinds.add("Primakoff Flux times 50")
+    kinds.add("Primakoff Flux · 50")
 
-  var totalFlux: float
-  for i in 0..<energies.len:
-    totalFlux += 0.009 * diff_fluxs[i]
+  let diffFluxDf = seqsToDf({ "Energy / eV" : energies,
+                              "Flux / keV⁻¹ m⁻² yr⁻¹" : diff_fluxs })
+  diffFluxDf.write_csv(&"axion_diff_flux_gae_{g_ae}_gagamma_{g_agamma}.csv")
+  let totalFlux = simpson(diff_fluxs, energies.mapIt(it * 1e-3))
   echo "The total axion Flux in 1/(y m^2):", totalFlux
-
 
   let dfEmrate = seqsToDf({ "energy": energies,
                             "emrate": emratesS[4, _].squeeze.clone })
@@ -745,8 +742,11 @@ proc main*(): Tensor[float] =
                               "type": kinds })
   ggplot(dfDiffflux, aes("Axion energy [eV]", "Fluxfraction [keV⁻¹y⁻¹m⁻²]", color = "type")) +
     geom_line() +
-    ggtitle("The flux fraction of axions from the sun") +
-    ggsave("diffFlux.pdf")
+    xlab("Axion energy [keV]") +
+    ylab("Flux [keV⁻¹ y⁻¹ m⁻²]") +
+    ggtitle(&"Differential solar axion flux for g_ae = {g_ae}, g_aγ = {g_agamma} GeV⁻¹") +
+    margin(right = 6.5) +
+    ggsave("diffFlux.pdf", width = 800, height = 480)
 
   result = emratesS
 
