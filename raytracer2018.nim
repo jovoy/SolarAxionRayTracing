@@ -1223,11 +1223,11 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     ggtitle("Deviation of X-rays - detector entrance to readout") +
     ggsave(&"deviationDet_ridges_{year}.pdf", height = 600)
 
-  let dfFluxE = seqsToDf({"Axion energy [eV]": energiesflux,
+  let dfFluxE = seqsToDf({"Axion energy [eV]": energiesAx,
                               "Flux after experiment": fluxes})
   ggplot(dfFluxE, aes("Axion energy [eV]", "Flux after experiment")) +
     geom_point() +
-    ggtitle("The fluf after the experiment") +
+    ggtitle("The flux after the experiment") +
     ggsave(&"FluxE_{year}.pdf")
 
   #let fname2 = "extracted_from_aznar2015_llnl_telescope_eff_plot.csv"
