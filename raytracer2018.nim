@@ -180,16 +180,20 @@ proc getRandomPointFromSolarModel(center: Vec3, radius: float64,
     r: float
     angle1 = 360 * rand(1.0)
     angle2 = 180 * rand(1.0)
+    # TODO: seems like a bad idea to name ``i`` as a random ``float``!
     i = rand(emRateVecSums.sum)
-    prevSum = 0.0
 
-  for iRad in 0..<emRateVecSums.len - 1:
-    if iRad != 0 and i > prevSum and i <= emRateVecSums[iRad] + prevSum:
-      r = (0.0015 + (iRad).float * 0.0005) * radius
-    elif iRad == 0 and i >= 0.0 and i <= emRateVecSums[iRad]:
-      r = (0.0015 + (iRad).float * 0.0005) * radius
-    prevSum += emRateVecSums[iRad]
+  block ClearThisUp:
+    var
+      prevSum = 0.0
 
+    for iRad in 0 ..< emRateVecSums.len - 1: # TODO: why len - 1? Misunderstanding of ..< ?
+      if iRad != 0 and i > prevSum and i <= emRateVecSums[iRad] + prevSum:
+        # what are these exact values? related to solare model radial binning I presume. Should be clearer
+        r = (0.0015 + (iRad).float * 0.0005) * radius
+      elif iRad == 0 and i >= 0.0 and i <= emRateVecSums[iRad]:
+        r = (0.0015 + (iRad).float * 0.0005) * radius
+      prevSum += emRateVecSums[iRad]
 
   x = cos(degToRad(angle1)) * sin(degToRad(angle2)) * r
   y = sin(degToRad(angle1)) * sin(degToRad(angle2)) * r
@@ -212,7 +216,6 @@ proc getRandomEnergyFromSolarModel(vectorInSun, center: Vec3, radius: float64,
         vectorInSun[2]-center[2])*(vectorInSun[2]-center[2]))
     r = rad / radius
     iRad: int
-    emRateEnergySum: float
     indexRad = (r - 0.0015) / 0.0005
 
   if indexRad - 0.5 > floor(indexRad):
@@ -222,7 +225,6 @@ proc getRandomEnergyFromSolarModel(vectorInSun, center: Vec3, radius: float64,
   let ffRate = toSeq(0 ..< energies.len).mapIt(emissionRates[iRad][it] *
       energies[it] * energies[it])
 
-  #let emRateEnergySumAll = emissionRates[iRad].sum
   let ffSumAll = ffRate.sum
   let sampleEmRate = rand(1.0) * ffSumAll #emRateEnergySumAll
 
@@ -1077,19 +1079,21 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     integralSilver = 0.0
     integralGold = 0.0
 
-  var
-    fluxes = newSeq[float](1000)
-    energiesflux = linspace(1.0, 10000.0, 1000)
+  # var
+    ## TODO: this doesn't belong here
+    # fluxes = newSeq[float](1000)
+    # energiesflux = linspace(1.0, 10000.0, 1000)
 
   let
     energies = linspace(1.0, 10000.0, 1112)
     roomTemp = 293.15 #K
 
-  let emRatesDf = toDf(readCsv("solar_model_tensor.csv"))
+  ## TODO: make the code use tensor for the emission rates!
+  var emRatesDf = toDf(readCsv("solar_model_tensor.csv"))
   let emRatesTensor = emRatesDf["value"].toTensor(float)
     .reshape([emRatesDf.filter(fn {`dimension_1` == 0}).len, emRatesDf.filter(
         fn {`dimension_2` == 0}).len])
-  let emrates = emRatesTensor
+  let emRates = emRatesTensor
     .toRawSeq
     .reshape2D([emRatesTensor.shape[1], emRatesTensor.shape[0]])
   doAssert emRates[0].len == 1112
@@ -1157,6 +1161,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   extractPass(energiesAx)
   extractPass(shellNumber)
 
+  extractPass(fluxes)
   extractPass(weights)
   extractPass(transProbArgon)
 
@@ -1169,7 +1174,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   extractAll(energiesPre)
   extractAll(transProbDetector)
   extractAll(kinds)
-
+  echo "Extracted all data!"
   ################################################################################
   ################################################################################
   ################################################################################
