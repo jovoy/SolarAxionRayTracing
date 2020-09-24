@@ -370,7 +370,7 @@ proc primakoff(temp, energy, gagamma, ks2, alpha, ne, me: float): float =
 
 proc getFluxFraction(energies: seq[float], df: DataFrame,
                      n_es, temperatures: seq[int],
-                     emratesS: seq[seq[float]]): seq[float] =
+                     emratesS: Tensor[float]): seq[float] =
   const
     alpha = 1.0 / 137.0
     g_ae = 1e-13 # Redondo 2013: 0.511e-10
@@ -392,7 +392,7 @@ proc getFluxFraction(energies: seq[float], df: DataFrame,
     var r_last = 0.0
     var summm = 0.0
     var sum = 0.0
-    for r in 0..<df["Rho"].len:
+    for r in 0 ..< df["Rho"].len:
       let
         n_e_keV = pow(10.0, (n_es[r].toFloat * 0.25)) * 7.683e-24 # was 1/cm³ #correct conversion
         t_keV = pow(10.0, (temperatures[r].toFloat * 0.025)) * 8.617e-8 # was K # correct conversion
@@ -406,10 +406,10 @@ proc getFluxFraction(energies: seq[float], df: DataFrame,
         # sources of electric fields, neglecting both recoil effects and collective motions.
         ## TODO: what the heck is this? `k` is nowhere to be seen
         let k = sqrt((e_keV * e_keV) - ((4.0 * PI * alpha * n_e_keV) / m_e_keV))
-        diff_flux += emratesS[r][iEindexx] * (r_perc - r_last) * r_perc * r_perc *
+        diff_flux += emratesS[r, iEindexx] * (r_perc - r_last) * r_perc * r_perc *
                      e_keV * e_keV * 0.5 / (PI * PI) #k instead of e
       else :
-        diff_flux += emratesS[r][iEindexx] * (r_perc - r_last) * r_perc * r_perc *
+        diff_flux += emratesS[r, iEindexx] * (r_perc - r_last) * r_perc * r_perc *
                      e_keV * e_keV * 0.5 / (PI * PI)
       summm = summm + (r_perc - r_last)
       sum += (r_perc - r_last)
@@ -425,13 +425,15 @@ proc hash(x: ElementKind): Hash =
   result = h !& int(x)
   result = !$result
 
-proc main*(energies: seq[float]): seq[seq[float]] =
+proc main*(): Tensor[float] =
 
   ## First lets access the solar model and calculate some necessary values
   const solarModel = "./ReadSolarModel/resources/AGSS09_solar_model_stripped.dat"
   var df = readSolarModel(solarModel)
-  #df = df.filter(f{`Radius` <= 0.2})
-  echo df.pretty(precision = 10)
+  let nElems = 1112 # TODO: clarify exact number
+  let energies = linspace(1.0, 10000.0, nElems)
+
+  let nRadius = df["Rho"].len
 
   ## now let's plot radius against temperature colored by density
   ggplot(df, aes("Radius", "Temp", color = "Rho")) +
@@ -440,7 +442,7 @@ proc main*(energies: seq[float]): seq[seq[float]] =
     ggsave("radius_temp_density.pdf")
 
   var
-    n_Z = newSeqWith(df["Rho"].len, newSeq[float](29)) #29 elements
+    n_Z = newSeqWith(nRadius, newSeq[float](29)) #29 elements
     n_e: float
     n_e_old: float
     n_es: seq[int]
@@ -466,11 +468,14 @@ proc main*(energies: seq[float]): seq[seq[float]] =
     amu = 1.6605e-24 #grams
   # send halp
 
-  for iRadius in 0..< df["Rho"].len:
+  echo "Walking all radii"
+  let rho = df["Rho"].toTensor(float)
+
+  for iRadius in 0..< rho.size:
     template eAt(arg: untyped): untyped = df[elements[arg]][iRadius, float]
     template aAt(arg: untyped): untyped = atomicMass[arg]
     template n(idx: int): untyped =
-      (eAt(idx) / aAt(idx)) * (df["Rho"][iRadius, float] / amu)
+      (eAt(idx) / aAt(idx)) * (rho[iRadius] / amu)
 
     n_Z[iRadius][1] = n(0) # Hydrogen
     for iZmult in 1..3:
@@ -478,7 +483,7 @@ proc main*(energies: seq[float]): seq[seq[float]] =
       let nVal = (eAt(iz - 1) + eAt(iz)) /
                  ((aAt(iz - 1) * eAt(iz - 1) + aAt(iz) * eAt(iz)) /
                   (eAt(iz - 1) + eAt(iz))) *
-                 df["Rho"][iRadius, float] / amu
+                 rho[iRadius] / amu
       if iZmult == 1:
         n_Z[iRadius][iz] = nVal
       else:
@@ -487,13 +492,13 @@ proc main*(energies: seq[float]): seq[seq[float]] =
     n_Z[iRadius][8] = (eAt(7) + eAt(8) + eAt(9)) /
                        ((eAt(7) * aAt(7) + eAt(8) * aAt(8) + eAt(9) * aAt(9)) /
                         (eAt(7) + eAt(8) + eAt(9))) *
-                      df["Rho"][iRadius, float] / amu
+                      rho[iRadius] / amu
     for iZ in 10..<29:
       n_Z[iRadius][iZ] = n(iZ)
     n_e = 0.0
     for Z in 0..<elements.len:
-      n_e += (df["Rho"][iRadius, float]/amu) * charges[Z] * df[elements[Z]][iRadius, float] / atomicMass[Z] # (g/cm³ /g) = 1/cm³
-    n_e_old = (df["Rho"][iRadius, float]/amu) * (1 + df[elements[0]][iRadius, float]/2)
+      n_e += (rho[iRadius]/amu) * charges[Z] * df[elements[Z]][iRadius, float] / atomicMass[Z] # (g/cm³ /g) = 1/cm³
+    n_e_old = (rho[iRadius]/amu) * (1 + df[elements[0]][iRadius, float]/2)
     for iTemp in 0..90:
       distTemp = log(df["Temp"][iRadius, float], 10.0) / 0.025 - float(140 + 2 * iTemp)
       if abs(distTemp) <= 1.0:
@@ -523,6 +528,7 @@ proc main*(energies: seq[float]): seq[seq[float]] =
   #var opElNew: Table[ZTempDensity, OpacityFile]
 
 
+  echo "Walking all temps..."
   for temp in toSet(temperatures):
     for (Z_str, Z) in iterEnum(ElementKind):
       let testF = &"./OPCD_3.3/mono/fm{Z:02}.{temp}"
@@ -543,37 +549,39 @@ proc main*(energies: seq[float]): seq[seq[float]] =
 
 
   ## Calculate the absorbtion coefficients depending on the energy and the radius out of the opacity values
+  var
+    absCoefs = zeros[float](nRadius, nElems) #29 elements
+    emratesS = zeros[float](nRadius, nElems)
+    emratesInS = zeros[float](nRadius, nElems)
+    term1s = zeros[float](nRadius, nElems)
+    comptons = zeros[float](nRadius, nElems)
+    term3s = zeros[float](nRadius, nElems)
+    ffterms = zeros[float](nRadius, nElems)
+    primakoffs = zeros[float](nRadius, nElems)
+    posOP = zeros[int](nRadius, nElems)
+    ironOpE: seq[float]
+    n_e_keV: float
+    zs = newSeqOfCap[int](100_000)
+    rs = newSeqOfCap[float](100_000)
+    rs2 = newSeqOfCap[float](100_000)
+    nZs = newSeqOfCap[float](100_000)
+    engs = newSeqOfCap[float](100_000)
+    ops = newSeqOfCap[float](100_000)
 
-
-  var absCoefs = newSeqWith(df["Rho"].len, newSeq[float](1112)) #29 elements
-  var emratesS = newSeqWith(df["Rho"].len, newSeq[float](1112))
-  var emratesInS = newSeqWith(df["Rho"].len, newSeq[float](1112))
-  var term1s = newSeqWith(df["Rho"].len, newSeq[float](1112))
-  var comptons = newSeqWith(df["Rho"].len, newSeq[float](1112))
-  var term3s = newSeqWith(df["Rho"].len, newSeq[float](1112))
-  var ffterms = newSeqWith(df["Rho"].len, newSeq[float](1112))
-  var primakoffs = newSeqWith(df["Rho"].len, newSeq[float](1112))
-
-  var posOP = newSeqWith(df["Rho"].len, newSeq[int](1112))
-  var ironOpE: seq[float]
-  var n_e_keV: float
-  echo df["Rho"].len
-  var zs: seq[int]
-  var rs: seq[float]
-  var rs2: seq[float]
-  var nZs: seq[float]
-  var engs: seq[float]
-  var ops: seq[float]
-
-  for R in 0..<df["Rho"].len:
+  echo "Walking all radii again..."
+  for R in 0 ..< nRadius:
+    echo "Radius ", R
     n_eInt = n_es[R]
     temperature = temperatures[R]
+    let
+      n_esR = n_es[R].float
+      temp = temperatures[R].float
     for iE in energies:
       var sum = 0.0
       var absCoef = 0.0
-      n_e_keV = pow(10.0, (n_es[R].toFloat * 0.25)) * 7.683e-24 # was 1/cm³ #correct conversion
-      let temp_keV = pow(10.0, (temperatures[R].toFloat * 0.025)) * 8.617e-8 # was K # correct conversion
-      var temp_K = pow(10.0, (temperatures[R].toFloat * 0.025))
+      n_e_keV = pow(10.0, (n_esR * 0.25)) * 7.683e-24 # was 1/cm³ #correct conversion
+      let temp_keV = pow(10.0, (temp * 0.025)) * 8.617e-8 # was K # correct conversion
+      var temp_K = pow(10.0, (temp * 0.025))
 
       let energy_keV = iE * 0.001 #w * temp_keV
       var energy_J = 1.60218e-16 * energy_keV
@@ -591,13 +599,15 @@ proc main*(energies: seq[float]): seq[seq[float]] =
       let y = debye_scale / (sqrt( 2.0 * m_e_keV * temp_keV))
       if w >= 20.0 or w <= 0.0732: #because the tables dont go beyond that, apparently because the axion production beyond that is irrelevant #except for He, maybe find a better solution
         for (Z_str, Z) in iterEnum(ElementKind):
+          # TODO: avoid looping over unneeded elements here
           if Z in noElement:
             continue
           sum = sum + n_Z[R][Z] * 0.0
-        absCoefs[R][iEindex] = sum * 1.97327e-8 * 0.528e-8 * 0.528e-8 *
+        absCoefs[R, iEindex] = sum * 1.97327e-8 * 0.528e-8 * 0.528e-8 *
                                (1.0 - exp(-energy_keV / temp_keV))
       else :
         for (Z_str, Z) in iterEnum(ElementKind):
+          # TODO: avoid looping over unneeded elements here
           if Z in noElement:
             continue
           table = spline.eval(w)
@@ -616,8 +626,9 @@ proc main*(energies: seq[float]): seq[seq[float]] =
             engs.add(energy_keV)
             #ops.add(opElNew[(Z, temperature, n_eInt)].densityOp.interp.eval(energy_keV))
           #let opacityL = opElNew[(Z, temperature, n_eInt)].densityOp.interp.eval(energy_keV)
-          echo opElements
-
+          ## TODO: can this whole loop not done be smarter?
+          ## TODO: also the table of table isn't the best idea, esp. since the temp access is not
+          ## necessary here. Temp is constant for all Z
           let opacity = opElements[ElementKind(Z)][temperature].densityTab[n_eInt].interp.eval(table)
 
 
@@ -626,33 +637,31 @@ proc main*(energies: seq[float]): seq[seq[float]] =
           if Z > 2:
             sum +=  n_Z[R][Z] * opacity
 
-
-
         absCoef = sum * 1.97327e-8 * 0.528e-8 * 0.528e-8 * (1.0 - exp(-energy_keV / temp_keV)) # is in keV
 
-        absCoefs[R][iEindex] = absCoef
+        absCoefs[R, iEindex] = absCoef
 
       ## Now it's left to calculate the emission rates
       ## making the same approximation as for n_e calculation
 
       ##ion density weighted by charge^2 from Raffelt
-      let nZZ2_raffelt_keV = (df["Rho"][R, float] / amu) * 7.683e-24 #seems to be correct
+      let nZZ2_raffelt_keV = (rho[R] / amu) * 7.683e-24 #seems to be correct
       let ffterm = freefreeEmrate(alpha, g_ae, energy_keV, n_e_keV, m_e_keV, temp_keV, nZZ2_raffelt_keV, w, y)
       ## includes contribution from ff, fb and bb processes and a part of the Comption contribution ## keV³ / keV² = keV :
-      let term1 = term1(g_ae, energy_keV, (absCoefs[R][iEindex]), e_charge, m_e_keV, temp_keV)
+      let term1 = term1(g_ae, energy_keV, (absCoefs[R, iEindex]), e_charge, m_e_keV, temp_keV)
       let term2 = term2(alpha, g_ae, energy_keV, n_e_keV, m_e_keV, temp_keV)# completes the Compton contribution #keV
       let term3 = bremsEmrate(alpha, g_ae, energy_keV, n_e_keV, m_e_keV, temp_keV, w, y) # contribution from ee-bremsstahlung
       let compton = comptonEmrate(alpha, g_ae, energy_keV, n_e_keV, m_e_keV, temp_keV)
       let primakoff = primakoff(temp_keV, energy_keV, gagamma, debye_scale_squared, alpha, n_e_keV, m_e_keV)
-      term1s[R][iEindex] = term1
-      comptons[R][iEindex] = compton
-      term3s[R][iEindex] = term3
-      ffterms[R][iEindex] = ffterm
-      primakoffs[R][iEindex] = primakoff
+      term1s[R, iEindex] = term1
+      comptons[R, iEindex] = compton
+      term3s[R, iEindex] = term3
+      ffterms[R, iEindex] = ffterm
+      primakoffs[R, iEindex] = primakoff
       let total_emrate = compton +  term1 + term3 + ffterm#) keV
       let total_emrate_s = total_emrate / (6.58e-19) # in 1/sec
-      emratesS[R][iEindex] = total_emrate
-      emratesInS[R][iEindex] = total_emrate_s
+      emratesS[R, iEindex] = total_emrate
+      emratesInS[R, iEindex] = total_emrate_s
       # if want to have absorbtion coefficient of a radius and energy: R = (r (in % of sunR) - 0.0015) / 0.0005
 
       #if iEindex == 110:
@@ -660,6 +669,7 @@ proc main*(energies: seq[float]): seq[seq[float]] =
       #echo total_emrate
 
 
+  echo "creating all plots..."
 
   var dfNZ = seqsToDf({ "Radius": rs,
                         "nZ": nZs,
@@ -717,14 +727,14 @@ proc main*(energies: seq[float]): seq[seq[float]] =
 
 
   let dfEmrate = seqsToDf({ "energy": energies,
-                            "emrate": emratesS[4] })
+                            "emrate": emratesS[4, _].squeeze.clone })
     .mutate(f{"flux" ~ `emrate` * `energy` * `energy` * 0.5 / Pi / Pi})
   ggplot(dfEmrate, aes("energy", "flux")) +
     geom_line() +
     ggsave("emrate_R10.pdf")
 
   let dfAbscoef = seqsToDf({ "energy": energies,
-                            "absCoefs": absCoefs[10] })
+                            "absCoefs": absCoefs[10, _].squeeze.clone })
   ggplot(dfAbscoef, aes("energy", "absCoefs")) +
     geom_line() +
     ggsave("abscoefs_R10.pdf")
@@ -741,11 +751,9 @@ proc main*(energies: seq[float]): seq[seq[float]] =
   result = emratesS
 
 when isMainModule:
-  var energies = linspace(1.0, 10000.0, 1112)
-  let solarModel = main(energies)
-
-  let smTensor = solarModel.toTensor
-  smTensor.to_csv("solar_model_tensor.csv")
+  let solarModel = main()
+  echo "writing to csv"
+  solarModel.to_csv("solar_model_tensor.csv")
 
   when false:
     ## TODO: better approach to store the full "solar model" as a CSV from a DF
