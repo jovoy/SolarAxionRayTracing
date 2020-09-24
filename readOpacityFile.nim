@@ -261,10 +261,10 @@ proc quadWeight(x: float): float =
   let N = 5
   result = 1.0 / (x * pow(lagDeriv(N,x),2) )
 
-proc inner_integral(t: float, y: float): float =
-  result = (1.0/2.0) * ( ((y * y) / (t * t + y * y)) + ln( t * t + y * y ) )
+template inner_integral(t: float, y: float): float =
+  (1.0/2.0) * ( ((y * y) / (t * t + y * y)) + ln( t * t + y * y ) )
 
-proc outer(x, w, y: float): float =
+proc outer(x, w, y: float): float {.inline.} =
   let coeff = x * exp(-x * x)
   # wrap the inner call to have an `IntegrateFunc` kind
   #let fn = proc(x: float, optional: seq[float]): float =
