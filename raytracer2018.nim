@@ -483,14 +483,14 @@ proc prepareheatmap(numberofrows: int, numberofcolumns: int,
   var heatmaptable = newSeqWith(numberofrows, newSeq[float](numberofcolumns))
   # TODO: clean up!
   for i, value in data_X:
-    var coord_X = floor((data_X[i] - start_x) / stepsize_X)
-    var coord_Y = floor((data_Y[i] - start_y) / stepsize_Y)
-    if coord_X >= 0:
-      if coord_Y >= 0:
-        if coord_X <= float(numberofrows):
-          if coord_Y <= float(numberofcolumns):
-            heatmaptable[int(coord_Y)][int(coord_X)] = heatmaptable[int(
-                coord_Y)][int(coord_X)] + 1*weight1[i]/norm
+    var coord_X = floor((data_X[i] - start_x) / stepsize_X).int
+    var coord_Y = floor((data_Y[i] - start_y) / stepsize_Y).int
+    heatmaptable[coord_Y][coord_X] = heatmaptable[coord_Y][coord_X] + 1*weight1[i]/norm
+
+    # if coord_X >= 0 and coord_Y >= 0 and coord_X <= float(numberofrows) and
+    #   coord_Y <= float(numberofcolumns)::
+    #   heatmaptable[int(coord_Y)][int(coord_X)] = heatmaptable[int(
+    #     coord_Y)][int(coord_X)] + 1*weight1[i]/norm
   result = heatmaptable
 
 proc getMaxVal(table: seq[seq[float]]): float =
@@ -511,19 +511,20 @@ proc drawfancydiagrams(diagramtitle: string,
     zs = newSeq[float](width * width)
   for y in 0 ..< width:
     for x in 0 ..< width:
-      xs[y * width] = x
-      ys[y * width] = y
-      zs[y * width] = objectstodraw[y][x]
+      xs[y * width + x] = x
+      ys[y * width + x] = y
+      zs[y * width + x] = objectstodraw[y][x]
+
   #d.zmin = 0.0
   #d.zmax = 5e-22
   var df = seqsToDf({ "x" : xs,
                       "y" : ys,
                       "z" : zs })
-    .mutate(f{float: "x-axis [mm]" ~ `x` * 14.0 / 3000.0},
-            f{float: "y-axis [mm]" ~ `y` * 14.0 / 3000.0})
+    .mutate(f{float: "x-axis [mm]" ~ `x` * 14.0 / width.float},
+            f{float: "y-axis [mm]" ~ `y` * 14.0 / width.float})
   template makeMinMax(knd, ax: untyped): untyped =
     template `knd ax`(): untyped =
-      `CHIPREGIONS_GOLD ax knd` * 3000.0 / 14.0
+      `CHIPREGIONS_GOLD ax knd` * width.float / 14.0
   makeMinMax(min, X)
   makeMinMax(max, X)
   makeMinMax(min, Y)
