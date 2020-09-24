@@ -1242,26 +1242,26 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   #  ggtitle("The telescope energy efficiency") +
   #  ggsave(&"EnergyEff_{year}.pdf")
 
-  let dfFluxE2 = seqsToDf({"Axion energy [keV]": energiesAx,
-                            "Flux after experiment": weights})
-
+  let dfFluxE2 = seqsToDf({ "Axion energy [keV]": energiesAx,
+                            "Flux after experiment": weights })
+  dfFluxE2.write_csv(&"axion_gae_1e13_gagamma_{g_agamma}_flux_after_exp_N_{numberOfPointsSun}.csv")
   ggplot(dfFluxE2, aes("Axion energy [keV]", weight = "Flux after experiment")) +
     geom_histogram(binWidth = 0.1) +
-    ylab("The fluf after the experiment") +
+    ylab("The flux after the experiment") +
     ggsave(&"FluxEnice_{year}.pdf")
 
   let dfFluxE3 = seqsToDf({"Axion energy [keV]": energiesPre})
 
   ggplot(dfFluxE3, aes("Axion energy [keV]")) +
     geom_histogram(binWidth = 0.1) +
-    ylab("The fluf before the experiment") +
+    ylab("The flux before the experiment") +
     ggsave(&"FluxE_before_experiment_{year}.pdf")
 
   #[ggplot(dfFluxE, aes("Axion energy [keV]")) +#, weights = "Flux after experiment")) +
     geom_histogram() +
     ggtitle("Energy dependeny") +
     ggsave("energiesHisto.pdf")]#
-
+  echo "all plots done, now to heatmap!"
   ## get the heatmaps out of the sequences of data X and data Y, first for the amount of data in one pixel ##
   ## compared to the overall amount and then the data in one pixel compared to the maximal amount of data in any pixel ##
   var
@@ -1272,14 +1272,14 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   var heatmaptable1 = prepareheatmap(3000, 3000, beginX, endX, beginY, endY,
       pointdataX, pointdataY, weights,
       numberOfPointsSun) #colour scale is now the number of points in one pixel divided by the the number of all events
-  var heatmaptable2 = prepareheatmap(3000, 3000, beginX, endX, beginY, endY,
+  var heatmaptable2 = prepareheatmap(256, 256, beginX, endX, beginY, endY,
       pointdataX, pointdataY, weights, 1.0)
   var heatmaptable3 = prepareheatmap(3000, 3000, beginX, endX, beginY, endY,
       pointdataX, pointdataY, weights, getMaxVal(heatmaptable2)) # if change number of rows: has to be in the maxVal as well
  # echo "Probability of it originating from an axion if a photon hits at x = 5,3mm and y = 8,4mm (in this model):"
  # echo (heatmaptable3[53][84]) * 100.0  #echo heatmaptable3[x][y]
 
-  drawfancydiagrams("Axion Model Fluxfraction", heatmaptable2, 3000, year)
+  drawfancydiagrams("Axion Model Fluxfraction", heatmaptable2, 256, year)
 
   when false:
     fluxFractionTotal = integralTotal #/ integralNormalisation
