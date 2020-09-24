@@ -12,7 +12,8 @@ import seqmath except linspace
 import arraymancer except readCsv, linspace
 import numericalnim
 import glm
-import plotly, ggplotnim
+# import plotly
+import ggplotnim
 import weave
 
 ##################rayTracer###############################
@@ -495,9 +496,9 @@ proc prepareheatmap(numberofrows: int, numberofcolumns: int,
 proc getMaxVal(table: seq[seq[float]]): float =
   result = table.mapIt(max(it)).max
 
-proc serializePlot(plt: PlotJson, fname: string) =
-  ## serializes a plotly plot so that we can run it elsewhere
-  writeFile(fname, ( % plt).pretty)
+# proc serializePlot(plt: PlotJson, fname: string) =
+#   ## serializes a plotly plot so that we can run it elsewhere
+#   writeFile(fname, ( % plt).pretty)
 
 proc drawfancydiagrams(diagramtitle: string,
                        objectstodraw: seq[seq[float]],
