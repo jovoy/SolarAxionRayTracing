@@ -113,6 +113,10 @@ const
 
 randomize(299792458)
 
+func conversionProb*(B, g_agamma, length: float): float {.inline.} =
+  result = 0.025 * B * B * g_agamma * g_agamma * (1 / (1.44 * 1.2398)) *
+    (1 / (1.44 * 1.2398)) * (length * 1e-3) * (length * 1e-3) #g_agamma= 1e-12
+
 var fluxFractionGold = 0.0 #dies muss eine globale var sein
 proc getFluxFractionGold(): float64 =
 
@@ -850,9 +854,7 @@ proc traceAxion(res: var Axion,
     transmissionTelescopeYaw = (6.0e-7 * pow(6.0, ya) - 1.0e-5 * pow(5.0, ya) -
         0.0001 * pow(4.0, ya) + 0.0034 * pow(3.0, ya) - 0.0292 * pow(2.0, ya) -
         0.1534 * ya + 99.959) / 100.0
-    probConversionMagnet = 0.025 * expSetup.B * expSetup.B * g_agamma *
-        g_agamma * (1 / (1.44 * 1.2398)) * (1 / (1.44 * 1.2398)) * (pathCB *
-        1e-3) * (pathCB * 1e-3) #g_agamma= 1e-12
+    probConversionMagnet = conversionProb(expSetup.B, g_agamma, pathCB)
 
     distancePipe = (pointDetectorWindow[2] - pointExitCBZylKart[2]) * 1e-3 #m
     # for setup including gas
