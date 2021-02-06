@@ -1116,6 +1116,36 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     cdf.applyIt(it / cdf[^1])
     emRateCDFs.add cdf
 
+  ## sample from random point and plot
+  when false:
+    var es = newSeq[float]()
+    var ems = newSeq[float]()
+    var rs = newSeq[float]()
+    var ts = newSeq[float]()
+    var ps = newSeq[float]()
+
+    for i in 0 ..< 100_000:
+      let pos = getRandomPointFromSolarModel(centerSun, radiusSun, emratesRadiusCumSum)
+      let r = (pos - centerSun).length()
+      let energyAx = getRandomEnergyFromSolarModel(
+        pos, centerSun, radiusSun, energies, emrates, emRateCDFs, "energy"
+      )
+      let em = getRandomEnergyFromSolarModel(
+        pos, centerSun, radiusSun, energies, emrates, emRateCDFs, "emissionRate"
+      )
+      ts.add arccos(pos[2] / r)
+      ps.add arctan(pos[1] / pos[0])
+      es.add energyAx
+      ems.add em
+      rs.add r
+
+    let df = seqsToDf(es, ems, rs)
+    ggplot(df, aes("es")) + geom_histogram(bins = 500) + ggsave("/tmp/es.pdf")
+    ggplot(df, aes("rs")) + geom_histogram(bins = 300) + ggsave("/tmp/rs.pdf")
+    ggplot(df, aes("ems")) + geom_histogram(bins = 500) + ggsave("/tmp/ems.pdf")
+    ggplot(df, aes("ts")) + geom_histogram() + ggsave("/tmp/ts.pdf")
+    ggplot(df, aes("ps")) + geom_histogram() + ggsave("/tmp/ps.pdf")
+
   ## Detector Window##
   #theta angle between window strips and horizontal x axis
   var theta: float
