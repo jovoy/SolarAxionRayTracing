@@ -1321,7 +1321,7 @@ when isMainModule:
   detectorWindowAperture = 14.0 #mm
 
   calculateFluxFractions(radiationCharacteristic, detectorWindowAperture,
-                         pressGas, mAxion, "CAST",
+                         pressGas, mAxion, esCAST,
                          "2018") # radiationCharacteristic = "axionRadiation::characteristic::sar"
 
   # weight (telescopetransmission)
