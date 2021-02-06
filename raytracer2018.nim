@@ -453,7 +453,7 @@ proc getPointDetectorWindow(pointMirror2: Vec3, pointAfterMirror2: Vec3,
 
   result = pointMirror2Turned + n * vectorAfterMirror2
 
-proc interpTrans(fname: string): CubicSpline[float] =
+proc interpTrans(fname: string): InterpolatorType[float] =
   let df = toDf(readCsv(fname, sep = ' '))
   result = newCubicSpline(df["PhotonEnergy(eV)"].toTensor(float).toRawSeq,
                           df["Transmission"].toTensor(float).toRawSeq)
