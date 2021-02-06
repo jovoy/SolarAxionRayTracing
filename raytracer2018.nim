@@ -2,8 +2,6 @@
 import math, strutils, algorithm, random, sequtils, os, strformat, tables
 import json except `{}`
 
-# this project
-import readOpacityFile
 # TODO: axionMass will be minified and the important stuff extracted
 # import axionMass/axionMass
 
