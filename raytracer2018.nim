@@ -909,6 +909,7 @@ proc traceAxion(res: var Axion,
       transmissionMagnet) #transmission probabilities times axion emission rate times the flux fraction
 
   ##Detector window:##
+  ## TODO: is the 7.0 there due to 14 mm / 2?
   if sqrt(pointDetectorWindow[0] * pointDetectorWindow[0] + pointDetectorWindow[
       1] * pointDetectorWindow[1]) > 7.0: return
   var pointDetectorWindowTurned = vec3(0.0)
@@ -926,6 +927,9 @@ proc traceAxion(res: var Axion,
   var energyAxTransWindow: int
   # TODO: assignment here of the different kinds is obviously broken. Instead of having
   # one kinds field + the others we should have some additional field or something
+  ## TODO: transmission of window material etc. can also be modeled using ray tracing.
+  ## probability that transmission happens at all!
+  ## TODO: get the data once to avoid `toRawSeq` overhead
   if abs(y) > stripDistWindow / 2.0 and
      abs(y) < stripDistWindow / 2.0 + stripWidthWindow or
      abs(y) > 1.5 * stripDistWindow + stripWidthWindow and
@@ -979,7 +983,8 @@ proc traceAxion(res: var Axion,
   res.pointdataY = pointDetectorWindow[1]
   res.weights = weight
 
-  var
+  ## TODO: the following are not used for anything!
+  let
     gold = ( (pointDetectorWindow[0] >= CHIPREGIONS_GOLD_X_MIN) and (
         pointDetectorWindow[0] <= CHIPREGIONS_GOLD_X_MAX) and (
         pointDetectorWindow[1] >= CHIPREGIONS_GOLD_Y_MIN) and (
