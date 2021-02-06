@@ -49,7 +49,7 @@ type
     opacities: seq[float]
     # a cubic spline interpolation function to get any `energy` from the given
     # `energies` and `opacities`
-    interp: CubicSpline[float]
+    interp: InterpolatorType[float]
 
   OpacityFileKind = enum
     ofkOriginal, ofkNew
