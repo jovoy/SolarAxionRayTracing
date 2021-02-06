@@ -21,6 +21,9 @@ import weave
 #degToRad(angle has to be done in Raytracer2014 for cos and sin
 
 type
+  ExperimentSetupKind = enum
+    esCAST, esBabyIAXO
+
   CenterVectors = ref object
     centerEntranceCB: Vec3[float]
     centerExitCB: Vec3[float]
@@ -29,26 +32,26 @@ type
     centerExitCBMagneticField: Vec3[float]
     centerSun: Vec3[float]
 
-  ExperimentSetup = ref object
-    radiusCB: float
-    RAYTRACER_LENGTH_COLDBORE: float
-    RAYTRACER_LENGTH_COLDBORE_9T: float
-    RAYTRACER_LENGTH_PIPE_CB_VT3: float
-    radiusPipeCBVT3: float
-    RAYTRACER_LENGTH_PIPE_VT3_XRT: float
-    radiusPipeVT3XRT: float
-    RAYTRACER_FOCAL_LENGTH_XRT: float
-    distanceCBAxisXRTAxis: float
-    RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW: float
-    pipes_turned: float
-    allR1: seq[float]
-    allXsep: seq[float]
-    allAngles: seq[float]
-    lMirror: float
-    d: float
-    B: float
-    tGas: float
-    depthDet: float
+  ExperimentSetup* = ref object
+    radiusCB*: float
+    RAYTRACER_LENGTH_COLDBORE*: float
+    RAYTRACER_LENGTH_COLDBORE_9T*: float
+    RAYTRACER_LENGTH_PIPE_CB_VT3*: float
+    radiusPipeCBVT3*: float
+    RAYTRACER_LENGTH_PIPE_VT3_XRT*: float
+    radiusPipeVT3XRT*: float
+    RAYTRACER_FOCAL_LENGTH_XRT*: float
+    distanceCBAxisXRTAxis*: float
+    RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW*: float
+    pipes_turned*: float
+    allR1*: seq[float]
+    allXsep*: seq[float]
+    allAngles*: seq[float]
+    lMirror*: float
+    d*: float
+    B*: float
+    tGas*: float
+    depthDet*: float
 
   MaterialKind = enum
     mkSi3N4 = "Si3N4"
@@ -547,12 +550,12 @@ proc drawfancydiagrams(diagramtitle: string,
 
 ############done with the functions, let's use them############
 
-proc getVarsForSetup(setup: string): ExperimentSetup =
+proc getVarsForSetup*(setup: ExperimentSetupKind): ExperimentSetup =
   # TODO: clean up, possibly make this into a toml file where one can
   # input different settings!
   result = new ExperimentSetup
   case setup
-  of "CAST":
+  of esCAST:
     result = ExperimentSetup(radiusCB: 21.5, #mm
       RAYTRACER_LENGTH_COLDBORE: 9756.0, #mm half B field to end of CB #ok
       RAYTRACER_LENGTH_COLDBORE_9T: 9260.0, #mm half B field to half B field #ok
@@ -560,7 +563,7 @@ proc getVarsForSetup(setup: string): ExperimentSetup =
       radiusPipeCBVT3: 39.64, #30.0 #mm smallest aperture between end of CB and VT3
       RAYTRACER_LENGTH_PIPE_VT3_XRT: 150.0, #mm from drawings #198.2 #mm from XRT drawing #ok
       radiusPipeVT3XRT: 35.0, #25.0 #mm from drawing #35.0 #m irrelevant, large enough to not loose anything # needs to be mm #ok
-      RAYTRACER_FOCAL_LENGTH_XRT: 1500.0, #1485.0 #mm is from llnl XRT https://iopscience.iop.org/article/10.1088/1475-7516/2015/12/008/pdf #1600.0 #mm was the Telescope of 2014 (MPE XRT) also: Aperatur changed #ok
+      RAYTRACER_FOCAL_LENGTH_XRT: 1300.0, #1485.0 #mm is from llnl XRT https://iopscience.iop.org/article/10.1088/1475-7516/2015/12/008/pdf #1600.0 #mm was the Telescope of 2014 (MPE XRT) also: Aperatur changed #ok
       distanceCBAxisXRTAxis: 0.0, #62.1#58.44 #mm from XRT drawing #there is no difference in the axis even though the picture gets transfered 62,1mm down, but in the detector center
       RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW: 0.0, #mm #no change, because don't know
       pipes_turned: 3.0, #degree # this is the angle by which the pipes before the detector were turned in comparison to the telescope
@@ -578,7 +581,7 @@ proc getVarsForSetup(setup: string): ExperimentSetup =
       tGas: 1.7, #K
       depthDet: 30.0 #mm
     )
-  of "BabyIaxo":
+  of esBabyIAXO:
     result = ExperimentSetup(radiusCB: 350.0, #mm
                              # Change:
       RAYTRACER_LENGTH_COLDBORE: 10000.0, #mm not sure if this is true
@@ -616,7 +619,7 @@ proc traceAxion(res: var Axion,
                 emRatesSum: seq[float],
                 energies: seq[float],
                 stripDistWindow, stripWidthWindow, theta: float,
-                setup: string,
+                setup: ExperimentSetupKind,
                 detectorWindowAperture: float,
                 dfTab: Table[string, DataFrame]
                ) =
@@ -791,14 +794,14 @@ proc traceAxion(res: var Axion,
     n: float
     n3: float
   case setup
-  of "CAST":
+  of esCAST:
     pointDetectorWindow = getPointDetectorWindow(pointMirror2,
         pointAfterMirror2, expSetup.RAYTRACER_FOCAL_LENGTH_XRT,
         expSetup.lMirror, expSetup.allXsep[8], 62.1, expSetup.d, degToRad(2.75))
     pointEndDetector = getPointDetectorWindow(pointMirror2, pointAfterMirror2, (
         expSetup.RAYTRACER_FOCAL_LENGTH_XRT + 30.0), expSetup.lMirror,
         expSetup.allXsep[8], 62.1, expSetup.d, degToRad(2.75))
-  of "BabyIAXO":
+  of esBabyIAXO:
     distDet = distanceMirrors - 0.5 * expSetup.allXsep[8] * cos(beta) +
         expSetup.RAYTRACER_FOCAL_LENGTH_XRT -
         expSetup.RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW
@@ -868,9 +871,9 @@ proc traceAxion(res: var Axion,
   var transmissionTelescopeEnergy: float
   #echo probConversionMagnet
   case setup
-  of "CAST":
+  of esCAST:
     transmissionMagnet = cos(ya) * probConversionMagnet #1.0
-  of "BabyIAXO":
+  of esBabyIAXO:
     transmissionMagnet = 0.0 #transmissionMagnetGas
 
   if energyAx < 2.0:
@@ -1004,7 +1007,7 @@ proc traceAxionWrapper(axBuf: ptr UncheckedArray[Axion],
                        emRatesSum: seq[float],
                        energies: seq[float],
                        stripDistWindow, stripWidthWindow, theta: float,
-                       setup: string,
+                       setup: ExperimentSetupKind,
                        detectorWindowAperture: float,
                        dfTab: Table[string, DataFrame]
                       ) =
@@ -1025,7 +1028,7 @@ proc traceAxionWrapper(axBuf: ptr UncheckedArray[Axion],
 
 proc calculateFluxFractions(axionRadiationCharacteristic: string,
                             detectorWindowAperture: float, pGas: float,
-                                m_a: float, setup: string,
+                            m_a: float, setup: ExperimentSetupKind,
                             year: string) = #The year is only for the way the window in front of the detector was turned.
   var
     distanceCBAxisXRTAxis = 0.0
