@@ -169,83 +169,57 @@ proc getRandomPointOnDisk(center: Vec3, radius: float64): Vec3 =
     angle = 360 * rand(1.0)
   x = cos(degToRad(angle)) * r
   y = sin(degToRad(angle)) * r
-  var vector = vec3(x, y, 0.0)
-  vector = vector + center
-  result = vector
-
+  result = vec3(x, y, 0.0) + center
 
 proc getRandomPointFromSolarModel(center: Vec3, radius: float64,
-                                  emRateVecSums: seq[float]): Vec3 =
+                                  emRateCumSum: seq[float]): Vec3 =
   ## This function gives the coordinates of a random point in the sun, biased
   ## by the emissionrates (which depend on the radius and the energy) ##
-  var
-    x = 0.0
-    y = 0.0
-    z = 0.0
-    r: float
+  ##
+  ## `emRateCumSum` is the normalized (to 1.0) cumulative sum of the emission
+  ## rates over all energies at each radius
+  let
     angle1 = 360 * rand(1.0)
     angle2 = 180 * rand(1.0)
-    # TODO: seems like a bad idea to name ``i`` as a random ``float``!
-    i = rand(emRateVecSums.sum)
-
-  block ClearThisUp:
-    var
-      prevSum = 0.0
-
-    for iRad in 0 ..< emRateVecSums.len - 1: # TODO: why len - 1? Misunderstanding of ..< ?
-      if iRad != 0 and i > prevSum and i <= emRateVecSums[iRad] + prevSum:
-        # what are these exact values? related to solare model radial binning I presume. Should be clearer
-        r = (0.0015 + (iRad).float * 0.0005) * radius
-      elif iRad == 0 and i >= 0.0 and i <= emRateVecSums[iRad]:
-        r = (0.0015 + (iRad).float * 0.0005) * radius
-      prevSum += emRateVecSums[iRad]
-
-  x = cos(degToRad(angle1)) * sin(degToRad(angle2)) * r
-  y = sin(degToRad(angle1)) * sin(degToRad(angle2)) * r
-  z = cos(degToRad(angle2)) * r
-  var vector = vec3(x, y, z)
-  vector = vector + center
-
-  result = vector
+    ## random number from 0 to 1 corresponding to possible solar radii.
+    randEmRate = rand(1.0)
+    rIdx = emRateCumSum.lowerBound(randEmRate)
+    r = (0.0015 + (rIdx).float * 0.0005) * radius
+  let x = cos(degToRad(angle1)) * sin(degToRad(angle2)) * r
+  let y = sin(degToRad(angle1)) * sin(degToRad(angle2)) * r
+  let z = cos(degToRad(angle2)) * r
+  result = vec3(x, y, z) + center
 
 proc getRandomEnergyFromSolarModel(vectorInSun, center: Vec3, radius: float64,
                                    energies: seq[float],
                                    emissionRates: seq[seq[float]],
-                                   energyOrEmRate: string): float =
+                                   emRateCDFs: seq[seq[float]],
+                                   computeType: string): float =
 
   ## This function gives a random energy for an event at a given radius, biased
   ## by the emissionrates at that radius. This only works if the energies to
   ## choose from are evenly distributed ##
   var
-    rad = sqrt(vectorInSun[0]*vectorInSun[0]+vectorInSun[1]*vectorInSun[1] + (
-        vectorInSun[2]-center[2])*(vectorInSun[2]-center[2]))
+    rad = (vectorInSun - center).length
     r = rad / radius
     iRad: int
     indexRad = (r - 0.0015) / 0.0005
-
   if indexRad - 0.5 > floor(indexRad):
     iRad = int(ceil(indexRad))
   else: iRad = int(floor(indexRad))
-
-  let ffRate = toSeq(0 ..< energies.len).mapIt(emissionRates[iRad][it] *
-      energies[it] * energies[it])
-
-  let ffSumAll = ffRate.sum
-  let sampleEmRate = rand(1.0) * ffSumAll #emRateEnergySumAll
-
-  #let emRateCumSum = cumSum(emissionRates[iRad])
-  let ffCumSum = cumSum(ffRate)
-  let idx = ffCumSum.lowerBound(sampleEmRate)
-  let energy = energies[idx] * 0.001
-  let emissionRate = emissionRates[iRad][idx]
-
+  # get the normalized (to 1) CDF for this radius
+  let cdfEmRate = emRateCDFs[iRad]
+  # sample an index based on this CDF
+  let idx = cdfEmRate.lowerBound(rand(1.0))
   ## TODO: this is horrible. Returning a physically different function from the same
   ## proc is extremely confusing! Especially given that we even calculate both at the
   ## same time!
-  case energyOrEmRate
+  case computeType
   of "energy":
+    let energy = energies[idx] * 0.001
     result = energy
   of "emissionRate":
+    let emissionRate = emissionRates[iRad][idx]
     result = emissionRate
 
 ## The following are some functions to determine inetersection of the rays with the
@@ -381,20 +355,29 @@ proc findPosXRT*(pointXRT: Vec3, pointCB: Vec3,
     point = pointCB
     s: float
     term: float
-    sMinHigh = (sMin * 100000.0).int
-    sMaxHigh = (sMax * 100000.0).int
+    sMinHigh = sMin
+    sMaxHigh = sMax
     pointMirror = vec3(0.0)
   let direc = pointXRT - pointCB
-
-  for i in sMinHigh..sMaxHigh:
-    s = i.float / 100000.0
-    term = sqrt((point[0] + s * direc[0]) * (point[0] + s * direc[0]) + (point[
-        1] + s * direc[1]) * (point[1] + s * direc[1])) - ((r2 - r1) * (point[
-        2] + s * direc[2] - distMirr) / (cos(angle) * lMirror))
-
-    if abs(r1 - term) < 2.0 * uncer:
-      pointMirror = point + s * direc ## sometimes there are 3 different s for which this works, in that case the one with the highest value is taken
-      result = pointMirror
+  template calcVal(s: float): untyped =
+    let res = sqrt((point[0] + s * direc[0]) * (point[0] + s * direc[0]) + (point[
+      1] + s * direc[1]) * (point[1] + s * direc[1])) - ((r2 - r1) * (point[
+      2] + s * direc[2] - distMirr) / (cos(angle) * lMirror))
+    res
+  var mid = (sMaxHigh + sMinHigh) / 2.0
+  while abs(r1 - term) > 2.0 * uncer:
+    if abs(sMinHigh - sMaxHigh) < 1e-8: break
+    term = calcVal(mid)
+    if abs(r1 - calcVal((sMinHigh + mid) / 2.0)) < abs(r1 - calcVal((sMaxHigh + mid) / 2.0)):
+      # use lower half
+      sMaxHigh = mid
+      mid = (sMinHigh + mid) / 2.0
+    else:
+      # use upper half
+      sMinHigh = mid
+      mid = (sMaxHigh + mid) / 2.0
+  pointMirror = point + mid * direc
+  result = pointMirror
 
 proc getVectoraAfterMirror*(pointXRT, pointCB, pointMirror: Vec3,
                             angle: float, pointOrAngle: string): Vec3 =
@@ -618,7 +601,8 @@ proc traceAxion(res: var Axion,
                 centerVecs: CenterVectors,
                 expSetup: ExperimentSetup,
                 emRates: seq[seq[float]],
-                emRatesSum: seq[float],
+                emRatesRadiusCumSum: seq[float],
+                emRateCDFs: seq[seq[float]],
                 energies: seq[float],
                 stripDistWindow, stripWidthWindow, theta: float,
                 setup: ExperimentSetupKind,
@@ -627,17 +611,18 @@ proc traceAxion(res: var Axion,
                ) =
   ## Get a random point in the sun, biased by the emission rate, which is higher
   ## at smalller radii, so this will give more points in the center of the sun ##
-  let pointInSun = getRandomPointFromSolarModel(centerVecs.centerSun, radiusSun, emratesSum)
-
+  let pointInSun = getRandomPointFromSolarModel(centerVecs.centerSun, radiusSun, emRatesRadiusCumSum)
   ## Get a random point at the end of the coldbore of the magnet to take all axions into account that make it to this point no matter where they enter the magnet ##
   let pointExitCBMagneticField = getRandomPointOnDisk(
       centerVecs.centerExitCBMagneticField, expSetup.radiusCB)
 
   ## Get a random energy for the axion biased by the emission rate ##
-  let energyAx = getRandomEnergyFromSolarModel(pointInSun, centerVecs.centerSun,
-      radiusSun, energies, emrates, "energy")
-  let emissionRateAx = getRandomEnergyFromSolarModel(pointInSun,
-      centerVecs.centerSun, radiusSun, energies, emrates, "emissionRate")
+  let energyAx = getRandomEnergyFromSolarModel(
+    pointInSun, centerVecs.centerSun, radiusSun, energies, emRates, emRateCDFs, "energy"
+  )
+  let emissionRateAx = getRandomEnergyFromSolarModel(
+    pointInSun, centerVecs.centerSun, radiusSun, energies, emRates, emRateCDFs, "emissionRate"
+  )
   ## Throw away all the axions, that don't make it through the piping system and therefore exit the system at some point ##
 
   # TODO: ask johanna why is `intersect` 0? Isn't being modified anywhere!
@@ -650,7 +635,6 @@ proc traceAxion(res: var Axion,
     intersectsCB = lineIntersectsCylinderOnce(pointInSun,
         pointExitCBMagneticField, centerVecs.centerEntranceCB,
         centerVecs.centerExitCBMagneticField, expSetup.radiusCB, intersect)
-
   if (not intersectsEntranceCB and not intersectsCB): return
 
   if (not intersectsEntranceCB): #generates problems with the weight because the weight is multiplied with the difference of the leght of the path of the particle and the legth of the coldbore
@@ -1009,7 +993,8 @@ proc traceAxionWrapper(axBuf: ptr UncheckedArray[Axion],
                        centerVecs: CenterVectors,
                        expSetup: ExperimentSetup,
                        emRates: seq[seq[float]],
-                       emRatesSum: seq[float],
+                       emRatesRadiusCumSum: seq[float],
+                       emRateCDFs: seq[seq[float]],
                        energies: seq[float],
                        stripDistWindow, stripWidthWindow, theta: float,
                        setup: ExperimentSetupKind,
@@ -1018,13 +1003,13 @@ proc traceAxionWrapper(axBuf: ptr UncheckedArray[Axion],
                       ) =
   echo "Starting weave!"
   parallelFor iSun in 0 ..< bufLen:
-    captures: {axBuf, centerVecs, expSetup, emRates, emRatesSum,
+    captures: {axBuf, centerVecs, expSetup, emRates, emRatesRadiusCumSum, emRateCDFs,
                energies, stripDistWindow,
                stripWidthWindow, theta,
                setup, detectorWindowAperture, dfTab}
     axBuf[iSun].traceAxion(centerVecs,
                            expSetup,
-                           emRates, emRatesSum,
+                           emRates, emRatesRadiusCumSum, emRateCDFs,
                            energies,
                            stripDistWindow, stripWidthWindow, theta,
                            setup,
@@ -1102,15 +1087,28 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     roomTemp = 293.15 #K
 
   ## TODO: make the code use tensor for the emission rates!
-  var emRatesDf = toDf(readCsv("solar_model_tensor.csv"))
-  let emRatesTensor = emRatesDf["value"].toTensor(float)
-    .reshape([emRatesDf.filter(fn {`dimension_1` == 0}).len, emRatesDf.filter(
-        fn {`dimension_2` == 0}).len])
+  var emRatesDf = readCsvTyped("solar_model_tensor.csv")
+    .rename(f{"Radius" <- "dimension_1"}, f{"Energy" <- "dimension_2"}, f{"Flux" <- "value"})
+    #.mutate(f{"Energy" ~ (`Energy` * 9 + 1.0) * 0.001})
+
+  let emRatesTensor = emRatesDf["Flux"].toTensor(float)
+    .reshape([emRatesDf.filter(fn {`Radius` == 0}).len, emRatesDf.filter(
+        fn {`Energy` == 0}).len])
   let emRates = emRatesTensor
     .toRawSeq
     .reshape2D([emRatesTensor.shape[1], emRatesTensor.shape[0]])
   doAssert emRates[0].len == 1112
-  let emRatesSum = emRates.mapIt(it.sum)
+  var emRatesRadiusCumSum = emRates.mapIt(it.sum).cumSum()
+  # normalize to one
+  emRatesRadiusCumSum.applyIt(it / emRatesRadiusCumSum[^1])
+
+  ## Compute all normalized CDFs of the emission rates for each radius
+  var emRateCDFs = newSeq[seq[float]]()
+  for iRad, f in emRates:
+    var cdf = toSeq(0 ..< energies.len).mapIt(f[it] * energies[it] * energies[it] / (2 * Pi * Pi))
+      .cumSum()
+    cdf.applyIt(it / cdf[^1])
+    emRateCDFs.add cdf
 
   ## Detector Window##
   #theta angle between window strips and horizontal x axis
@@ -1149,7 +1147,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   traceAxionWrapper(axBuf, numberOfPointsSun,
                     centerVecs,
                     expSetup,
-                    emRates, emRatesSum,
+                    emRates, emRatesRadiusCumSum, emRateCDFs,
                     energies,
                     stripDistWindow, stripWidthWindow, theta,
                     setup,
