@@ -83,7 +83,7 @@ type
 const
   RAYTRACER_DISTANCE_SUN_EARTH = 1.5e14 #mm #ok
   radiusSun = 6.9e11                    #mm #ok
-  numberOfPointsSun = 10_000            #100000 for statistics
+  numberOfPointsSun = 1_000_000            #100000 for statistics
 
   pressGas = 14.3345 #for example P = 14.3345 mbar (corresponds to 1 bar at room temperature).
 
@@ -681,12 +681,18 @@ proc traceAxion(res: var Axion,
   pointEntranceXRT[1] = pointExitPipeVT3XRT[1]
   pointEntranceXRT[2] = pointExitPipeVT3XRT[2]
 
+  ## filters out the edges of the mirrors (NOTE: that's probably why we don't get the lines
+  ## in our picture now...)
   #if (getPixelValue(pointEntranceXRT)[0] > 1400.0 or getPixelValue(pointEntranceXRT)[1] > 1400.0): return
   #if lineIntersectsCircleEdge(circleTotal, getPixelValue(pointEntranceXRT)): return
 
+  ## there is a 2mm wide graphite block between each glass mirror, to seperate them
+  ## in the middle of the X-ray telescope. Return if hit
+  ## TODO: understand why this does that?!
   if pointEntranceXRT[1] <= 1.0 and pointEntranceXRT[1] >=
-      -1.0: return #there is a 2mm wide graphit block between each glass mirror, to seperate them in the middle of the x-Ray telescope
+      -1.0: return
 
+  ## Coordinate transform from cartesian to polar at the XRT entrance
   var
     vectorEntranceXRTCircular = vec3(0.0)
   let
@@ -834,7 +840,7 @@ proc traceAxion(res: var Axion,
   let
     transmissionTelescopePitch = (0.0008*p*p*p*p + 1e-04*p*p*p - 0.4489*p*p -
         0.3116*p + 96.787) / 100.0
-    # TODO: wait, is this really 6^ya etc ?
+    # TODO: wait, is this really 6^ya etc ? Update: Also appears in thesis.
     transmissionTelescopeYaw = (6.0e-7 * pow(6.0, ya) - 1.0e-5 * pow(5.0, ya) -
         0.0001 * pow(4.0, ya) + 0.0034 * pow(3.0, ya) - 0.0292 * pow(2.0, ya) -
         0.1534 * ya + 99.959) / 100.0
@@ -962,7 +968,7 @@ proc traceAxion(res: var Axion,
     if energyAx * 1000.0 < 0.0 + i.float * 10.0 and energyAx * 1000.0 > 0.0 +
         i.float * 10.0 - 10.0:
       res.fluxes += weight
-
+  ## assign final axion position & weight
   res.pointdataX = pointDetectorWindow[0]
   res.pointdataY = pointDetectorWindow[1]
   res.weights = weight
