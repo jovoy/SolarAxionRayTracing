@@ -436,7 +436,7 @@ proc main*(): Tensor[float] =
   ggplot(df, aes("Radius", "Temp", color = "Rho")) +
     geom_line() +
     ggtitle("Radius versus temperature of solar mode, colored by density") +
-    ggsave("radius_temp_density.pdf")
+    ggsave("out/radius_temp_density.pdf")
 
   var
     n_Z = newSeqWith(nRadius, newSeq[float](29)) #29 elements
@@ -516,7 +516,7 @@ proc main*(): Tensor[float] =
   ggplot(dfTemp, aes("Radius", "Ne", color = "Temp")) +
     geom_point() +
     ggtitle("Radius versus temperature of solar mode, colored by density") +
-    ggsave("radius_temp_ne.pdf")
+    ggsave("out/radius_temp_ne.pdf")
 
 
 
@@ -675,7 +675,7 @@ proc main*(): Tensor[float] =
   ggplot(dfNZ, aes("Radius", "nZ", color = "Z")) +
     geom_point() +
     ggtitle("Radius versus atomic density for different Z") +
-    ggsave("radius_nZ_Z.pdf")
+    ggsave("out/radius_nZ_Z.pdf")
 
   #var dfOp = seqsToDf({ "Radius": rs2,
   #                      "opacity": ops,
@@ -728,13 +728,13 @@ proc main*(): Tensor[float] =
     .mutate(f{"flux" ~ `emrate` * `energy` * `energy` * 0.5 / Pi / Pi})
   ggplot(dfEmrate, aes("energy", "flux")) +
     geom_line() +
-    ggsave("emrate_R10.pdf")
+    ggsave("out/emrate_R10.pdf")
 
   let dfAbscoef = seqsToDf({ "energy": energies,
                             "absCoefs": absCoefs[10, _].squeeze.clone })
   ggplot(dfAbscoef, aes("energy", "absCoefs")) +
     geom_line() +
-    ggsave("abscoefs_R10.pdf")
+    ggsave("out/abscoefs_R10.pdf")
 
 
   let dfDiffflux = seqsToDf({ "Axion energy [eV]": energieslong,
@@ -746,7 +746,8 @@ proc main*(): Tensor[float] =
     ylab("Flux [keV⁻¹ y⁻¹ m⁻²]") +
     ggtitle(&"Differential solar axion flux for g_ae = {g_ae}, g_aγ = {g_agamma} GeV⁻¹") +
     margin(right = 6.5) +
-    ggsave("diffFlux.pdf", width = 800, height = 480)
+    ggsave("out/diffFlux_radii.pdf", width = 800, height = 480)
+
 
   result = emratesS
 

@@ -544,7 +544,7 @@ proc drawfancydiagrams(diagramtitle: string,
     # geom_line(aes = aes(yMin = minY(), yMax = maxY(), x = minX())) +
     # geom_line(aes = aes(yMin = minY(), yMax = maxY(), x = maxX())) +
     ggtitle("Solar axion image for axion electron flux") +
-    ggsave(&"axion_image_{year}.pdf")
+    ggsave(&"out/axion_image_{year}.pdf")
 
 ############done with the functions, let's use them############
 
@@ -1204,7 +1204,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
              color = "type")) +
     geom_line() +
     ggtitle("The transmission probability for different detector parts") +
-    ggsave(&"TransProb_{year}.pdf")
+    ggsave(&"out/TransProb_{year}.pdf")
 
   let dfTransProbAr = seqsToDf({"Axion energy [keV]": energiesAx,
                               "Transmission Probability": transProbArgon})
@@ -1212,7 +1212,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
          aes("Axion energy [keV]", "Transmission Probability")) +
     geom_line() +
     ggtitle("The transmission probability for the detector gas") +
-    ggsave(&"TransProbAr_{year}.pdf")
+    ggsave(&"out/TransProbAr_{year}.pdf")
 
   let dfDet = seqsToDf({"Deviation [mm]": deviationDet,
                          "Energies": energiesAx,
@@ -1222,31 +1222,31 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   ggplot(dfDet, aes("Deviation [mm]")) +
     geom_histogram(binWidth = 0.001) +
     ggtitle("Deviation of X-rays detector entrance to readout") +
-    ggsave(&"deviationDet_{year}.pdf")
+    ggsave(&"out/deviationDet_{year}.pdf")
 
   ggplot(dfDet, aes("Deviation [mm]", fill = factor("Shell"))) +
     geom_histogram(binWidth = 0.001) +
     ggtitle("Deviation of X-rays - detector entrance to readout") +
-    ggsave(&"deviationDet_stacked_{year}.pdf")
+    ggsave(&"out/deviationDet_stacked_{year}.pdf")
 
   ggplot(dfDet, aes("Energies", fill = factor("Shell"))) +
     ggridges("Shell", overlap = 1.8) +
     geom_histogram(binWidth = 0.1, position = "identity") +
     ggtitle("X-ray energy distributions at detector") +
-    ggsave(&"energies_by_shell_{year}.pdf", height = 600)
+    ggsave(&"out/energies_by_shell_{year}.pdf", height = 600)
 
   ggplot(dfDet, aes("Deviation [mm]", fill = factor("Shell"))) +
     ggridges("Shell", overlap = 1.8) +
     geom_histogram(binWidth = 0.001, position = "identity") +
     ggtitle("Deviation of X-rays - detector entrance to readout") +
-    ggsave(&"deviationDet_ridges_{year}.pdf", height = 600)
+    ggsave(&"out/deviationDet_ridges_{year}.pdf", height = 600)
 
   let dfFluxE = seqsToDf({"Axion energy [eV]": energiesAx,
-                              "Flux after experiment": fluxes})
+                           "Flux after experiment": fluxes})
   ggplot(dfFluxE, aes("Axion energy [eV]", "Flux after experiment")) +
     geom_point() +
     ggtitle("The flux after the experiment") +
-    ggsave(&"FluxE_{year}.pdf")
+    ggsave(&"out/FluxE_{year}.pdf")
 
   #let fname2 = "extracted_from_aznar2015_llnl_telescope_eff_plot.csv"
   #let dfEnergyEff = toDf(readCsv(fname2, sep = ','))
@@ -1257,7 +1257,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   #ggplot(dfEnergyEff, aes("Energies [keV]", "Effective Area [cm^2]")) +
   #  geom_line() +
   #  ggtitle("The telescope energy efficiency") +
-  #  ggsave(&"EnergyEff_{year}.pdf")
+  #  ggsave(&"out/EnergyEff_{year}.pdf")
 
   let dfFluxE2 = seqsToDf({ "Axion energy [keV]": energiesAx,
                             "Flux after experiment": weights })
@@ -1265,14 +1265,14 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   ggplot(dfFluxE2, aes("Axion energy [keV]", weight = "Flux after experiment")) +
     geom_histogram(binWidth = 0.1) +
     ylab("The flux after the experiment") +
-    ggsave(&"FluxEnice_{year}.pdf")
+    ggsave(&"out/FluxEnice_{year}.pdf")
 
   let dfFluxE3 = seqsToDf({"Axion energy [keV]": energiesPre})
 
   ggplot(dfFluxE3, aes("Axion energy [keV]")) +
     geom_histogram(binWidth = 0.1) +
     ylab("The flux before the experiment") +
-    ggsave(&"FluxE_before_experiment_{year}.pdf")
+    ggsave(&"out/FluxE_before_experiment_{year}.pdf")
 
   #[ggplot(dfFluxE, aes("Axion energy [keV]")) +#, weights = "Flux after experiment")) +
     geom_histogram() +
