@@ -324,7 +324,6 @@ proc getPixelValue(intersects: Vec3): Vec3 =
   intersectsPix[1] = floor(intersects[1] / (sizeViewfield/1400.0)) + 700
   result = intersectsPix
 
-
 proc lineIntersectsCircleEdge(circleEdges: seq[seq[float64]],
     intersectsPix: Vec3): bool =
   var
@@ -523,6 +522,8 @@ proc drawfancydiagrams(diagramtitle: string,
   makeMinMax(min, Y)
   makeMinMax(max, Y)
 
+  echo df
+  echo df.filter(f{`z` > 0.0})
   ggplot(df, aes("x-axis [mm]", "y-axis [mm]", fill = "z")) +
     geom_raster() +
     scale_x_continuous() + scale_y_continuous() + scale_fill_continuous("z") +
@@ -612,6 +613,8 @@ proc traceAxion(res: var Axion,
   ## Get a random point in the sun, biased by the emission rate, which is higher
   ## at smalller radii, so this will give more points in the center of the sun ##
   let pointInSun = getRandomPointFromSolarModel(centerVecs.centerSun, radiusSun, emRatesRadiusCumSum)
+  #let pointInSun = getRandomPointOnDisk(centerVecs.centerSun, radiusSun)
+  #let pointInSun = centerVecs.centerSun
   ## Get a random point at the end of the coldbore of the magnet to take all axions into account that make it to this point no matter where they enter the magnet ##
   let pointExitCBMagneticField = getRandomPointOnDisk(
       centerVecs.centerExitCBMagneticField, expSetup.radiusCB)
@@ -755,8 +758,6 @@ proc traceAxion(res: var Axion,
     distanceMirrors = cos(beta3) * (xSep + expSetup.lMirror)
     pointMirror1 = findPosXRT(pointEntranceXRTZylKart, pointExitCBZylKart, r1,
         r2, beta, expSetup.lMirror, 0.0, 0.001, 1.0, 1.1)
-
-
   # var s = getVectoraAfterMirror(pointEntranceXRTZylKart, pointExitCBZylKart, pointMirror1, beta, "angle") ##poinExitPipeVT3 = pointEntranceXRT
 
 
@@ -990,6 +991,9 @@ proc traceAxion(res: var Axion,
         pointDetectorWindow[0] <= CHIPREGIONS_CHIP_X_MAX) and (
         pointDetectorWindow[1] >= CHIPREGIONS_CHIP_Y_MIN) and (
         pointDetectorWindow[1] <= CHIPREGIONS_CHIP_Y_MAX))
+  #echo gold
+  #echo silver
+  #echo bronze
 
   # finally set the `passed` field to indicate this axion went all the way
   res.passed = true
@@ -1096,6 +1100,19 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   var emRatesDf = readCsvTyped("solar_model_tensor.csv")
     .rename(f{"Radius" <- "dimension_1"}, f{"Energy" <- "dimension_2"}, f{"Flux" <- "value"})
     #.mutate(f{"Energy" ~ (`Energy` * 9 + 1.0) * 0.001})
+  #ggplot(emRatesDf, aes("Radius", "Flux")) + geom_point() + ggsave("/tmp/rad_flux.pdf")
+  #ggplot(emRatesDf, aes("Energy", "Flux")) + geom_point() + ggsave("/tmp/energy_flux.pdf")
+  #ggplot(emRatesDf, aes("Energy", "Flux", color = factor("Radius"))) +
+  #  geom_line() +
+  #  xlim(0, 0.1) +
+  #  ggsave("/tmp/energy_rad_flux.pdf")
+  #
+  #let emRatesDfRad = emRatesDf.group_by("Radius").summarize(f{float: "SumFlux" << sum(`Flux`)})
+  #echo emRatesDfRad
+  #ggplot(emRatesDfRad, aes("Radius", "SumFlux")) +
+  #  geom_line() +
+  #  ggsave("/tmp/flux_radius_sum.pdf")
+
 
   let emRatesTensor = emRatesDf["Flux"].toTensor(float)
     .reshape([emRatesDf.filter(fn {`Radius` == 0}).len, emRatesDf.filter(
