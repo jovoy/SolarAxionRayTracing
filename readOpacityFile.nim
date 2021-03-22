@@ -367,7 +367,8 @@ proc primakoff(temp, energy, gagamma, ks2, alpha, ne, me: float): float =
 
 proc getFluxFraction(energies: seq[float], df: DataFrame,
                      n_es, temperatures: seq[int],
-                     emratesS: Tensor[float]): seq[float] =
+                     emratesS: Tensor[float],
+                     typ: string = ""): DataFrame =
   const
     alpha = 1.0 / 137.0
     g_ae = 1e-13 # Redondo 2013: 0.511e-10
@@ -379,10 +380,12 @@ proc getFluxFraction(energies: seq[float], df: DataFrame,
     hbar = 6.582119514e-25 # in GeV * s
     keV2cm = 1.97327e-8 # cm per keV^-1
     amu = 1.6605e-24 #grams
-  var diff_fluxs: seq[float]
   let factor = pow(r_sun * 0.1 / (keV2cm), 3.0) /
                (pow(0.1 * r_sunearth, 2.0) * (1.0e6 * hbar)) /
                (3.1709791983765E-8 * 1.0e-4) # for units of 1/(keV y m²)
+  var diff_fluxs: seq[float]
+  var radii: seq[float]
+  var E: seq[float]
   for e in energies:
     var iEindexx = ((e - 1.0) / 9.0).toInt
     var diff_flux = 0.0
@@ -403,19 +406,29 @@ proc getFluxFraction(energies: seq[float], df: DataFrame,
         # sources of electric fields, neglecting both recoil effects and collective motions.
         ## TODO: what the heck is this? `k` is nowhere to be seen
         let k = sqrt((e_keV * e_keV) - ((4.0 * PI * alpha * n_e_keV) / m_e_keV))
-        diff_flux += emratesS[r, iEindexx] * (r_perc - r_last) * r_perc * r_perc *
+        diff_flux = emratesS[r, iEindexx] * (r_perc - r_last) * r_perc * r_perc *
                      e_keV * e_keV * 0.5 / (PI * PI) #k instead of e
       else :
-        diff_flux += emratesS[r, iEindexx] * (r_perc - r_last) * r_perc * r_perc *
+        diff_flux = emratesS[r, iEindexx] * (r_perc - r_last) * r_perc * r_perc *
                      e_keV * e_keV * 0.5 / (PI * PI)
       summm = summm + (r_perc - r_last)
       sum += (r_perc - r_last)
-
       r_last = r_perc
-    diff_flux = diff_flux * factor
-    diff_fluxs.add(diff_flux)
 
-    result = diff_fluxs
+      diff_fluxs.add diffFlux * factor
+      radii.add r.float
+      E.add e
+    #diff_flux = diff_flux * factor
+    #diff_fluxs.add(diff_flux)
+
+    #result = diff_fluxs
+  result = seqsToDf({"diffFlux" : diffFluxs, "Radius" : radii, "Energy" : E })
+  result["type"] = constantColumn(typ, result.len)
+
+#proc getFluxFraction(energies: seq[float], df: DataFrame,
+#                     n_es, temperatures: seq[int],
+#                     emratesS: Tensor[float]): seq[float] =
+#  result = df.group_by("Radius").summarize(f{sum(`diffFlux`)})["diffFlux", float].toRawSeq
 
 proc hash(x: ElementKind): Hash =
   var h: Hash = 0
@@ -541,10 +554,6 @@ proc main*(): Tensor[float] =
       #  let opFile = &"./OPCD_3.3/OP/opacity_table_{Z_str[1 .. ^1]}_{temp}_{ne}.dat"
       #  if existsFile(opFile):
       #    opElNew[(Z, temp, ne)] = parseOpacityFile(opFile, kind = ofkNew)
-
-
-
-
   ## Calculate the absorbtion coefficients depending on the energy and the radius out of the opacity values
   var
     absCoefs = zeros[float](nRadius, nElems) #29 elements
@@ -612,7 +621,6 @@ proc main*(): Tensor[float] =
             zs.add(Z)
             rs.add((R.float * 0.0005 + 0.0015))
             nZs.add(n_Z[R][Z])
-
 
           if Z == 1 and (iEindex == 12 or
                          iEindex == 68 or
@@ -684,44 +692,21 @@ proc main*(): Tensor[float] =
   #ggplot(dfOp, aes("Radius", "opacity", color = "energies")) +
   #  geom_point() +
   #  ggtitle("Radius versus opacity for different energies") +
-  #  ggsave("radius_op_energies.pdf")
+  #  ggsave("out/radius_op_energies.pdf")
 
-  let diff_fluxs = getFluxFraction(energies, df, n_es, temperatures, emratesS)
-  let term1flux = getFluxFraction(energies, df, n_es, temperatures, term1s)
-  let comptonflux = getFluxFraction(energies, df, n_es, temperatures, comptons)
-  let term3flux = getFluxFraction(energies, df, n_es, temperatures, term3s)
-  let fftermflux = getFluxFraction(energies, df, n_es, temperatures, ffterms)
-  let primakoffflux = getFluxFraction(energies, df, n_es, temperatures, primakoffs)
-  var energieslong: seq[float]
-  var fluxes: seq[float]
-  var kinds: seq[string]
-  for E in energies:
-    var e_keV = E * 0.001
-    var iEindex = ((E - 1.0) / 9.0).toInt
-    energieslong.add(e_keV)
-    fluxes.add(diff_fluxs[iEindex])
-    kinds.add("Total Flux")
-    energieslong.add(e_keV)
-    fluxes.add(term1flux[iEindex])
-    kinds.add("FB BB Flux")
-    energieslong.add(e_keV)
-    fluxes.add(comptonflux[iEindex])
-    kinds.add("Compton Flux")
-    energieslong.add(e_keV)
-    fluxes.add(term3flux[iEindex])
-    kinds.add("EE Flux")
-    energieslong.add(e_keV)
-    fluxes.add(fftermflux[iEindex])
-    kinds.add("FF Flux")
-    energieslong.add(e_keV)
-    fluxes.add(50.0 * primakoffflux[iEindex])
-    kinds.add("Primakoff Flux · 50")
+  var diffFluxDf = newDataFrame()
+  diffFluxDf.add getFluxFraction(energies, df, n_es, temperatures, emratesS, "Total flux")
+  diffFluxDf.add getFluxFraction(energies, df, n_es, temperatures, term1s, "FB BB Flux")
+  diffFluxDf.add getFluxFraction(energies, df, n_es, temperatures, comptons, "Compton Flux")
+  diffFluxDf.add getFluxFraction(energies, df, n_es, temperatures, term3s, "EE Flux")
+  diffFluxDf.add getFluxFraction(energies, df, n_es, temperatures, ffterms, "FF Flux")
+  diffFluxDf.add getFluxFraction(energies, df, n_es, temperatures, primakoffs, "Primakoff Flux · 50")
 
-  let diffFluxDf = seqsToDf({ "Energy / eV" : energies,
-                              "Flux / keV⁻¹ m⁻² yr⁻¹" : diff_fluxs })
-  diffFluxDf.write_csv(&"axion_diff_flux_gae_{g_ae}_gagamma_{g_agamma}.csv")
-  let totalFlux = simpson(diff_fluxs, energies.mapIt(it * 1e-3))
-  echo "The total axion Flux in 1/(y m^2):", totalFlux
+  #let diffFluxDf = seqsToDf({ "Energy / eV" : energies,
+  #                            "Flux / keV⁻¹ m⁻² yr⁻¹" : diff_fluxs })
+  #diffFluxDf.write_csv(&"axion_diff_flux_gae_{g_ae}_gagamma_{g_agamma}.csv")
+  #let totalFlux = simpson(diff_fluxs, energies.mapIt(it * 1e-3))
+  #echo "The total axion Flux in 1/(y m^2):", totalFlux
 
   let dfEmrate = seqsToDf({ "energy": energies,
                             "emrate": emratesS[4, _].squeeze.clone })
@@ -737,10 +722,7 @@ proc main*(): Tensor[float] =
     ggsave("out/abscoefs_R10.pdf")
 
 
-  let dfDiffflux = seqsToDf({ "Axion energy [eV]": energieslong,
-                              "Fluxfraction [keV⁻¹y⁻¹m⁻²]": fluxes,
-                              "type": kinds })
-  ggplot(dfDiffflux, aes("Axion energy [eV]", "Fluxfraction [keV⁻¹y⁻¹m⁻²]", color = "type")) +
+  ggplot(diffFluxDf, aes("Energy", "Flux", color = "Radius")) +
     geom_line() +
     xlab("Axion energy [keV]") +
     ylab("Flux [keV⁻¹ y⁻¹ m⁻²]") +
@@ -748,6 +730,17 @@ proc main*(): Tensor[float] =
     margin(right = 6.5) +
     ggsave("out/diffFlux_radii.pdf", width = 800, height = 480)
 
+  when false:
+    let dfDiffflux = seqsToDf({ "Axion energy [eV]": energieslong,
+                                "Fluxfraction [keV⁻¹y⁻¹m⁻²]": fluxes,
+                                "type": kinds })
+    ggplot(dfDiffflux, aes("Axion energy [eV]", "Fluxfraction [keV⁻¹y⁻¹m⁻²]", color = "type")) +
+      geom_line() +
+      xlab("Axion energy [keV]") +
+      ylab("Flux [keV⁻¹ y⁻¹ m⁻²]") +
+      ggtitle(&"Differential solar axion flux for g_ae = {g_ae}, g_aγ = {g_agamma} GeV⁻¹") +
+      margin(right = 6.5) +
+      ggsave("out/diffFlux.pdf", width = 800, height = 480)
 
   result = emratesS
 
