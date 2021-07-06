@@ -91,6 +91,9 @@ const
   mAxion = 0.4                          #eV for example
   g_agamma = 1e-12
 
+const
+  IgnoreDetWindow = false
+  IgnoreGasAbs = false
 
 ## Chipregions#####
 
@@ -929,7 +932,8 @@ proc traceAxion(res: var Axion,
         float).toRawSeq.lowerBound(energyAx * 1000.0)
     transWindow = dfTab["siFile"]["Transmission"].toTensor(float)[energyAxTransWindow]
     #transWindow = splineStrips.eval(energyAx * 1000.0)
-    weight *= transWindow
+    when not IgnoreDetWindow:
+      weight *= transWindow
     res.transProbWindow = transWindow
     res.transProbDetector = transWindow
     res.energiesAxAll = energyAx
@@ -939,7 +943,8 @@ proc traceAxion(res: var Axion,
         float).toRawSeq.lowerBound(energyAx * 1000.0)
     transWindow = dfTab["siNfile"]["Transmission"].toTensor(float)[energyAxTransWindow]
     #transWindow = spline.eval(energyAx * 1000.0)
-    weight *= transWindow
+    when not IgnoreDetWindow:
+      weight *= transWindow
     res.transprobWindow = transWindow
     res.transProbDetector = transWindow
     res.energiesAxAll = energyAx
@@ -950,7 +955,8 @@ proc traceAxion(res: var Axion,
       float).toRawSeq.lowerBound(energyAx * 1000.0)
   let transDet = dfTab["detectorFile"]["Transmission"].toTensor(float)[energyAxTransWindow]
   #var transDet = splineDet.eval(energyAx * 1000.0)
-  weight *= 1.0 - transDet
+  when not IgnoreGasAbs:
+    weight *= 1.0 - transDet
   #echo splineDet.eval(energyAx * 1000.0)
   res.transProbArgon = transDet
   res.transProbDetector = transDet
