@@ -572,13 +572,13 @@ proc getVarsForSetup*(setup: ExperimentSetupKind): ExperimentSetup =
                              # Change:
       RAYTRACER_LENGTH_COLDBORE: 10000.0, #mm not sure if this is true
       RAYTRACER_LENGTH_COLDBORE_9T: 10000.0, #mm I know it's not 9T here should be the actual length of pipe with a stable magnetic field
-      RAYTRACER_LENGTH_PIPE_CB_VT3: 300.0, #mm said Tobi
+      RAYTRACER_LENGTH_PIPE_CB_VT3: 300.0, #mm not determined
       radiusPipeCBVT3: 370.0, #mm smallest aperture between end of CB and VT4 # no Idea, I just made it wider than the coldbore
-      RAYTRACER_LENGTH_PIPE_VT3_XRT: 300.0, #mm said Tobi
+      RAYTRACER_LENGTH_PIPE_VT3_XRT: 300.0, #mm not determined
       radiusPipeVT3XRT: 370.0, #mm irrelevant, large enough to not loose anything # no idea
       RAYTRACER_FOCAL_LENGTH_XRT: 7500.0, #mm # one possibility, the other is 5050 mm
       distanceCBAxisXRTAxis: 0.0,
-      RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW: 0.0, #mm #no change, because don't know
+      RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW: 0.0, #mm #no change, because don't know #good idea
       pipes_turned: 0.0, #degree
                              # Measurements of the Telescope mirrors in the following, R1 are the radii of the mirror shells at the entrance of the mirror
                              # It's again a Nustar telescope, but not just a fragment, so I suppose there are more than 13 Layers
@@ -591,9 +591,9 @@ proc getVarsForSetup*(setup: ExperimentSetupKind): ExperimentSetup =
       #allR2: @[0.0, 60.731, 63.237, 65.838, 68.538, 71.339, 74.246, 77.263, 80.394, 83.642]
       allAngles: @[0.0, 0.579, 0.603, 0.628, 0.654, 0.680, 0.708, 0.737, 0.767,
           0.798, 0.830, 0.863, 0.898, 0.933, 0.970], ## the angles of the mirror shells coresponding to the radii above
-      lMirror: 225.0, #mm Mirror length
+      lMirror: 300.0, #mm Mirror length
       d: 0.0, #mm ## distance between center of colbore at XRT and center of XRT (where the focal point is on the minus x axis)
-      B: 2.0, #T magnetic field of magnet
+      B: 2.0, #T magnetic field of magnet # Rather 2-3 T, not entirely homogeneous
       tGas: 293.15, #K only Gas in BabyIAXO
       depthDet: 30.0 #mm #probably not
     )
