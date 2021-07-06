@@ -1103,7 +1103,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     roomTemp = 293.15 #K
 
   ## TODO: make the code use tensor for the emission rates!
-  var emRatesDf = readCsvTyped("solar_model_tensor.csv")
+  var emRatesDf = readCsv("solar_model_tensor.csv")
     .rename(f{"Radius" <- "dimension_1"}, f{"Energy" <- "dimension_2"}, f{"Flux" <- "value"})
     #.mutate(f{"Energy" ~ (`Energy` * 9 + 1.0) * 0.001})
   #ggplot(emRatesDf, aes("Radius", "Flux")) + geom_point() + ggsave("/tmp/rad_flux.pdf")
@@ -1185,9 +1185,9 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   ################################################################################
   ################################################################################
   var dfTab = initTable[string, DataFrame]()
-  dfTab["siFile"] = toDf(readCsv(siFile, sep = ' '))
-  dfTab["siNfile"] = toDf(readCsv(siNfile, sep = ' '))
-  dfTab["detectorFile"] = toDf(readCsv(detectorFile, sep = ' '))
+  dfTab["siFile"] = readCsv(siFile, sep = ' ')
+  dfTab["siNfile"] = readCsv(siNfile, sep = ' ')
+  dfTab["detectorFile"] = readCsv(detectorFile, sep = ' ')
   echo dfTab
 
   let centerVecs = CenterVectors(centerEntranceCB: centerEntranceCB,
