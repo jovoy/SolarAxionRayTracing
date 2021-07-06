@@ -8,6 +8,6 @@ srcDir        = "src"
 
 # Dependencies
 
-requires "nim >= 1.0.0"
-requires "ggplotnim >= 0.2.2"
-requires "numericalnim >= 0.5.0.1"
+requires "nim >= 1.5.0"
+requires "ggplotnim >= 0.4.3"
+requires "numericalnim >= 0.6.1"

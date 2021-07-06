@@ -91,6 +91,9 @@ const
   mAxion = 0.4                          #eV for example
   g_agamma = 1e-12
 
+const
+  IgnoreDetWindow = false
+  IgnoreGasAbs = false
 
 ## Chipregions#####
 
@@ -929,7 +932,8 @@ proc traceAxion(res: var Axion,
         float).toRawSeq.lowerBound(energyAx * 1000.0)
     transWindow = dfTab["siFile"]["Transmission"].toTensor(float)[energyAxTransWindow]
     #transWindow = splineStrips.eval(energyAx * 1000.0)
-    weight *= transWindow
+    when not IgnoreDetWindow:
+      weight *= transWindow
     res.transProbWindow = transWindow
     res.transProbDetector = transWindow
     res.energiesAxAll = energyAx
@@ -939,7 +943,8 @@ proc traceAxion(res: var Axion,
         float).toRawSeq.lowerBound(energyAx * 1000.0)
     transWindow = dfTab["siNfile"]["Transmission"].toTensor(float)[energyAxTransWindow]
     #transWindow = spline.eval(energyAx * 1000.0)
-    weight *= transWindow
+    when not IgnoreDetWindow:
+      weight *= transWindow
     res.transprobWindow = transWindow
     res.transProbDetector = transWindow
     res.energiesAxAll = energyAx
@@ -950,7 +955,8 @@ proc traceAxion(res: var Axion,
       float).toRawSeq.lowerBound(energyAx * 1000.0)
   let transDet = dfTab["detectorFile"]["Transmission"].toTensor(float)[energyAxTransWindow]
   #var transDet = splineDet.eval(energyAx * 1000.0)
-  weight *= 1.0 - transDet
+  when not IgnoreGasAbs:
+    weight *= 1.0 - transDet
   #echo splineDet.eval(energyAx * 1000.0)
   res.transProbArgon = transDet
   res.transProbDetector = transDet
@@ -1097,7 +1103,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     roomTemp = 293.15 #K
 
   ## TODO: make the code use tensor for the emission rates!
-  var emRatesDf = readCsvTyped("solar_model_tensor.csv")
+  var emRatesDf = readCsv("solar_model_tensor.csv")
     .rename(f{"Radius" <- "dimension_1"}, f{"Energy" <- "dimension_2"}, f{"Flux" <- "value"})
     #.mutate(f{"Energy" ~ (`Energy` * 9 + 1.0) * 0.001})
   #ggplot(emRatesDf, aes("Radius", "Flux")) + geom_point() + ggsave("/tmp/rad_flux.pdf")
@@ -1179,9 +1185,9 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   ################################################################################
   ################################################################################
   var dfTab = initTable[string, DataFrame]()
-  dfTab["siFile"] = toDf(readCsv(siFile, sep = ' '))
-  dfTab["siNfile"] = toDf(readCsv(siNfile, sep = ' '))
-  dfTab["detectorFile"] = toDf(readCsv(detectorFile, sep = ' '))
+  dfTab["siFile"] = readCsv(siFile, sep = ' ')
+  dfTab["siNfile"] = readCsv(siNfile, sep = ' ')
+  dfTab["detectorFile"] = readCsv(detectorFile, sep = ' ')
   echo dfTab
 
   let centerVecs = CenterVectors(centerEntranceCB: centerEntranceCB,
