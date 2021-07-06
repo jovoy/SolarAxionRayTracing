@@ -865,7 +865,7 @@ proc traceAxion(res: var Axion,
   of esCAST:
     transmissionMagnet = cos(ya) * probConversionMagnet #1.0
   of esBabyIAXO:
-    transmissionMagnet = 0.0 #transmissionMagnetGas
+    transmissionMagnet = cos(ya) * probConversionMagnet #0.0 #transmissionMagnetGas
 
   if energyAx < 2.0:
     #total eff area of telescope = 1438.338mm² = 14.38338cm² #the last thing are the mirror seperators
