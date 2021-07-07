@@ -17,6 +17,7 @@ var
   alpha: float
   alphas: seq[float]
   x = 0
+  xsep: seq[float]
 
 for i in 1..58:
   t = 0.47+(i.float-1.0)*((1.07-0.47)/57.0)
@@ -24,7 +25,7 @@ for i in 1..58:
   d = 1.0+(i.float-1.0)*((5.0-1.0)/57.0)
   ds.add(d)
   
-  r1s.add(r1)
+  r1s.add(round(r1,3))
   
   for j in 1..100:
     r1j = 300.0*sin(degToRad(j.float*0.01))+7500*tan(4.0*degToRad(j.float*0.01))
@@ -35,11 +36,12 @@ for i in 1..58:
       alpha = j.float*0.01
       x+=1
 
-  alphas.add(alpha)
-
+  alphas.add(round(alpha,3))
+  xsep.add(0.0)
   r1 = r1 + ts[i-1] + ds[i-1]
   
 
 echo x
 echo r1s
+echo xsep
 echo alphas
