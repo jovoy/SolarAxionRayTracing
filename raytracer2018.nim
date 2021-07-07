@@ -83,7 +83,7 @@ type
 const
   RAYTRACER_DISTANCE_SUN_EARTH = 1.5e14 #mm #ok
   radiusSun = 6.9e11                    #mm #ok
-  numberOfPointsSun = 1_000_000            #100000 for statistics
+  numberOfPointsSun = 1_000_000            #100000 for statistics   
 
   pressGas = 14.3345 #for example P = 14.3345 mbar (corresponds to 1 bar at room temperature).
 
@@ -574,7 +574,7 @@ proc getVarsForSetup*(setup: ExperimentSetupKind): ExperimentSetup =
     result = ExperimentSetup(radiusCB: 350.0, #mm
                              # Change:
       RAYTRACER_LENGTH_COLDBORE: 10000.0, #mm not sure if this is true
-      RAYTRACER_LENGTH_COLDBORE_9T: 10000.0, #mm I know it's not 9T here should be the actual length of pipe with a stable magnetic field
+      RAYTRACER_LENGTH_COLDBORE_9T: 9990.0, #mm I know it's not 9T here should be the actual length of pipe with a stable magnetic field; can't be same length
       RAYTRACER_LENGTH_PIPE_CB_VT3: 300.0, #mm not determined
       radiusPipeCBVT3: 370.0, #mm smallest aperture between end of CB and VT4 # no Idea, I just made it wider than the coldbore
       RAYTRACER_LENGTH_PIPE_VT3_XRT: 300.0, #mm not determined
@@ -587,13 +587,16 @@ proc getVarsForSetup*(setup: ExperimentSetupKind): ExperimentSetup =
                              # It's again a Nustar telescope, but not just a fragment, so I suppose there are more than 13 Layers
                              # Also the widest radius in CAST was 100 mm which is not enough, it should be about 350 mm
                              # Also the angles need to be different... but I could figute them out...
-      allR1: @[60.7095, 63.006, 65.606, 68.305, 71.105, 74.011, 77.027, 80.157,
-          83.405, 86.775, 90.272, 93.902, 97.668, 101.576, 105.632], ## the radii of the shells
-      allXsep: @[4.0, 4.171, 4.140, 4.221, 4.190, 4.228, 4.245, 4.288, 4.284,
-          4.306, 4.324, 4.373, 4.387, 4.403, 4.481],
+      allR1: @[153.0, 154.47, 156.021, 157.652, 159.364, 161.157, 163.031, 164.985, 167.02, 169.135, 171.332, 173.609, 175.966, 178.405, 180.924, 183.524, 
+          186.204, 188.965, 191.807, 194.73, 197.733, 200.817, 203.982, 207.228, 210.554, 213.961, 217.448, 221.016, 224.665, 228.395, 232.205, 236.096, 240.068, 
+          244.121, 248.254, 252.468, 256.762, 261.137, 265.593, 270.13, 274.747, 279.445, 284.224, 289.084, 294.024, 299.045, 304.146, 309.329, 314.592, 319.935, 
+          325.36, 330.865, 336.451, 342.117, 347.864, 353.692, 359.601, 365.59], ## the radii of the shells closest to the magnet
+      allXsep: @[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 
+          0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
       #allR2: @[0.0, 60.731, 63.237, 65.838, 68.538, 71.339, 74.246, 77.263, 80.394, 83.642]
-      allAngles: @[0.0, 0.579, 0.603, 0.628, 0.654, 0.680, 0.708, 0.737, 0.767,
-          0.798, 0.830, 0.863, 0.898, 0.933, 0.970], ## the angles of the mirror shells coresponding to the radii above
+      allAngles: @[0.29, 0.29, 0.3, 0.3, 0.3, 0.3, 0.31, 0.31, 0.32, 0.32, 0.32, 0.33, 0.33, 0.34, 0.34, 0.35, 0.35, 0.36, 0.36, 0.37, 0.37, 0.38, 0.39, 0.39, 
+          0.4, 0.4, 0.41, 0.42, 0.42, 0.43, 0.44, 0.45, 0.45, 0.46, 0.47, 0.48, 0.49, 0.49, 0.5, 0.51, 0.52, 0.53, 0.54, 0.55, 0.56, 0.57, 0.57, 0.58, 0.59, 
+          0.6, 0.61, 0.63, 0.64, 0.65, 0.66, 0.67, 0.68, 0.69], ## the angles of the mirror shells coresponding to the radii above
       lMirror: 300.0, #mm Mirror length
       d: 0.0, #mm ## distance between center of colbore at XRT and center of XRT (where the focal point is on the minus x axis)
       B: 2.0, #T magnetic field of magnet # Rather 2-3 T, not entirely homogeneous
@@ -630,7 +633,7 @@ proc traceAxion(res: var Axion,
     pointInSun, centerVecs.centerSun, radiusSun, energies, emRates, emRateCDFs, "emissionRate"
   )
   ## Throw away all the axions, that don't make it through the piping system and therefore exit the system at some point ##
-
+  
   # TODO: ask johanna why is `intersect` 0? Isn't being modified anywhere!
   var intersect = vec3(0.0)
   let intersectsEntranceCB = lineIntersectsCircle(pointInSun,
@@ -642,7 +645,7 @@ proc traceAxion(res: var Axion,
         pointExitCBMagneticField, centerVecs.centerEntranceCB,
         centerVecs.centerExitCBMagneticField, expSetup.radiusCB, intersect)
   if (not intersectsEntranceCB and not intersectsCB): return
-
+  
   if (not intersectsEntranceCB): #generates problems with the weight because the weight is multiplied with the difference of the leght of the path of the particle and the legth of the coldbore
     intersect = getIntersectLineIntersectsCylinderOnce(pointInSun,
         pointExitCBMagneticField, centerVecs.centerEntranceCB,
@@ -655,7 +658,7 @@ proc traceAxion(res: var Axion,
 
   if (not lineIntersectsCircle(pointInSun, pointExitCBMagneticField,
       centerVecs.centerExitCB, expSetup.radiusCB, pointExitCB)): return
-
+  
   pointExitCB = pointInSun + ((centerVecs.centerExitCB[2] - pointInSun[2]) / (
       pointExitCBMagneticField - pointInSun)[2]) * (pointExitCBMagneticField - pointInSun)
 
@@ -663,8 +666,11 @@ proc traceAxion(res: var Axion,
 
   if (not lineIntersectsCircle(pointExitCBMagneticField, pointExitCB,
       centerVecs.centerExitPipeCBVT3, expSetup.radiusPipeCBVT3,
-      pointExitPipeCBVT3)): return
-
+      pointExitPipeCBVT3)): 
+        echo "start"
+        echo "exit magnet", pointExitCBMagneticField, "exit cb", pointExitCB
+        return
+  
   pointExitPipeCBVT3 = pointExitCBMagneticField + ((
       centerVecs.centerExitPipeCBVT3[2] - pointExitCBMagneticField[2]) / (
       pointExitCB - pointExitCBMagneticField)[2]) * (pointExitCB - pointExitCBMagneticField)
@@ -673,13 +679,13 @@ proc traceAxion(res: var Axion,
   if (not lineIntersectsCircle(pointExitCB, pointExitPipeCBVT3,
       centerVecs.centerExitPipeVT3XRT, expSetup.radiusPipeVT3XRT,
       pointExitPipeVT3XRT)): return
-
+  
   pointExitPipeVT3XRT = pointExitCB + ((centerVecs.centerExitPipeVT3XRT[2] -
       pointExitCB[2]) / (pointExitPipeCBVT3 - pointExitCB)[2]) * (
       pointExitPipeCBVT3 - pointExitCB)
 
   var vectorBeforeXRT = pointExitPipeVT3XRT - pointExitCB
-
+  
   ###################from the CB (coldbore(pipe in Magnet)) to the XRT (XrayTelescope)#######################
 
   var pointEntranceXRT = vec3(0.0)
@@ -1380,7 +1386,7 @@ when isMainModule:
   detectorWindowAperture = 14.0 #mm
 
   calculateFluxFractions(radiationCharacteristic, detectorWindowAperture,
-                         pressGas, mAxion, esCAST,
+                         pressGas, mAxion, esBabyIAXO,
                          "2018") # radiationCharacteristic = "axionRadiation::characteristic::sar"
 
   # weight (telescopetransmission)
