@@ -1324,14 +1324,16 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     ggsave(&"out/FluxR_{year}.pdf")]#
 
   let dfRad = seqsToDf({"Radial component [mm]": pointdataR,
-                        "Transmission probability": weights})
-  #.filter(f{Value: isNull(df["Shell"][idx]).toBool == false})
-
+                        "Transmission probability": weights,
+                        "x": pointDataX,
+                       "y": pointDataY})
+  echo dfRad
+  echo dfRad.arrange("Radial component [mm]")
   ggplot(dfRad, aes("Radial component [mm]", weight = "Transmission probability")) +
     geom_histogram(binWidth = 0.001) +
     ggtitle("Radial distribution of the axions") +
     ggsave(&"out/radialDistribution_{year}.pdf")
-
+  
   let dfFluxE = seqsToDf({"Axion energy [eV]": energiesAx,
                           "Transmission probability": weights})
 
@@ -1345,10 +1347,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
                        "Transmission probability": weights})
     .mutate(f{"R" ~ sqrt(`x` * `x` + `y` * `y`)})
 
-  ggplot(dfXY, aes("x", "y")) +
-    geompoint(size = some(0.5), alpha = some(0.05)) +
-    ggtitle("X and Y") +
-    ggsave(&"out/xy_{year}.pdf") 
+
 
   ggplot(dfXY, aes("x", weight = "Transmission probability")) +
     geom_histogram(binWidth = 0.001) +
@@ -1360,11 +1359,51 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     ggtitle("R") +
     ggsave(&"out/R_{year}.pdf")
 
-  ggplot(dfXY, aes("y", weight = "Transmission probability")) +
-    geom_histogram(binWidth = 0.001) +
-    ggtitle("X and Y") +
-    ggsave(&"out/y_{year}.pdf")
+
   
+  ############get the 1 and 2 sigma area ###################
+  var pointR = pointdataR
+
+  sort(pointR, system.cmp)
+
+  var sigma1 = (pointR.len.float * 0.68).round.int
+  var sigma2 = (pointR.len.float * 0.955).round.int
+  var pointRsigma1 = pointR[0..<sigma1]
+  var pointRsigma2 = pointR[0..<sigma2]
+  var sigmaAssign = newSeq[string](pointR.len)
+  sigmaAssign.fill(0, sigma1 - 1, "sigma 1") #= 1.0"sigma 1"
+  sigmaAssign.fill(sigma1, sigma2 - 1, "sigma 2")
+  sigmaAssign.fill(sigma2, pointR.len - 1, "rest") 
+
+  #dfRad.mutate(fn {string -> string: "Sigma" ~ sigmaAssign[parseInt(`Idx`)]})
+  let 
+    dfRadOrg = dfRad.arrange("Radial component [mm]")
+    pointdataRSig = dfRadOrg["Radial component [mm]"].toTensor(float)
+    weightsSig = dfRadOrg["Transmission probability"].toTensor(float)
+    pointDataXSig = dfRadOrg["x"].toTensor(float)
+    pointDataYSig = dfRadOrg["y"].toTensor(float)
+
+  let dfRadSig = seqsToDf({"Radial component [mm]": pointdataRSig,
+                        "Transmission probability": weightsSig,
+                        "x": pointDataXSig,
+                       "y": pointDataYSig,
+                       "Sigma" : sigmaAssign,})
+
+  ggplot(dfRadSig, aes("Radial component [mm]", fill = factor("Sigma"), weight = "Transmission probability")) +
+    geom_histogram(binWidth = 0.001) +
+    ggtitle("Radial distribution of the axions with sigma") +
+    ggsave(&"out/radDistSig_{year}.pdf")
+  
+  ggplot(dfRadSig, aes("x", "y", fill = factor("Sigma"), weight = "Transmission probability")) +
+    geompoint(size = some(0.5), alpha = some(0.08)) +
+    ggtitle("X and Y") +
+    ggsave(&"out/xy_{year}.pdf") 
+
+  ggplot(dfRadSig, aes("y", fill = factor("Sigma"), weight = "Transmission probability")) +
+    geom_histogram(binWidth = 0.001) +
+    ggtitle("Y") +
+    ggsave(&"out/y_{year}.pdf")
+  #let fname2 = "extracted_from_aznar2015_llnl_telescope_eff_plot.csv"
   #let dfEnergyEff = toDf(readCsv(fname2, sep = ','))
   #  .mutate(fn {"Energies [keV]" ~ `xVals` * 8.0 + 1.0},
   #          fn {"Effective Area [cm^2]" ~ `yVals` *
