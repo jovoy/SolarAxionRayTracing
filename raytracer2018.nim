@@ -1007,8 +1007,10 @@ proc traceAxion(res: var Axion,
   #echo silver
   #echo bronze
 
-  # finally set the `passed` field to indicate this axion went all the way
-  res.passed = true
+  # finally set the `passed` field to indicate this axion went all the way 
+  if weight != 0:
+    res.passed = true
+  else: echo "lol"
 
 proc traceAxionWrapper(axBuf: ptr UncheckedArray[Axion],
                        bufLen: int,
