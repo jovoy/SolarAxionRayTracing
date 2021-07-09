@@ -62,8 +62,8 @@ type
     pointdataY: float
     pointdataXBefore: float
     pointdataYBefore: float
+    pointdataR: float
     weights: float
-    fluxes: float
     pixvalsX: float
     pixvalsY: float
     radii: float
@@ -90,7 +90,7 @@ const
 
   mAxion = 0.4                          #eV for example
   g_agamma = 1e-12
-
+var fluxesRs = newSeq[float](1000)
 const
   IgnoreDetWindow = false
   IgnoreGasAbs = false
@@ -792,6 +792,7 @@ proc traceAxion(res: var Axion,
   var
     pointDetectorWindow = vec3(0.0)
     pointEndDetector = vec3(0.0)
+    pointRadialComponent: float
     distDet: float
     n: float
     n3: float
@@ -972,20 +973,19 @@ proc traceAxion(res: var Axion,
   res.energiesAx = energyAx
   res.shellNumber = h
   ###detector COS has (0/0) at the bottom left corner of the chip
-
-  pointDetectorWindow[0] = - pointDetectorWindow[0] +
-      CHIPREGIONS_CHIP_CENTER_X # for the view from the detector to the sun
+  pointRadialComponent = sqrt(pointDetectorWindow[0]*pointDetectorWindow[0]+pointDetectorWindow[1]*pointDetectorWindow[1])
+  res.pointdataR = pointRadialComponent
+  #echo pointRadialComponent, "x ", pointDetectorWindow[0], "y ", pointDetectorWindow[1]
+  pointDetectorWindow[0] = - pointDetectorWindow[0] + CHIPREGIONS_CHIP_CENTER_X # for the view from the detector to the sun
   pointDetectorWindow[1] = pointDetectorWindow[1] + CHIPREGIONS_CHIP_CENTER_Y
 
-  for i in 1..1000:
-    if energyAx * 1000.0 < 0.0 + i.float * 10.0 and energyAx * 1000.0 > 0.0 +
-        i.float * 10.0 - 10.0:
-      res.fluxes += weight
+
   ## assign final axion position & weight
   res.pointdataX = pointDetectorWindow[0]
   res.pointdataY = pointDetectorWindow[1]
   res.weights = weight
 
+  
   ## TODO: the following are not used for anything!
   let
     gold = ( (pointDetectorWindow[0] >= CHIPREGIONS_GOLD_X_MIN) and (
@@ -1237,13 +1237,16 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   extractPass(energiesAx)
   extractPass(shellNumber)
 
-  extractPass(fluxes)
   extractPass(weights)
   extractPass(transProbArgon)
-
+  
   extractPass(pointDataX)
   extractPass(pointDataY)
+  extractPass(pointdataR)
 
+  echo pointDataX.totensor.mean
+  echo pointDataY.totensor.mean
+  echo pointDataR.totensor.mean
   template extractAll(n: untyped): untyped =
     let n = axions.mapIt(it.n)
   extractAll(energiesAxAll)
@@ -1305,15 +1308,63 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     geom_histogram(binWidth = 0.001, position = "identity") +
     ggtitle("Deviation of X-rays - detector entrance to readout") +
     ggsave(&"out/deviationDet_ridges_{year}.pdf", height = 600)
-
-  let dfFluxE = seqsToDf({"Axion energy [eV]": energiesAx,
+  
+  #[let dfFluxE = seqsToDf({"Axion energy [eV]": energiesAx,
                            "Flux after experiment": fluxes})
   ggplot(dfFluxE, aes("Axion energy [eV]", "Flux after experiment")) +
     geom_point() +
     ggtitle("The flux after the experiment") +
     ggsave(&"out/FluxE_{year}.pdf")
 
-  #let fname2 = "extracted_from_aznar2015_llnl_telescope_eff_plot.csv"
+  let dfFluxR = seqsToDf({"Axion radial position [mm]": pointdataR,
+                           "Flux after experiment": fluxesR})
+  ggplot(dfFluxR, aes("Axion radial position [mm]", "Flux after experiment")) +
+    geom_point() +
+    ggtitle("The radial flux after the experiment") +
+    ggsave(&"out/FluxR_{year}.pdf")]#
+
+  let dfRad = seqsToDf({"Radial component [mm]": pointdataR,
+                        "Transmission probability": weights})
+  #.filter(f{Value: isNull(df["Shell"][idx]).toBool == false})
+
+  ggplot(dfRad, aes("Radial component [mm]", weight = "Transmission probability")) +
+    geom_histogram(binWidth = 0.001) +
+    ggtitle("Radial distribution of the axions") +
+    ggsave(&"out/radialDistribution_{year}.pdf")
+
+  let dfFluxE = seqsToDf({"Axion energy [eV]": energiesAx,
+                          "Transmission probability": weights})
+
+  ggplot(dfFluxE, aes("Axion energy [eV]", weight = "Transmission probability")) +
+    geom_histogram(binWidth = 0.001) +
+    ggtitle("The Axion flux after the experiment") +
+    ggsave(&"out/fluxAfter_{year}.pdf") 
+
+  let dfXY = seqsToDf({"x": pointDataX,
+                       "y": pointDataY,
+                       "Transmission probability": weights})
+    .mutate(f{"R" ~ sqrt(`x` * `x` + `y` * `y`)})
+
+  ggplot(dfXY, aes("x", "y")) +
+    geompoint(size = some(0.5), alpha = some(0.05)) +
+    ggtitle("X and Y") +
+    ggsave(&"out/xy_{year}.pdf") 
+
+  ggplot(dfXY, aes("x", weight = "Transmission probability")) +
+    geom_histogram(binWidth = 0.001) +
+    ggtitle("X and Y") +
+    ggsave(&"out/x_{year}.pdf")
+
+  ggplot(dfXY, aes("R", weight = "Transmission probability")) +
+    geom_histogram(binWidth = 0.001) +
+    ggtitle("R") +
+    ggsave(&"out/R_{year}.pdf")
+
+  ggplot(dfXY, aes("y", weight = "Transmission probability")) +
+    geom_histogram(binWidth = 0.001) +
+    ggtitle("X and Y") +
+    ggsave(&"out/y_{year}.pdf")
+  
   #let dfEnergyEff = toDf(readCsv(fname2, sep = ','))
   #  .mutate(fn {"Energies [keV]" ~ `xVals` * 8.0 + 1.0},
   #          fn {"Effective Area [cm^2]" ~ `yVals` *
