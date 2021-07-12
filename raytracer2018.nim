@@ -50,6 +50,11 @@ type
     B*: float
     tGas*: float
     depthDet*: float
+    stripDistWindow*: float
+    stripWidthWindow*: float
+    theta*: float
+    radiusWindow*: float
+    numberOfStrips*: int
 
   MaterialKind = enum
     mkSi3N4 = "Si3N4"
@@ -590,7 +595,17 @@ proc getVarsForSetup*(setup: ExperimentSetupKind): ExperimentSetup =
       d: 83.0, #mm ## distance between center of colbore at XRT and center of XRT (where the focal point is on the minus x axis)
       B: 9.0, #T magnetic field of magnet
       tGas: 1.7, #K
-      depthDet: 30.0 #mm
+      depthDet: 30.0, #mm
+      stripDistWindow: 2.3,  #mm
+      stripWidthWindow: 0.5, #mm
+      #[case year
+      of "2017":
+        theta: degToRad(10.8)
+      of "2018":
+        theta: degToRad(71.5)]#
+      theta: degToRad(71.5),
+      radiusWindow: 7.0, #mm
+      numberOfStrips: 4
     )
   of esBabyIAXO:
     result = ExperimentSetup(radiusCB: 350.0, #mm
@@ -623,9 +638,19 @@ proc getVarsForSetup*(setup: ExperimentSetupKind): ExperimentSetup =
       d: 0.0, #mm ## distance between center of colbore at XRT and center of XRT (where the focal point is on the minus x axis)
       B: 2.0, #T magnetic field of magnet # Rather 2-3 T, not entirely homogeneous
       tGas: 293.15, #K only Gas in BabyIAXO
-      depthDet: 30.0 #mm #probably not
+      depthDet: 30.0, #mm #probably not
+      stripDistWindow: 0.38,  #mm from calculateWindowValues.nim TODO: put the function in here
+      stripWidthWindow: 0.02, #mm
+      theta: degToRad(71.5),  #theta angle between window strips and horizontal x axis
+      radiusWindow: 15.0, #mm
+      numberOfStrips: 20 #maybe baby
     )
+  ## Detector Window##
+  #theta angle between window strips and horizontal x axis
 
+  const
+    stripDistWindow = 2.3  #mm
+    stripWidthWindow = 0.5 #mm
 proc traceAxion(res: var Axion,
                 centerVecs: CenterVectors,
                 expSetup: ExperimentSetup,
@@ -934,7 +959,7 @@ proc traceAxion(res: var Axion,
   ##Detector window:##
   ## TODO: is the 7.0 there due to 14 mm / 2?
   if sqrt(pointDetectorWindow[0] * pointDetectorWindow[0] + pointDetectorWindow[
-      1] * pointDetectorWindow[1]) > 7.0: return
+      1] * pointDetectorWindow[1]) > expSetup.radiusWindow: return
   var pointDetectorWindowTurned = vec3(0.0)
   pointDetectorWindowTurned[0] = pointDetectorWindow[0] * cos(theta) +
       pointDetectorWindow[1] * sin(theta)
@@ -953,31 +978,30 @@ proc traceAxion(res: var Axion,
   ## TODO: transmission of window material etc. can also be modeled using ray tracing.
   ## probability that transmission happens at all!
   ## TODO: get the data once to avoid `toRawSeq` overhead
-  if abs(y) > stripDistWindow / 2.0 and
-     abs(y) < stripDistWindow / 2.0 + stripWidthWindow or
-     abs(y) > 1.5 * stripDistWindow + stripWidthWindow and
-     abs(y) < 1.5 * stripDistWindow + 2.0 * stripWidthWindow:
-    energyAxTransWindow = dfTab["siFile"]["PhotonEnergy(eV)"].toTensor(
-        float).toRawSeq.lowerBound(energyAx * 1000.0)
-    transWindow = dfTab["siFile"]["Transmission"].toTensor(float)[energyAxTransWindow]
-    #transWindow = splineStrips.eval(energyAx * 1000.0)
-    when not IgnoreDetWindow:
-      weight *= transWindow
-    res.transProbWindow = transWindow
-    res.transProbDetector = transWindow
-    res.energiesAxAll = energyAx
-    res.kinds = mkSi3N4
-  else:
-    energyAxTransWindow = dfTab["siNfile"]["PhotonEnergy(eV)"].toTensor(
-        float).toRawSeq.lowerBound(energyAx * 1000.0)
-    transWindow = dfTab["siNfile"]["Transmission"].toTensor(float)[energyAxTransWindow]
-    #transWindow = spline.eval(energyAx * 1000.0)
-    when not IgnoreDetWindow:
-      weight *= transWindow
-    res.transprobWindow = transWindow
-    res.transProbDetector = transWindow
-    res.energiesAxAll = energyAx
-    res.kinds = mkSi
+  for i in 0..(expSetup.numberOfStrips/2).round.int - 1:
+    if abs(y) > (1.0 * i.float + 0.5) * stripDistWindow + i.float * stripWidthWindow and
+      abs(y) < (1.0 * i.float + 0.5) * stripDistWindow + (i.float + 1.0) * stripWidthWindow:
+      energyAxTransWindow = dfTab["siFile"]["PhotonEnergy(eV)"].toTensor(
+          float).toRawSeq.lowerBound(energyAx * 1000.0)
+      transWindow = dfTab["siFile"]["Transmission"].toTensor(float)[energyAxTransWindow]
+      #transWindow = splineStrips.eval(energyAx * 1000.0)
+      when not IgnoreDetWindow:
+        weight *= transWindow
+      res.transProbWindow = transWindow
+      res.transProbDetector = transWindow
+      res.energiesAxAll = energyAx
+      res.kinds = mkSi3N4
+    else:
+      energyAxTransWindow = dfTab["siNfile"]["PhotonEnergy(eV)"].toTensor(
+          float).toRawSeq.lowerBound(energyAx * 1000.0)
+      transWindow = dfTab["siNfile"]["Transmission"].toTensor(float)[energyAxTransWindow]
+      #transWindow = spline.eval(energyAx * 1000.0)
+      when not IgnoreDetWindow:
+        weight *= transWindow
+      res.transprobWindow = transWindow
+      res.transProbDetector = transWindow
+      res.energiesAxAll = energyAx
+      res.kinds = mkSi
 
   ## Get the total probability that the Xray will be absorbed by the detector and therefore detected:
   let energyAxTransDet = dfTab["detectorFile"]["PhotonEnergy(eV)"].toTensor(
@@ -1201,15 +1225,16 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
 
   ## Detector Window##
   #theta angle between window strips and horizontal x axis
-  var theta: float
+  #[var theta: float
   case year
   of "2017":
     theta = degToRad(10.8)
   of "2018":
-    theta = degToRad(71.5)
-  const
-    stripDistWindow = 2.3  #mm
-    stripWidthWindow = 0.5 #mm
+    theta = degToRad(71.5)]#
+  var
+    stripDistWindow = expSetup.stripDistWindow  
+    stripWidthWindow = expSetup.stripWidthWindow
+    theta = expSetup.theta
 
   ################################################################################
   ################################################################################
