@@ -498,7 +498,9 @@ proc getMaxVal(table: seq[seq[float]]): float =
 proc drawfancydiagrams(diagramtitle: string,
                        objectstodraw: seq[seq[float]],
                        width: int,
-                       year: string) =
+                       year: string,
+                       rSigma1: float,
+                       rSigma2: float) =
   ## this function draws a hdiagram out a given heatmap ##
   var
     xs = newSeq[int](width * width)
@@ -512,11 +514,25 @@ proc drawfancydiagrams(diagramtitle: string,
 
   #d.zmin = 0.0
   #d.zmax = 5e-22
+  
+  var 
+    yr = linspace(- rSigma1, rSigma1, xs.len)
+    yr2 = linspace(- rSigma2, rSigma2, xs.len)
+  
+
   var df = seqsToDf({ "x" : xs,
                       "y" : ys,
-                      "z" : zs })
+                      "z" : zs,
+                      "yr0": yr,
+                      "yr02": yr2})
     .mutate(f{float: "x-axis [mm]" ~ `x` * 14.0 / width.float},
-            f{float: "y-axis [mm]" ~ `y` * 14.0 / width.float})
+            f{float: "y-axis [mm]" ~ `y` * 14.0 / width.float},
+            f{float: "xr" ~ sqrt(rSigma1 * rSigma1 - `yr0` * `yr0`) + 7.0},
+            f{float: "xrneg" ~ - sqrt(rSigma1 * rSigma1 - `yr0` * `yr0`) + 7.0},
+            f{float: "yr" ~ `yr0` + 7.0},
+            f{float: "xr2" ~ sqrt(rSigma2 * rSigma2 - `yr02` * `yr02`) + 7.0},
+            f{float: "xrneg2" ~ - sqrt(rSigma2 * rSigma2 - `yr02` * `yr02`) + 7.0},
+            f{float: "yr2" ~ `yr02` + 7.0})
   template makeMinMax(knd, ax: untyped): untyped =
     template `knd ax`(): untyped =
       `CHIPREGIONS_GOLD ax knd` * width.float / 14.0
@@ -525,11 +541,17 @@ proc drawfancydiagrams(diagramtitle: string,
   makeMinMax(min, Y)
   makeMinMax(max, Y)
 
+  
+  
   echo df
-  echo df.filter(f{`z` > 0.0})
+  #echo df.filter(f{`z` > 0.0})
   ggplot(df, aes("x-axis [mm]", "y-axis [mm]", fill = "z")) +
     geom_raster() +
     scale_x_continuous() + scale_y_continuous() + scale_fill_continuous("z") +
+    geompoint(aes("xr", "yr"), color = some(parseHex("F92672")), size = some(0.5)) +
+    geompoint(aes("xrneg", "yr"), color = some(parseHex("F92672")), size = some(0.5)) +
+    geompoint(aes("xr2", "yr2"), color = some(parseHex("ffa420")), size = some(0.5)) +
+    geompoint(aes("xrneg2", "yr2"), color = some(parseHex("ffa420")), size = some(0.5)) +
     # geom_line(aes = aes(xMin = minX(), xMax = maxX(), y = minY())) +
     # geom_line(aes = aes(xMin = minX(), xMax = maxX(), y = maxY())) +
     # geom_line(aes = aes(yMin = minY(), yMax = maxY(), x = minX())) +
@@ -1010,7 +1032,7 @@ proc traceAxion(res: var Axion,
   # finally set the `passed` field to indicate this axion went all the way 
   if weight != 0:
     res.passed = true
-  else: echo "lol"
+  
 
 proc traceAxionWrapper(axBuf: ptr UncheckedArray[Axion],
                        bufLen: int,
@@ -1368,14 +1390,15 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
 
   sort(pointR, system.cmp)
 
-  var sigma1 = (pointR.len.float * 0.68).round.int
-  var sigma2 = (pointR.len.float * 0.955).round.int
-  var pointRsigma1 = pointR[0..<sigma1]
-  var pointRsigma2 = pointR[0..<sigma2]
-  var sigmaAssign = newSeq[string](pointR.len)
-  sigmaAssign.fill(0, sigma1 - 1, "sigma 1") #= 1.0"sigma 1"
+  var 
+    sigma1 = (pointR.len.float * 0.68).round.int
+    sigma2 = (pointR.len.float * 0.955).round.int
+    sigmaAssign = newSeq[string](pointR.len)
+  sigmaAssign.fill(0, sigma1 - 1, "sigma 1") 
   sigmaAssign.fill(sigma1, sigma2 - 1, "sigma 2")
   sigmaAssign.fill(sigma2, pointR.len - 1, "rest") 
+  let rSigma1 = pointR[sigma1 - 1]
+  let rSigma2 = pointR[sigma2 - 1]
 
   #dfRad.mutate(fn {string -> string: "Sigma" ~ sigmaAssign[parseInt(`Idx`)]})
   let 
@@ -1384,20 +1407,43 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     weightsSig = dfRadOrg["Transmission probability"].toTensor(float)
     pointDataXSig = dfRadOrg["x"].toTensor(float)
     pointDataYSig = dfRadOrg["y"].toTensor(float)
+    sumWeights = sum(weightsSig)
+
+  
+  ##########same but for weighted values#####################
+  var 
+    sigma1Weight = (sumWeights * 0.68)
+    sigma2Weight = (sumWeights * 0.955)
+    sigmaAssignWeight : seq[string]
+    rSigma1W : float
+    rSigma2W : float
+  
+  #[for i in (pointR.len.float * 0.67).round.int..<pointR.len:
+    if sum(weightsSig[0..i]) < sigma1Weight:
+      rSigma1W = pointR[i]
+      sigmaAssignWeight.add("sigma 1") 
+    elif sum(weightsSig[0..i]) < sigma2Weight and sum(weightsSig[0..i]) >= sigma1Weight:
+      rSigma2W = pointR[i]
+      sigmaAssignWeight.add("sigma 2")
+    else:
+      sigmaAssignWeight.add("rest") 
+  echo rSigma1W, "vs ", rSigma1
+  echo rSigma2W, "vs ", rSigma2]#
+
 
   let dfRadSig = seqsToDf({"Radial component [mm]": pointdataRSig,
                         "Transmission probability": weightsSig,
                         "x": pointDataXSig,
                        "y": pointDataYSig,
-                       "Sigma" : sigmaAssign,})
+                       "Sigma" : sigmaAssign})
 
   ggplot(dfRadSig, aes("Radial component [mm]", fill = factor("Sigma"), weight = "Transmission probability")) +
     geom_histogram(binWidth = 0.001) +
     ggtitle("Radial distribution of the axions with sigma") +
     ggsave(&"out/radDistSig_{year}.pdf")
   
-  ggplot(dfRadSig, aes("x", "y", fill = factor("Sigma"), weight = "Transmission probability")) +
-    geompoint(size = some(0.5), alpha = some(0.08)) +
+  ggplot(dfRadSig, aes("x", "y", color = factor("Sigma"), weight = "Transmission probability")) +
+    geompoint(size = some(0.5), alpha = some(0.1)) +
     ggtitle("X and Y") +
     ggsave(&"out/xy_{year}.pdf") 
 
@@ -1405,6 +1451,24 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     geom_histogram(binWidth = 0.001) +
     ggtitle("Y") +
     ggsave(&"out/y_{year}.pdf")
+
+
+  #[let dfRadSigW = seqsToDf({"Radial component [mm]": pointdataRSig,
+                        "Transmission probability": weightsSig,
+                        "x": pointDataXSig,
+                       "y": pointDataYSig,
+                       "Sigma" : sigmaAssignWeight})
+
+  ggplot(dfRadSigW, aes("Radial component [mm]", fill = factor("Sigma"), weight = "Transmission probability")) +
+    geom_histogram(binWidth = 0.001) +
+    ggtitle("Radial distribution of the axions with sigma") +
+    ggsave(&"out/radDistSigW_{year}.pdf")
+  
+  ggplot(dfRadSigW, aes("x", "y", fill = factor("Sigma"), weight = "Transmission probability")) +
+    geompoint(size = some(0.5), alpha = some(0.1)) +
+    ggtitle("X and Y") +
+    ggsave(&"out/xyW_{year}.pdf") ]#
+
   #let fname2 = "extracted_from_aznar2015_llnl_telescope_eff_plot.csv"
   #let dfEnergyEff = toDf(readCsv(fname2, sep = ','))
   #  .mutate(fn {"Energies [keV]" ~ `xVals` * 8.0 + 1.0},
@@ -1453,7 +1517,8 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
  # echo "Probability of it originating from an axion if a photon hits at x = 5,3mm and y = 8,4mm (in this model):"
  # echo (heatmaptable3[53][84]) * 100.0  #echo heatmaptable3[x][y]
 
-  drawfancydiagrams("Axion Model Fluxfraction", heatmaptable2, 256, year)
+  drawfancydiagrams("Axion Model Fluxfraction", heatmaptable2, 256, year, rSigma1, rSigma2) #rSigma1W, rSigma2W) the latter is actually right but takes too long
+                                                                                            #difference of 0.7% for sigma 1 and 1.1% for sigma 2
 
   when false:
     fluxFractionTotal = integralTotal #/ integralNormalisation
