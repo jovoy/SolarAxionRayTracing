@@ -5,12 +5,15 @@ import numericalnim
 import glm
 
 let 
-  radiusWindow = 4.0
-  openAperatureRatio = 0.95
+  radiusWindow = 7.0 #4.0
+  openAperatureRatio = 0.838 #0.95
   totalArea = radiusWindow * radiusWindow * PI
   areaOfStrips = totalArea * (1.0 - openAperatureRatio)
-  numberOfStrips = 20 #has to be even so there is none in the middle
-  dAndwPerStrip = radiusWindow * 2.0 / numberOfStrips.float  #width and distance between strips per strip; the width on both sides is half the distance between strips
+  numberOfStrips = 4 #20 #has to be even so there is none in the middle
+  dAndwPerStrip = radiusWindow * 2.0 / (numberOfStrips.float + 1.0)  #width and distance between strips per strip; 
+                                                                     #the width on both sides is a whole width 
+                                                                     #(Don't know what to do about the additional string width) 
+                                                                     #not important at high strip number but at low
 
 var
   lengthStrip: float
@@ -28,4 +31,3 @@ let
   distStrips = dAndwPerStrip - widthStrips
 echo widthStrips
 echo distStrips
-echo distStrips + widthStrips

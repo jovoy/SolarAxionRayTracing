@@ -50,11 +50,12 @@ type
     B*: float
     tGas*: float
     depthDet*: float
-    stripDistWindow*: float
-    stripWidthWindow*: float
     theta*: float
     radiusWindow*: float
     numberOfStrips*: int
+    openAperatureRatio*: float
+    windowThickness*: float
+    alThickness*: float
 
   MaterialKind = enum
     mkSi3N4 = "Si3N4"
@@ -88,7 +89,7 @@ type
 const
   RAYTRACER_DISTANCE_SUN_EARTH = 1.5e14 #mm #ok
   radiusSun = 6.9e11                    #mm #ok
-  numberOfPointsSun = 1_000_000            #100000 for statistics   
+  numberOfPointsSun = 100_000_000            #100000 for statistics   
 
   pressGas = 14.3345 #for example P = 14.3345 mbar (corresponds to 1 bar at room temperature).
 
@@ -452,14 +453,6 @@ proc interpTrans(fname: string): InterpolatorType[float] =
   result = newCubicSpline(df["PhotonEnergy(eV)"].toTensor(float).toRawSeq,
                           df["Transmission"].toTensor(float).toRawSeq)
 
-# TODO: move elsewhere!
-let siNfile = "./resources/Si3N4Density=3.44Thickness=0.3microns"
-let spline = interpTrans(siNfile)
-let siFile = "./resources/SiDensity=2.33Thickness=200.microns"
-let splineStrips = interpTrans(siFile)
-let detectorFile = "./resources/transmission-argon-30mm-1050mbar-295K.dat"
-let splineDet = interpTrans(detectorFile)
-
 ## Now some functions for the graphs later, that store the data in heatmaps and then give them out with plotly ##
 
 proc prepareheatmap(numberofrows: int, numberofcolumns: int,
@@ -596,8 +589,8 @@ proc getVarsForSetup*(setup: ExperimentSetupKind): ExperimentSetup =
       B: 9.0, #T magnetic field of magnet
       tGas: 1.7, #K
       depthDet: 30.0, #mm
-      stripDistWindow: 2.3,  #mm
-      stripWidthWindow: 0.5, #mm
+      #stripDistWindow: 2.3,  #mm
+      #stripWidthWindow: 0.5, #mm #now calculated to these values
       #[case year
       of "2017":
         theta: degToRad(10.8)
@@ -605,13 +598,16 @@ proc getVarsForSetup*(setup: ExperimentSetupKind): ExperimentSetup =
         theta: degToRad(71.5)]#
       theta: degToRad(71.5),
       radiusWindow: 7.0, #mm
-      numberOfStrips: 4
+      numberOfStrips: 4,
+      openAperatureRatio: 0.838,
+      windowThickness: 0.3, #microns
+      alThickness: 0.02 #+-0.007
     )
   of esBabyIAXO:
     result = ExperimentSetup(radiusCB: 350.0, #mm
                              # Change:
-      RAYTRACER_LENGTH_COLDBORE: 10000.0, #mm not sure if this is true
-      RAYTRACER_LENGTH_COLDBORE_9T: 9990.0, #mm I know it's not 9T here should be the actual length of pipe with a stable magnetic field; can't be same length
+      RAYTRACER_LENGTH_COLDBORE: 11000.0, #mm not sure if this is true but this is how its written on page 61 of the 2021 BabyIAXO paper
+      RAYTRACER_LENGTH_COLDBORE_9T: 10000.0, #mm I know it's not 9T here should be the actual length of pipe with a stable magnetic field; can't be same length
       RAYTRACER_LENGTH_PIPE_CB_VT3: 300.0, #mm not determined
       radiusPipeCBVT3: 370.0, #mm smallest aperture between end of CB and VT4 # no Idea, I just made it wider than the coldbore
       RAYTRACER_LENGTH_PIPE_VT3_XRT: 300.0, #mm not determined
@@ -639,18 +635,42 @@ proc getVarsForSetup*(setup: ExperimentSetupKind): ExperimentSetup =
       B: 2.0, #T magnetic field of magnet # Rather 2-3 T, not entirely homogeneous
       tGas: 293.15, #K only Gas in BabyIAXO
       depthDet: 30.0, #mm #probably not
-      stripDistWindow: 0.38,  #mm from calculateWindowValues.nim TODO: put the function in here
-      stripWidthWindow: 0.02, #mm
       theta: degToRad(71.5),  #theta angle between window strips and horizontal x axis
-      radiusWindow: 15.0, #mm
-      numberOfStrips: 20 #maybe baby
+      radiusWindow: 4.0, #mm
+      numberOfStrips: 20, #maybe baby
+      openAperatureRatio: 0.95,
+      windowThickness: 0.1, #microns #options are: 0.3, 0.15 and 0.1
+      alThickness: 0.015
     )
-  ## Detector Window##
-  #theta angle between window strips and horizontal x axis
 
-  const
-    stripDistWindow = 2.3  #mm
-    stripWidthWindow = 0.5 #mm
+proc calcWindowVals(radiusWindow: float, numberOfStrips: int, openAperatureRatio: float): seq[float] =
+  let 
+    totalArea = radiusWindow * radiusWindow * PI
+    areaOfStrips = totalArea * (1.0 - openAperatureRatio)
+    dAndwPerStrip = radiusWindow * 2.0 / (numberOfStrips.float + 1.0)  #width and distance between strips per strip; 
+                                                                       #the width on both sides is a whole width 
+                                                                       #(Don't know what to do about the additional string width) 
+                                                                       #not important at high strip number but at low like CAST
+
+  var
+    lengthStrip: float
+    lengthAllStrips: float
+
+  for i in 0..(numberOfStrips/2).round.int - 1:
+    lengthStrip = sqrt(radiusWindow * radiusWindow - (i.float * dAndwPerStrip + 0.5 * dAndwPerStrip) * (i.float * dAndwPerStrip + 0.5 * dAndwPerStrip)) * 2.0
+    lengthAllStrips += lengthStrip
+    echo lengthStrip
+
+  lengthAllStrips = lengthAllStrips * 2.0
+
+  let 
+    widthStrips = areaOfStrips / lengthAllStrips
+    distStrips = dAndwPerStrip - widthStrips
+    stripsWidthandDist = @[widthStrips, distStrips]
+  echo widthStrips
+  echo distStrips
+  result = stripsWidthandDist
+
 proc traceAxion(res: var Axion,
                 centerVecs: CenterVectors,
                 expSetup: ExperimentSetup,
@@ -978,12 +998,15 @@ proc traceAxion(res: var Axion,
   ## TODO: transmission of window material etc. can also be modeled using ray tracing.
   ## probability that transmission happens at all!
   ## TODO: get the data once to avoid `toRawSeq` overhead
+
+
   for i in 0..(expSetup.numberOfStrips/2).round.int - 1:
     if abs(y) > (1.0 * i.float + 0.5) * stripDistWindow + i.float * stripWidthWindow and
       abs(y) < (1.0 * i.float + 0.5) * stripDistWindow + (i.float + 1.0) * stripWidthWindow:
       energyAxTransWindow = dfTab["siFile"]["PhotonEnergy(eV)"].toTensor(
-          float).toRawSeq.lowerBound(energyAx * 1000.0)
-      transWindow = dfTab["siFile"]["Transmission"].toTensor(float)[energyAxTransWindow]
+          float).toRawSeq.lowerBound(energyAx * 1000.0) 
+      transWindow = dfTab["siFile"]["Transmission"].toTensor(float)[energyAxTransWindow] * 
+                    dfTab["alFile"]["Transmission"].toTensor(float)[energyAxTransWindow]
       #transWindow = splineStrips.eval(energyAx * 1000.0)
       when not IgnoreDetWindow:
         weight *= transWindow
@@ -993,8 +1016,9 @@ proc traceAxion(res: var Axion,
       res.kinds = mkSi3N4
     else:
       energyAxTransWindow = dfTab["siNfile"]["PhotonEnergy(eV)"].toTensor(
-          float).toRawSeq.lowerBound(energyAx * 1000.0)
-      transWindow = dfTab["siNfile"]["Transmission"].toTensor(float)[energyAxTransWindow]
+          float).toRawSeq.lowerBound(energyAx * 1000.0) 
+      transWindow = dfTab["siNfile"]["Transmission"].toTensor(float)[energyAxTransWindow] * 
+                    dfTab["alFile"]["Transmission"].toTensor(float)[energyAxTransWindow]
       #transWindow = spline.eval(energyAx * 1000.0)
       when not IgnoreDetWindow:
         weight *= transWindow
@@ -1015,7 +1039,6 @@ proc traceAxion(res: var Axion,
   res.transProbDetector = transDet
   res.energiesAxAll = energyAx
   res.kinds = mkAr
-
   res.energiesAx = energyAx
   res.shellNumber = h
   ###detector COS has (0/0) at the bottom left corner of the chip
@@ -1156,6 +1179,9 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     energies = linspace(1.0, 10000.0, 1112)
     roomTemp = 293.15 #K
 
+  
+
+
   ## TODO: make the code use tensor for the emission rates!
   var emRatesDf = readCsv("solar_model_tensor.csv")
     .rename(f{"Radius" <- "dimension_1"}, f{"Energy" <- "dimension_2"}, f{"Flux" <- "value"})
@@ -1231,18 +1257,29 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     theta = degToRad(10.8)
   of "2018":
     theta = degToRad(71.5)]#
+  
+  ################################################################################
+  #############################Detector Window####################################
+  ################################################################################  
   var
-    stripDistWindow = expSetup.stripDistWindow  
-    stripWidthWindow = expSetup.stripWidthWindow
+    stripWidthWindow = calcWindowVals(expSetup.radiusWindow, expSetup.numberOfStrips, expSetup.openAperatureRatio)[0]
+    stripDistWindow = calcWindowVals(expSetup.radiusWindow, expSetup.numberOfStrips, expSetup.openAperatureRatio)[1]
     theta = expSetup.theta
 
-  ################################################################################
-  ################################################################################
-  ################################################################################
+  let siNfile = &"./resources/Si3N4Density=3.44Thickness={expSetup.windowThickness}microns"
+  let spline = interpTrans(siNfile)
+  let siFile = "./resources/SiDensity=2.33Thickness=200.microns"
+  let splineStrips = interpTrans(siFile)
+  let detectorFile = "./resources/transmission-argon-30mm-1050mbar-295K.dat"
+  let splineDet = interpTrans(detectorFile)
+  let alFile = &"./resources/AlDensity=2.7Thickness={expSetup.alThickness}microns"
+  let splineAl = interpTrans(alfile)
+
   var dfTab = initTable[string, DataFrame]()
   dfTab["siFile"] = readCsv(siFile, sep = ' ')
   dfTab["siNfile"] = readCsv(siNfile, sep = ' ')
   dfTab["detectorFile"] = readCsv(detectorFile, sep = ' ')
+  dfTab["alFile"] = readCsv(alFile, sep = ' ')
   echo dfTab
 
   let centerVecs = CenterVectors(centerEntranceCB: centerEntranceCB,
@@ -1387,7 +1424,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
                           "Transmission probability": weights})
 
   ggplot(dfFluxE, aes("Axion energy [eV]", weight = "Transmission probability")) +
-    geom_histogram(binWidth = 0.001) +
+    geom_histogram(binWidth = 0.0001) +
     ggtitle("The Axion flux after the experiment") +
     ggsave(&"out/fluxAfter_{year}.pdf") 
 
@@ -1511,7 +1548,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   ggplot(dfFluxE2, aes("Axion energy [keV]", weight = "Flux after experiment")) +
     geom_histogram(binWidth = 0.1) +
     ylab("The flux after the experiment") +
-    ggsave(&"out/FluxEnice_{year}.pdf")
+    ggsave(&"out/FluxEafter_{year}.pdf")
 
   let dfFluxE3 = seqsToDf({"Axion energy [keV]": energiesPre})
 
