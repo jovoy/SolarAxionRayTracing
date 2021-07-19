@@ -75,7 +75,9 @@ type
     radii: float
     energiesAx: float
     energiesAxAll: float
+    energiesAxWindow: float
     kinds: MaterialKind
+    kindsWindow: MaterialKind
     transProbWindow: float
     transProbArgon: float
     transProbDetector: float
@@ -89,7 +91,7 @@ type
 const
   RAYTRACER_DISTANCE_SUN_EARTH = 1.5e14 #mm #ok
   radiusSun = 6.9e11                    #mm #ok
-  numberOfPointsSun = 100_000_000            #100000 for statistics   
+  numberOfPointsSun = 1_000_000            #100000 for statistics   
 
   pressGas = 14.3345 #for example P = 14.3345 mbar (corresponds to 1 bar at room temperature).
 
@@ -696,6 +698,7 @@ proc traceAxion(res: var Axion,
   let energyAx = getRandomEnergyFromSolarModel(
     pointInSun, centerVecs.centerSun, radiusSun, energies, emRates, emRateCDFs, "energy"
   )
+  
   let emissionRateAx = getRandomEnergyFromSolarModel(
     pointInSun, centerVecs.centerSun, radiusSun, energies, emRates, emRateCDFs, "emissionRate"
   )
@@ -925,7 +928,7 @@ proc traceAxion(res: var Axion,
     probConversionMagnet = conversionProb(expSetup.B, g_agamma, pathCB)
 
     distancePipe = (pointDetectorWindow[2] - pointExitCBZylKart[2]) * 1e-3 #m
-    # for setup including gas
+    # for setup including gas: functions are in axionmass/axionmass
     #probConversionMagnetGas = axionConversionProb2(m_a, energyAx, pGas, tGas, (pathCB * 1e-3),
     #                                               expSetup.radiusCB, g_agamma, B)
     #absorbtionXrays = intensitySuppression2(energyAx, (pathCB * 1e-3) , distancePipe,
@@ -977,7 +980,6 @@ proc traceAxion(res: var Axion,
       transmissionMagnet) #transmission probabilities times axion emission rate times the flux fraction
 
   ##Detector window:##
-  ## TODO: is the 7.0 there due to 14 mm / 2?
   if sqrt(pointDetectorWindow[0] * pointDetectorWindow[0] + pointDetectorWindow[
       1] * pointDetectorWindow[1]) > expSetup.radiusWindow: return
   var pointDetectorWindowTurned = vec3(0.0)
@@ -998,7 +1000,7 @@ proc traceAxion(res: var Axion,
   ## TODO: transmission of window material etc. can also be modeled using ray tracing.
   ## probability that transmission happens at all!
   ## TODO: get the data once to avoid `toRawSeq` overhead
-
+  
 
   for i in 0..(expSetup.numberOfStrips/2).round.int - 1:
     if abs(y) > (1.0 * i.float + 0.5) * stripDistWindow + i.float * stripWidthWindow and
@@ -1013,7 +1015,9 @@ proc traceAxion(res: var Axion,
       res.transProbWindow = transWindow
       res.transProbDetector = transWindow
       res.energiesAxAll = energyAx
-      res.kinds = mkSi3N4
+      res.energiesAxWindow = energyAx
+      res.kinds = mkSi
+      res.kindsWindow = mkSi
     else:
       energyAxTransWindow = dfTab["siNfile"]["PhotonEnergy(eV)"].toTensor(
           float).toRawSeq.lowerBound(energyAx * 1000.0) 
@@ -1025,22 +1029,28 @@ proc traceAxion(res: var Axion,
       res.transprobWindow = transWindow
       res.transProbDetector = transWindow
       res.energiesAxAll = energyAx
-      res.kinds = mkSi
+      res.energiesAxWindow = energyAx
+      res.kinds = mkSi3N4
+      res.kindsWindow = mkSi3N4
 
   ## Get the total probability that the Xray will be absorbed by the detector and therefore detected:
   let energyAxTransDet = dfTab["detectorFile"]["PhotonEnergy(eV)"].toTensor(
       float).toRawSeq.lowerBound(energyAx * 1000.0)
   let transDet = dfTab["detectorFile"]["Transmission"].toTensor(float)[energyAxTransWindow]
+
   #var transDet = splineDet.eval(energyAx * 1000.0)
   when not IgnoreGasAbs:
     weight *= 1.0 - transDet
   #echo splineDet.eval(energyAx * 1000.0)
   res.transProbArgon = transDet
   res.transProbDetector = transDet
+
   res.energiesAxAll = energyAx
   res.kinds = mkAr
   res.energiesAx = energyAx
   res.shellNumber = h
+  
+  
   ###detector COS has (0/0) at the bottom left corner of the chip
   pointRadialComponent = sqrt(pointDetectorWindow[0]*pointDetectorWindow[0]+pointDetectorWindow[1]*pointDetectorWindow[1])
   res.pointdataR = pointRadialComponent
@@ -1275,6 +1285,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   let alFile = &"./resources/AlDensity=2.7Thickness={expSetup.alThickness}microns"
   let splineAl = interpTrans(alfile)
 
+
   var dfTab = initTable[string, DataFrame]()
   dfTab["siFile"] = readCsv(siFile, sep = ' ')
   dfTab["siNfile"] = readCsv(siNfile, sep = ' ')
@@ -1336,9 +1347,12 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   template extractAll(n: untyped): untyped =
     let n = axions.mapIt(it.n)
   extractAll(energiesAxAll)
+  extractAll(energiesAxWindow)
   extractAll(energiesPre)
   extractAll(transProbDetector)
+  extractAll(transprobWindow)
   extractAll(kinds)
+  extractAll(kindsWindow)
   echo "Extracted all data!"
   ################################################################################
   ################################################################################
@@ -1346,17 +1360,22 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
 
   let dfTransProb = seqsToDf({"Axion energy [keV]": energiesAxAll,
                                "Transmission Probability": transProbDetector,
-                               "type": kinds.mapIt($it)})
+                               "type": kinds.mapIt($it),
+                               "Axion energy window[keV]":energiesAxWindow,
+                               "Transmission Probability window": transprobWindow,
+                               "type window":kindsWindow.mapIt($it)})
   #echo energiesAxAll
   #echo transProbDetector
   #echo kinds
 
   # echo dfTransProb.pretty(-1)
-
-  ggplot(dfTransProb.arrange("Axion energy [keV]"),
-         aes("Axion energy [keV]", "Transmission Probability",
+  
+  ggplot(dfTransProb.arrange("Axion energy [keV]")
+         ) +
+    geom_line(aes("Axion energy [keV]", "Transmission Probability",
              color = "type")) +
-    geom_line() +
+    geom_line(aes("Axion energy [keV]", "Transmission Probability window",
+             color = "type window")) +
     ggtitle("The transmission probability for different detector parts") +
     ggsave(&"out/TransProb_{year}.pdf")
 
@@ -1413,7 +1432,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
                         "Transmission probability": weights,
                         "x": pointDataX,
                        "y": pointDataY})
-  echo dfRad
+  
   echo dfRad.arrange("Radial component [mm]")
   ggplot(dfRad, aes("Radial component [mm]", weight = "Transmission probability")) +
     geom_histogram(binWidth = 0.001) +
