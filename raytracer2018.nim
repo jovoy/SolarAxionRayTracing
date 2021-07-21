@@ -70,6 +70,7 @@ type
     pointdataYBefore: float
     pointdataR: float
     weights: float
+    weightsAll: float
     pixvalsX: float
     pixvalsY: float
     radii: float
@@ -622,16 +623,20 @@ proc getVarsForSetup*(setup: ExperimentSetupKind): ExperimentSetup =
                              # It's again a Nustar telescope, but not just a fragment, so I suppose there are more than 13 Layers
                              # Also the widest radius in CAST was 100 mm which is not enough, it should be about 350 mm
                              # Also the angles need to be different... but I could figute them out...
+      #allR3: @[151.61, 153.88, 156.17, 158.48, 160.82, 163.18, 165.57, 167.98, 170.42, 172.88, 175.37, 177.88, 180.42, 183.14, 185.89, 188.67, 191.48, 
+          #194.32, 197.19, 200.09, 203.02, 206.03, 209.07, 212.14, 215.24, 218.37, 221.54, 224.74, 227.97, 231.24, 234.54, 237.87, 241.24, 244.85, 
+          #248.5, 252.19, 255.92, 259.68, 263.48, 267.32, 271.2, 275.12, 279.08, 283.09, 287.14, 291.38, 295.72, 300.11, 304.54, 309.02, 313.54, 
+          #318.11, 322.73, 327.4, 332.12, 336.88, 341.69, 346.55] #these are the real values but R3
       allR1: @[153.0, 154.47, 156.021, 157.652, 159.364, 161.157, 163.031, 164.985, 167.02, 169.135, 171.332, 173.609, 175.966, 178.405, 180.924, 183.524, 
           186.204, 188.965, 191.807, 194.73, 197.733, 200.817, 203.982, 207.228, 210.554, 213.961, 217.448, 221.016, 224.665, 228.395, 232.205, 236.096, 240.068, 
           244.121, 248.254, 252.468, 256.762, 261.137, 265.593, 270.13, 274.747, 279.445, 284.224, 289.084, 294.024, 299.045, 304.146, 309.329, 314.592, 319.935, 
-          325.36, 330.865, 336.451, 342.117, 347.864, 353.692, 359.601, 365.59], ## the radii of the shells closest to the magnet
+          325.36, 330.865, 336.451, 342.117, 347.864, 353.692, 359.601, 365.59], ## the radii of the shells closest to the magnet, not real values
       allXsep: @[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 
           0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
       #allR2: @[0.0, 60.731, 63.237, 65.838, 68.538, 71.339, 74.246, 77.263, 80.394, 83.642]
       allAngles: @[0.29, 0.29, 0.3, 0.3, 0.3, 0.3, 0.31, 0.31, 0.32, 0.32, 0.32, 0.33, 0.33, 0.34, 0.34, 0.35, 0.35, 0.36, 0.36, 0.37, 0.37, 0.38, 0.39, 0.39, 
           0.4, 0.4, 0.41, 0.42, 0.42, 0.43, 0.44, 0.45, 0.45, 0.46, 0.47, 0.48, 0.49, 0.49, 0.5, 0.51, 0.52, 0.53, 0.54, 0.55, 0.56, 0.57, 0.57, 0.58, 0.59, 
-          0.6, 0.61, 0.63, 0.64, 0.65, 0.66, 0.67, 0.68, 0.69], ## the angles of the mirror shells coresponding to the radii above
+          0.6, 0.61, 0.63, 0.64, 0.65, 0.66, 0.67, 0.68, 0.69], ## the angles of the mirror shells coresponding to the radii above, not real values
       lMirror: 300.0, #mm Mirror length
       d: 0.0, #mm ## distance between center of colbore at XRT and center of XRT (where the focal point is on the minus x axis)
       B: 2.0, #T magnetic field of magnet # Rather 2-3 T, not entirely homogeneous
@@ -1063,6 +1068,7 @@ proc traceAxion(res: var Axion,
   res.pointdataX = pointDetectorWindow[0]
   res.pointdataY = pointDetectorWindow[1]
   res.weights = weight
+  res.weightsAll = weight
 
   
   ## TODO: the following are not used for anything!
@@ -1329,7 +1335,9 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   #echo axionsPass[0 ..< 100]
 
   template extractPass(n: untyped): untyped =
-    let n = axionsPass.mapIt(it.n)
+    let n = axionsPass.mapIt(it.n)  
+  template extractAll(n: untyped): untyped =
+    let n = axions.mapIt(it.n)
   extractPass(deviationDet)
   extractPass(energiesAx)
   extractPass(shellNumber)
@@ -1344,8 +1352,8 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   echo pointDataX.totensor.mean
   echo pointDataY.totensor.mean
   echo pointDataR.totensor.mean
-  template extractAll(n: untyped): untyped =
-    let n = axions.mapIt(it.n)
+  
+  extractAll(weightsAll)
   extractAll(energiesAxAll)
   extractAll(energiesAxWindow)
   extractAll(energiesPre)
@@ -1363,19 +1371,17 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
                                "type": kinds.mapIt($it),
                                "Axion energy window[keV]":energiesAxWindow,
                                "Transmission Probability window": transprobWindow,
-                               "type window":kindsWindow.mapIt($it)})
-  #echo energiesAxAll
-  #echo transProbDetector
-  #echo kinds
-
-  # echo dfTransProb.pretty(-1)
+                               "type window":kindsWindow.mapIt($it),
+                               "Flux after experiment": weightsAll})
   
+  echo dfTransProb
   ggplot(dfTransProb.arrange("Axion energy [keV]")
          ) +
     geom_line(aes("Axion energy [keV]", "Transmission Probability",
              color = "type")) +
     geom_line(aes("Axion energy [keV]", "Transmission Probability window",
              color = "type window")) +
+    geom_histogram(aes("Axion energy [keV]", weight = "Flux after experiment"), binWidth = 0.01) +
     ggtitle("The transmission probability for different detector parts") +
     ggsave(&"out/TransProb_{year}.pdf")
 
