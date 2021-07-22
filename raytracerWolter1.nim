@@ -12,7 +12,7 @@ import numericalnim
 import glm
 # import plotly
 import ggplotnim
-import weave
+
 
 let 
   allR3 = @[151.61, 153.88, 156.17, 158.48, 160.82, 163.18, 165.57, 167.98, 170.42, 172.88, 175.37, 177.88, 180.42, 183.14, 185.89, 188.67, 191.48, 
@@ -23,5 +23,16 @@ let
       0.627, 0.636, 0.646, 0.655, 0.665, 0.675, 0.684, 0.694, 0.704, 0.714, 0.724, 0.735, 0.745, 0.756, 0.768, 0.779, 0.790, 0.802, 0.814, 0.826, 0.838, 0.850, 
       0.862, 0.874, 0.887, 0.900, 0.913, 0.927, 0.941, 0.955, 0.968, 0.983, 0.997, 1.011, 1.026, 1.041, 1.055, 1.070]
   coatingMaterial = "Gold"
-  coatingDensity = 
+  coatingDensity = 19.302 #g/cm³
   coatingThickness = 0.00025 #mm = 250 nm
+
+var 
+  goldfile: string
+  alpha: float
+  dfTable = initTable[string, DataFrame]()
+
+for i in 17..80:
+  alpha = i.float * 0.01
+  goldfile = &"./resources/reflectivity/{alpha}degGold0.25microns"
+  dfTable[&"goldfile{alpha}"] = readCsv(goldfile, sep = ' ')
+#echo dfTable
