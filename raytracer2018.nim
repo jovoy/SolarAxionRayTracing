@@ -691,7 +691,8 @@ proc traceAxion(res: var Axion,
                 stripDistWindow, stripWidthWindow, theta: float,
                 setup: ExperimentSetupKind,
                 detectorWindowAperture: float,
-                dfTab: Table[string, DataFrame]
+                dfTab: Table[string, DataFrame],
+                dfTable: Table[string, DataFrame]
                ) =
   ## Get a random point in the sun, biased by the emission rate, which is higher
   ## at smalller radii, so this will give more points in the center of the sun ##
@@ -865,6 +866,14 @@ proc traceAxion(res: var Axion,
         pointExitCBZylKart, pointMirror1, beta, "angle")
     angle2 = getVectoraAfterMirror(pointAfterMirror1, pointMirror1,
         pointMirror2, beta3, "angle")
+    alpha1 = angle1[1].round(2)
+    alpha2 = angle2[1].round(2)
+    energyAxReflection1 = dfTable[fmt"goldfile{alpha1:4.2f}"]["PhotonEnergy(eV)"].toTensor(
+            float).toRawSeq.lowerBound(energyAx * 1000.0)
+    energyAxReflection2 = dfTable[fmt"goldfile{alpha2:4.2f}"]["PhotonEnergy(eV)"].toTensor(
+            float).toRawSeq.lowerBound(energyAx * 1000.0)
+    reflectionProb1 = dfTable[fmt"goldfile{alpha1:4.2f}"]["Reflectivity"].toTensor(float)[energyAxReflection1]
+    reflectionProb2 = dfTable[fmt"goldfile{alpha2:4.2f}"]["Reflectivity"].toTensor(float)[energyAxReflection2]
   #if angle1[1] < 0.2 or angle2[1] < 0.2:
     #echo getVectoraAfterMirror(pointEntranceXRTZylKart,
           #pointExitCBZylKart, pointMirror1, beta, "angle"), " ", getVectoraAfterMirror(pointAfterMirror1, pointMirror1,
@@ -1118,14 +1127,15 @@ proc traceAxionWrapper(axBuf: ptr UncheckedArray[Axion],
                        stripDistWindow, stripWidthWindow, theta: float,
                        setup: ExperimentSetupKind,
                        detectorWindowAperture: float,
-                       dfTab: Table[string, DataFrame]
-                      ) =
+                       dfTab: Table[string, DataFrame],
+                       dfTable: Table[string, DataFrame]
+                       ) =
   echo "Starting weave!"
   parallelFor iSun in 0 ..< bufLen:
     captures: {axBuf, centerVecs, expSetup, emRates, emRatesRadiusCumSum, emRateCDFs,
                energies, stripDistWindow,
                stripWidthWindow, theta,
-               setup, detectorWindowAperture, dfTab}
+               setup, detectorWindowAperture, dfTab, dfTable}
     axBuf[iSun].traceAxion(centerVecs,
                            expSetup,
                            emRates, emRatesRadiusCumSum, emRateCDFs,
@@ -1133,7 +1143,7 @@ proc traceAxionWrapper(axBuf: ptr UncheckedArray[Axion],
                            stripDistWindow, stripWidthWindow, theta,
                            setup,
                            detectorWindowAperture,
-                           dfTab)
+                           dfTab, dfTable)
 
 proc calculateFluxFractions(axionRadiationCharacteristic: string,
                             detectorWindowAperture: float, pGas: float,
@@ -1307,7 +1317,17 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   dfTab["siNfile"] = readCsv(siNfile, sep = ' ')
   dfTab["detectorFile"] = readCsv(detectorFile, sep = ' ')
   dfTab["alFile"] = readCsv(alFile, sep = ' ')
-  echo dfTab
+  
+
+  var 
+    goldfile: string
+    alpha: float
+    dfTable = initTable[string, DataFrame]()
+
+  for i in 17..80:
+    alpha = (i.float * 0.01).round(2)
+    goldfile = fmt"./resources/reflectivity/{alpha:4.2f}degGold0.25microns"
+    dfTable[fmt"goldfile{alpha:4.2f}"] = readCsv(goldfile, sep = ' ')
 
   let centerVecs = CenterVectors(centerEntranceCB: centerEntranceCB,
                                  centerExitCB: centerExitCB,
@@ -1330,7 +1350,8 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
                     stripDistWindow, stripWidthWindow, theta,
                     setup,
                     detectorWindowAperture,
-                    dfTab)
+                    dfTab,
+                    dfTable)
   exit(Weave)
 
   # walk the axions and determine `integralTotal` and `integral*`
@@ -1384,7 +1405,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
                                "type window":kindsWindow.mapIt($it),
                                "Flux after experiment": weightsAll})
   
-  echo dfTransProb
+  
   ggplot(dfTransProb.arrange("Axion energy [keV]")
          ) +
     geom_line(aes("Axion energy [keV]", "Transmission Probability",
