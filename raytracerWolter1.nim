@@ -67,11 +67,14 @@ for k in 0..57:
 echo areaMirrorFronts
 
 ######## This part is about the spider and all of the values are estimated ##################
+var 
+  innerArea = allR3[0] * allR3[0] * PI * 0.01 #cm^2 #too much
+  areaSpiderStrips = allR1[57] * allR1[57] * PI * (2.5 * 16.0 / 360.0) * 0.01 #cm^2 #intersection with Mirror fronts too much
 
 
 let dfRef = seqsToDf({"Reflectivity": reflectivity,
                       "Photon Energy[eV]": energies})
-ggplot(dfRef.mutate(f{"EffArea" ~ `Reflectivity` * (totalArea - areaMirrorFronts)}),
+ggplot(dfRef.mutate(f{"EffArea" ~ `Reflectivity` * (totalArea - areaMirrorFronts - areaSpiderStrips)}),
         aes("Photon Energy[eV]", "EffArea")) +
   geom_line() +
   #xlim(100.0, 10000.0) +
