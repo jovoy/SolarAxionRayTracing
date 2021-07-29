@@ -255,7 +255,7 @@ proc lineIntersectsCircle(point_1, point_2, center: Vec3,
   result = r_xy_intersect < radius
 
 proc lineIntersectsCylinderOnce(point_1: Vec3, point_2: Vec3, centerBegin: Vec3,
-    centerEnd: Vec3, radius: float64, intersect: Vec3): bool =
+    centerEnd: Vec3, radius: float64): bool =
   ## Also a function to know if the line intersected at least the whole magnet,
   ## and then only once, because else the axions would have just flown through ##
   let
@@ -285,8 +285,7 @@ proc lineIntersectsCylinderOnce(point_1: Vec3, point_2: Vec3, centerBegin: Vec3,
     return true
 
 proc getIntersectLineIntersectsCylinderOnce(point_1: Vec3, point_2: Vec3,
-    centerBegin: Vec3, centerEnd: Vec3, radius: float64,
-    intersect: Vec3): Vec3 =
+    centerBegin: Vec3, centerEnd: Vec3, radius: float64): Vec3 =
   let
     vector = point_2 - point_1
     lambda_dummy = (-1000.0 - point_1[2]) / vector[2]
@@ -718,8 +717,6 @@ proc traceAxion(res: var Axion,
   )
   ## Throw away all the axions, that don't make it through the piping system and therefore exit the system at some point ##
   
-  # TODO: ask johanna why is `intersect` 0? Isn't being modified anywhere! It's a relict and I need to get rid of it because it is unneccessary
-  var intersect = vec3(0.0)
   let intersectsEntranceCB = lineIntersectsCircle(pointInSun,
       pointExitCBMagneticField, centerVecs.centerEntranceCB, expSetup.radiusCB)
   var intersectsCB = false
@@ -727,19 +724,18 @@ proc traceAxion(res: var Axion,
   if (not intersectsEntranceCB):
     intersectsCB = lineIntersectsCylinderOnce(pointInSun,
         pointExitCBMagneticField, centerVecs.centerEntranceCB,
-        centerVecs.centerExitCBMagneticField, expSetup.radiusCB, intersect)
+        centerVecs.centerExitCBMagneticField, expSetup.radiusCB)
   if (not intersectsEntranceCB and not intersectsCB): return
-  
+
+  var intersect = vec3(0.0) #isnt't changed for axions that hit the entrance of the coldbore because the z value is 0 then anyways
   if (not intersectsEntranceCB): #generates problems with the weight because the weight is multiplied with the difference of the leght of the path of the particle and the legth of the coldbore
     intersect = getIntersectLineIntersectsCylinderOnce(pointInSun,
         pointExitCBMagneticField, centerVecs.centerEntranceCB,
-        centerVecs.centerExitCBMagneticField, expSetup.radiusCB,
-        intersect) #pointInSun + ((centerVecs.centerEntranceCB[2] - pointInSun[2]) / (pointExitCBMagneticField - pointInSun)[2]) * (pointExitCBMagneticField - pointInSun)
-  #if (not intersectsCB):
-    #intersect = pointInSun + ((centerVecs.centerEntranceCB[2] - pointInSun[2]) / (pointExitCBMagneticField - pointInSun)[2]) * (pointExitCBMagneticField - pointInSun)
-  let pathCB = pointExitCBMagneticField[2] - intersect[2]
+        centerVecs.centerExitCBMagneticField, expSetup.radiusCB) #pointInSun + ((centerVecs.centerEntranceCB[2] - pointInSun[2]) / (pointExitCBMagneticField - pointInSun)[2]) * (pointExitCBMagneticField - pointInSun)
+  
+  let pathCB = pointExitCBMagneticField[2] - intersect[2] #shouldn't this be different for each axion?
   var pointExitCB = vec3(0.0)
-
+  echo intersect
   if (not lineIntersectsCircle(pointInSun, pointExitCBMagneticField,
       centerVecs.centerExitCB, expSetup.radiusCB)): return
   
@@ -757,7 +753,7 @@ proc traceAxion(res: var Axion,
   pointExitPipeCBVT3 = pointExitCBMagneticField + ((
       centerVecs.centerExitPipeCBVT3[2] - pointExitCBMagneticField[2]) / (
       pointExitCB - pointExitCBMagneticField)[2]) * (pointExitCB - pointExitCBMagneticField)
-  var pointExitPipeVT3XRT = vec3(0.0) #seq[float]
+  var pointExitPipeVT3XRT = vec3(0.0) 
 
   if (not lineIntersectsCircle(pointExitCB, pointExitPipeCBVT3,
       centerVecs.centerExitPipeVT3XRT, expSetup.radiusPipeVT3XRT)): return
@@ -774,15 +770,6 @@ proc traceAxion(res: var Axion,
   pointEntranceXRT[0] = pointExitPipeVT3XRT[0] #- distanceCBAxisXRTAxis
   pointEntranceXRT[1] = pointExitPipeVT3XRT[1]
   pointEntranceXRT[2] = pointExitPipeVT3XRT[2]
-
-  ## filters out the edges of the mirrors (NOTE: that's probably why we don't get the lines
-  ## in our picture now...)
-  #if (getPixelValue(pointEntranceXRT)[0] > 1400.0 or getPixelValue(pointEntranceXRT)[1] > 1400.0): return
-  #if lineIntersectsCircleEdge(circleTotal, getPixelValue(pointEntranceXRT)): return
-
-
-    
-    
 
   ## Coordinate transform from cartesian to polar at the XRT entrance
   var
@@ -801,7 +788,7 @@ proc traceAxion(res: var Axion,
   
   ## there is a 2mm wide graphite block between each glass mirror, to seperate them
   ## in the middle of the X-ray telescope. Return if hit
-  ## TODO: understand why this does that?!
+  ## BabyIAXO return if X-ray its the spider structure
   case setup
   of esCAST:
     if pointEntranceXRT[1] <= 1.0 and pointEntranceXRT[1] >=
@@ -815,7 +802,7 @@ proc traceAxion(res: var Axion,
     for i in 0..16:
       if (phi_flat >= (-1.25 + 22.5 * i.float) and phi_flat <= (1.25 + 22.5 * i.float)): #spider strips (actually wider for innermost but doesnn't matter because it doesnt reach the window anyways)
         return
-    #TODO: inner spider structure that doesnt matters
+    #TODO: inner spider structure that doesnt matter
 
   
   ## Calculate the way of the axion through the telescope by manually reflecting the ray on the two mirror layers and then ending up before the detector ##
@@ -828,7 +815,6 @@ proc traceAxion(res: var Axion,
     r4 = 0.0
     r5 = 0.0
     beta = 0.0 ## in degree
-    r1Zyl = 0.0
     xSep = 0.0
     h: int
 
@@ -845,7 +831,7 @@ proc traceAxion(res: var Axion,
       r1 = expSetup.allR1[k]
       beta = degToRad(expSetup.allAngles[k])
       xSep = expSetup.allXsep[k]
-      r2 = r1 - expSetup.lMirror * sin(beta) #225mm is the length of the mirrors
+      r2 = r1 - expSetup.lMirror * sin(beta) 
       r3 = r2 - 0.5 * xSep * tan(beta)
       r4 = r3 - 0.5 * xSep * tan(3.0 * beta)
       r5 = r4 - expSetup.lMirror * sin(3.0 * beta)
