@@ -2,8 +2,9 @@
 import math, strutils, algorithm, random, sequtils, os, strformat, tables
 import json except `{}`
 
-# TODO: axionMass will be minified and the important stuff extracted
-# import axionMass/axionMass
+
+
+# nim c -r --threads:on -d:danger raytracerWolter1.nim 
 
 # nimble
 import seqmath except linspace
@@ -42,6 +43,9 @@ var
   reflectionProbE: float
   reflectionProb: float
   reflectionEnergy: float
+  reflectionProbAlpha:float
+  angles: seq[float]
+  reflectivityAlpha: seq[float]
 
 for i in 17..80:
   alpha = (i.float * 0.01).round(2)
@@ -53,13 +57,27 @@ for l in 0..499:
   reflectionProbE = 0.0
   for j in 17..80:    
     alpha1 = (j.float * 0.01).round(2)
-      #alpha2 = angle2[1].round(2)
     
     reflectionProb = dfTable[fmt"goldfile{alpha1:4.2f}"]["Reflectivity"].toTensor(float)[l]
     reflectionEnergy = dfTable[fmt"goldfile{alpha1:4.2f}"]["PhotonEnergy(eV)"].toTensor(float)[l]
     reflectionProbE += reflectionProb * 0.01
   reflectivity.add(reflectionProbE)
   energies.add(reflectionEnergy)
+
+for j in 17..80:
+  reflectionProbAlpha = 0.0
+  alpha1 = (j.float * 0.01).round(2)
+  for l in 0..499:  
+    
+    reflectionProb = dfTable[fmt"goldfile{alpha1:4.2f}"]["Reflectivity"].toTensor(float)[l]
+    echo reflectionProb
+    reflectionProbAlpha += reflectionProb * 19.98 * 0.0001  #dont know why the 0.0001
+  angles.add(alpha1)
+  reflectivityAlpha.add(reflectionProbAlpha)
+echo angles
+echo reflectivityAlpha
+
+######now the things that have to be substracted from the total area################################
 
 for k in 0..57:
   var areaRing = ((allR1[k] + allThickness[k]) * (allR1[k] + allThickness[k]) * PI) - (allR1[k] * allR1[k] * PI)
@@ -68,17 +86,36 @@ echo areaMirrorFronts
 
 ######## This part is about the spider and all of the values are estimated ##################
 var 
+  radiusAreaMirrorF = sqrt(areaMirrorFronts / PI)
   innerArea = allR3[0] * allR3[0] * PI * 0.01 #cm^2 #too much
-  areaSpiderStrips = allR1[57] * allR1[57] * PI * (2.5 * 16.0 / 360.0) * 0.01 #cm^2 #intersection with Mirror fronts too much
+  areaSpiderStrips = (allR1[57] * allR1[57] - allR3[0] * allR3[0]) * PI * (2.5 * 16.0 / 360.0) * 0.01 - (radiusAreaMirrorF * radiusAreaMirrorF * PI * (2.5 * 16.0 / 360.0) * 0.01) #cm^2 
+  areaInnerCircles = (((64.7 * 64.7 * PI)) + (((130.7 + 20.9) * (130.7 + 20.9) * PI) - (130.7 * 130.7 * PI) )) * 0.01 #cm² from picture #closed in the middle
+  areaInnerStrips = (130.7 - 49.5 + 15.2) * 15.2 * 0.01 #cm² from picture
+echo areaMirrorFronts + areaSpiderStrips + areaInnerCircles + areaInnerStrips
 
 
 let dfRef = seqsToDf({"Reflectivity": reflectivity,
-                      "Photon Energy[eV]": energies})
-ggplot(dfRef.mutate(f{"EffArea" ~ `Reflectivity` * (totalArea - areaMirrorFronts - areaSpiderStrips)}),
-        aes("Photon Energy[eV]", "EffArea")) +
+                      "Photon Energy[eV]": energies}).mutate(f{"EffArea" ~ `Reflectivity` * (totalArea - areaMirrorFronts - areaSpiderStrips - areaInnerCircles - areaInnerStrips)})
+ggplot(dfRef, aes("Photon Energy[eV]", "EffArea")) +
   geom_line() +
   #xlim(100.0, 10000.0) +
   scale_x_log10() +
   #scale_y_log10() +
   ggtitle("The reflectivity od the XMM telescope depending on the photon energy") +
   ggsave(&"out/Reflectivity.pdf")
+
+let dfRefAlpha = seqsToDf({"Reflectivity": reflectivityAlpha,
+                      "Angles": angles}).mutate(f{"EffArea" ~ `Reflectivity` * (totalArea - areaMirrorFronts - areaSpiderStrips - areaInnerCircles - areaInnerStrips)})
+ggplot(dfRefAlpha, aes("Angles", "EffArea")) +
+  geom_line() +
+  #xlim(100.0, 10000.0) +
+  scale_x_log10() +
+  #scale_y_log10() +
+  ggtitle("The reflectivity od the XMM telescope depending on the reflection angle") +
+  ggsave(&"out/ReflectivityAlpha.pdf")
+
+var energy1500 = dfRef["Photon Energy[eV]"].toTensor(float).toRawSeq.lowerBound(1500.0)
+echo "Effective Area at 1.5 keV ", dfRef["EffArea"].toTensor(float)[energy1500]
+
+var energy8000 = dfRef["Photon Energy[eV]"].toTensor(float).toRawSeq.lowerBound(8000.0)
+echo "Effective Area at 8 keV ", dfRef["EffArea"].toTensor(float)[energy8000]
