@@ -3,7 +3,7 @@ import math, strutils, algorithm, random, sequtils, os, strformat, tables
 import json except `{}`
 
 # TODO: axionMass will be minified and the important stuff extracted
-# import axionMass/axionMass
+import axionMass/axionMassforMagnet
 
 # nimble
 import seqmath except linspace
@@ -42,12 +42,14 @@ type
     distanceCBAxisXRTAxis*: float
     RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW*: float
     pipes_turned*: float
+    allThickness*: seq[float]
     allR1*: seq[float]
     allXsep*: seq[float]
     allAngles*: seq[float]
     lMirror*: float
     d*: float
     B*: float
+    pGas*: float
     tGas*: float
     depthDet*: float
     theta*: float
@@ -64,6 +66,7 @@ type
 
   Axion = object
     passed: bool # indicates whether axion reached the detector
+    passedTillWindow: bool
     pointdataX: float
     pointdataY: float
     pointdataXBefore: float
@@ -71,6 +74,8 @@ type
     pointdataR: float
     weights: float
     weightsAll: float
+    transmissionMagnets: float
+    yawAngles: float
     pixvalsX: float
     pixvalsY: float
     radii: float
@@ -92,11 +97,11 @@ type
 const
   RAYTRACER_DISTANCE_SUN_EARTH = 1.5e14 #mm #ok
   radiusSun = 6.9e11                    #mm #ok
-  numberOfPointsSun = 1_000_000            #100000 for statistics   
+  numberOfPointsSun = 1_000_000            #100000 for statistics   #37734 for CAST if BabyIaxo 10 mio  #26500960 corresponding to 100_000 axions at CAST, doesnt work
 
-  pressGas = 14.3345 #for example P = 14.3345 mbar (corresponds to 1 bar at room temperature).
+  
 
-
+  roomTemp = 293.15 #K
   mAxion = 0.4                          #eV for example
   g_agamma = 1e-12
 var fluxesRs = newSeq[float](1000)
@@ -237,7 +242,7 @@ proc getRandomEnergyFromSolarModel(vectorInSun, center: Vec3, radius: float64,
 ## The following are some functions to determine inetersection of the rays with the
 ## geometry (pipes, magnet, mirrors) of the setup ##
 proc lineIntersectsCircle(point_1, point_2, center: Vec3,
-                          radius: float64, intersect: Vec3): bool =
+                          radius: float64): bool =
   ## Now a function to see if the lines from the sun will actually intersect
   ## the circle area from the magnet entrance (called coldbore) etc. ##
   var vector = vec3(0.0)
@@ -580,6 +585,8 @@ proc getVarsForSetup*(setup: ExperimentSetupKind): ExperimentSetup =
       RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW: 0.0, #mm #no change, because don't know
       pipes_turned: 3.0, #degree # this is the angle by which the pipes before the detector were turned in comparison to the telescope
                              # Measurements of the Telescope mirrors in the following, R1 are the radii of the mirror shells at the entrance of the mirror
+      allThickness: @[0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2,
+          0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2], ## the radii of the shells
       allR1: @[60.7095, 63.006, 65.606, 68.305, 71.105, 74.011, 77.027, 80.157,
           83.405, 86.775, 90.272, 93.902, 97.668, 101.576, 105.632], ## the radii of the shells
       allXsep: @[4.0, 4.171, 4.140, 4.221, 4.190, 4.228, 4.245, 4.288, 4.284,
@@ -590,6 +597,7 @@ proc getVarsForSetup*(setup: ExperimentSetupKind): ExperimentSetup =
       lMirror: 225.0, #mm Mirror length
       d: 83.0, #mm ## distance between center of colbore at XRT and center of XRT (where the focal point is on the minus x axis)
       B: 9.0, #T magnetic field of magnet
+      pGas: 14.3345, #pressure of the gas
       tGas: 1.7, #K
       depthDet: 30.0, #mm
       #stripDistWindow: 2.3,  #mm
@@ -620,29 +628,26 @@ proc getVarsForSetup*(setup: ExperimentSetupKind): ExperimentSetup =
       RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW: 0.0, #mm #no change, because don't know #good idea
       pipes_turned: 0.0, #degree
                              # Measurements of the Telescope mirrors in the following, R1 are the radii of the mirror shells at the entrance of the mirror
-                             # It's again a Nustar telescope, but not just a fragment, so I suppose there are more than 13 Layers
-                             # Also the widest radius in CAST was 100 mm which is not enough, it should be about 350 mm
-                             # Also the angles need to be different... but I could figute them out...
       #allR3: @[151.61, 153.88, 156.17, 158.48, 160.82, 163.18, 165.57, 167.98, 170.42, 172.88, 175.37, 177.88, 180.42, 183.14, 185.89, 188.67, 191.48, 
           #194.32, 197.19, 200.09, 203.02, 206.03, 209.07, 212.14, 215.24, 218.37, 221.54, 224.74, 227.97, 231.24, 234.54, 237.87, 241.24, 244.85, 
           #248.5, 252.19, 255.92, 259.68, 263.48, 267.32, 271.2, 275.12, 279.08, 283.09, 287.14, 291.38, 295.72, 300.11, 304.54, 309.02, 313.54, 
           #318.11, 322.73, 327.4, 332.12, 336.88, 341.69, 346.55] #these are the real values but R3
-      #allThickness: @[0.468, 0.475, 0.482, 0.490, 0.497, 0.504, 0.511, 0.519, 0.526, 0.534, 0.542, 0.549, 0.557, 0.566, 0.574, 0.583, 0.591, 0.600, 0.609, 0.618, 
-          #0.627, 0.636, 0.646, 0.655, 0.665, 0.675, 0.684, 0.694, 0.704, 0.714, 0.724, 0.735, 0.745, 0.756, 0.768, 0.779, 0.790, 0.802, 0.814, 0.826, 0.838, 0.850, 
-          #0.862, 0.874, 0.887, 0.900, 0.913, 0.927, 0.941, 0.955, 0.968, 0.983, 0.997, 1.011, 1.026, 1.041, 1.055, 1.070]
+      allThickness: @[0.468, 0.475, 0.482, 0.490, 0.497, 0.504, 0.511, 0.519, 0.526, 0.534, 0.542, 0.549, 0.557, 0.566, 0.574, 0.583, 0.591, 0.600, 0.609, 0.618, 
+          0.627, 0.636, 0.646, 0.655, 0.665, 0.675, 0.684, 0.694, 0.704, 0.714, 0.724, 0.735, 0.745, 0.756, 0.768, 0.779, 0.790, 0.802, 0.814, 0.826, 0.838, 0.850, 
+          0.862, 0.874, 0.887, 0.900, 0.913, 0.927, 0.941, 0.955, 0.968, 0.983, 0.997, 1.011, 1.026, 1.041, 1.055, 1.070],
       allR1: @[153.126, 155.419, 157.731, 160.065, 162.428, 164.812, 167.225, 169.66, 172.124, 174.608, 177.123, 179.658, 182.224, 184.971, 187.749, 190.556, 
           193.394, 196.263, 199.161, 202.09, 205.05, 208.09, 211.16, 214.261, 217.392, 220.553, 223.755, 226.987, 230.249, 233.552, 236.885, 240.248, 243.652, 
           247.298, 250.984, 254.711, 258.478, 262.276, 266.114, 269.992, 273.911, 277.87, 281.869, 285.92, 290.01, 294.292, 298.676, 303.109, 307.584, 312.108, 
           316.674, 321.289, 325.955, 330.672, 335.439, 340.246, 345.104, 350.013], ## the radii of the shells closest to the magnet, now correct
       allXsep: @[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 
           0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-      #allR2: @[0.0, 60.731, 63.237, 65.838, 68.538, 71.339, 74.246, 77.263, 80.394, 83.642]
       allAngles: @[0.29, 0.294, 0.298, 0.303, 0.307, 0.312, 0.316, 0.321, 0.325, 0.33, 0.335, 0.34, 0.345, 0.35, 0.355, 0.36, 0.366, 0.371, 0.377, 0.382, 0.388, 
           0.393, 0.399, 0.405, 0.411, 0.417, 0.423, 0.429, 0.435, 0.441, 0.448, 0.454, 0.461, 0.467, 0.474, 0.481, 0.489, 0.496, 0.503, 0.51, 0.518, 0.525, 0.533, 
           0.54, 0.548, 0.556, 0.564, 0.573, 0.581, 0.59, 0.598, 0.607, 0.616, 0.625, 0.634, 0.643, 0.652, 0.661], ## the angles of the mirror shells coresponding to the radii above, now correct
       lMirror: 300.0, #mm Mirror length
       d: 0.0, #mm ## distance between center of colbore at XRT and center of XRT (where the focal point is on the minus x axis)
       B: 2.0, #T magnetic field of magnet # Rather 2-3 T, not entirely homogeneous
+      pGas: 14.3345, #pressure of the gas #for example P = 14.3345 mbar (corresponds to 1 bar at room temperature).
       tGas: 293.15, #K only Gas in BabyIAXO
       depthDet: 30.0, #mm #probably not
       theta: degToRad(71.5),  #theta angle between window strips and horizontal x axis
@@ -713,10 +718,10 @@ proc traceAxion(res: var Axion,
   )
   ## Throw away all the axions, that don't make it through the piping system and therefore exit the system at some point ##
   
-  # TODO: ask johanna why is `intersect` 0? Isn't being modified anywhere!
+  # TODO: ask johanna why is `intersect` 0? Isn't being modified anywhere! It's a relict and I need to get rid of it because it is unneccessary
   var intersect = vec3(0.0)
   let intersectsEntranceCB = lineIntersectsCircle(pointInSun,
-      pointExitCBMagneticField, centerVecs.centerEntranceCB, expSetup.radiusCB, intersect)
+      pointExitCBMagneticField, centerVecs.centerEntranceCB, expSetup.radiusCB)
   var intersectsCB = false
   res.energiesPre = energyAx
   if (not intersectsEntranceCB):
@@ -736,7 +741,7 @@ proc traceAxion(res: var Axion,
   var pointExitCB = vec3(0.0)
 
   if (not lineIntersectsCircle(pointInSun, pointExitCBMagneticField,
-      centerVecs.centerExitCB, expSetup.radiusCB, pointExitCB)): return
+      centerVecs.centerExitCB, expSetup.radiusCB)): return
   
   pointExitCB = pointInSun + ((centerVecs.centerExitCB[2] - pointInSun[2]) / (
       pointExitCBMagneticField - pointInSun)[2]) * (pointExitCBMagneticField - pointInSun)
@@ -744,8 +749,7 @@ proc traceAxion(res: var Axion,
   var pointExitPipeCBVT3 = vec3(0.0)
 
   if (not lineIntersectsCircle(pointExitCBMagneticField, pointExitCB,
-      centerVecs.centerExitPipeCBVT3, expSetup.radiusPipeCBVT3,
-      pointExitPipeCBVT3)): 
+      centerVecs.centerExitPipeCBVT3, expSetup.radiusPipeCBVT3)): 
         echo "start"
         echo "exit magnet", pointExitCBMagneticField, "exit cb", pointExitCB
         return
@@ -756,8 +760,7 @@ proc traceAxion(res: var Axion,
   var pointExitPipeVT3XRT = vec3(0.0) #seq[float]
 
   if (not lineIntersectsCircle(pointExitCB, pointExitPipeCBVT3,
-      centerVecs.centerExitPipeVT3XRT, expSetup.radiusPipeVT3XRT,
-      pointExitPipeVT3XRT)): return
+      centerVecs.centerExitPipeVT3XRT, expSetup.radiusPipeVT3XRT)): return
   
   pointExitPipeVT3XRT = pointExitCB + ((centerVecs.centerExitPipeVT3XRT[2] -
       pointExitCB[2]) / (pointExitPipeCBVT3 - pointExitCB)[2]) * (
@@ -777,11 +780,9 @@ proc traceAxion(res: var Axion,
   #if (getPixelValue(pointEntranceXRT)[0] > 1400.0 or getPixelValue(pointEntranceXRT)[1] > 1400.0): return
   #if lineIntersectsCircleEdge(circleTotal, getPixelValue(pointEntranceXRT)): return
 
-  ## there is a 2mm wide graphite block between each glass mirror, to seperate them
-  ## in the middle of the X-ray telescope. Return if hit
-  ## TODO: understand why this does that?!
-  if pointEntranceXRT[1] <= 1.0 and pointEntranceXRT[1] >=
-      -1.0: return
+
+    
+    
 
   ## Coordinate transform from cartesian to polar at the XRT entrance
   var
@@ -792,10 +793,31 @@ proc traceAxion(res: var Axion,
     phi_radius = arctan2(-pointEntranceXRT[1], (pointEntranceXRT[
         0]+expSetup.d)) #arccos((pointEntranceXRT[1]+expSetup.d) / radius1)
     alpha = arctan(radius1 / expSetup.RAYTRACER_FOCAL_LENGTH_XRT)
+    phi_flat = radtoDeg(arccos(pointEntranceXRT[0] / radius1))
   vectorEntranceXRTCircular[0] = radius1
-  vectorEntranceXRTCircular[1] = phi_radius
-  vectorEntranceXRTCircular[2] = alpha
+  vectorEntranceXRTCircular[1] = phi_radius #in rad
+  vectorEntranceXRTCircular[2] = alpha #in rad
 
+  
+  ## there is a 2mm wide graphite block between each glass mirror, to seperate them
+  ## in the middle of the X-ray telescope. Return if hit
+  ## TODO: understand why this does that?!
+  case setup
+  of esCAST:
+    if pointEntranceXRT[1] <= 1.0 and pointEntranceXRT[1] >=
+        -1.0: return
+  of esBabyIAXO:
+    ## here we have a spider structure for the XMM telescope:
+    if vectorEntranceXRTCircular[0] <= 64.7: #doesnt really matter because there are no mirrors in the middle and these axions dont reach the window anyways
+      return
+    elif vectorEntranceXRTCircular[0] < 151.6 and vectorEntranceXRTCircular[0] > (151.6 - 20.9): #doesnt really matter because there are no mirrors in the middle and these axions dont reach the window anyways
+      return
+    for i in 0..16:
+      if (phi_flat >= (-1.25 + 22.5 * i.float) and phi_flat <= (1.25 + 22.5 * i.float)): #spider strips (actually wider for innermost but doesnn't matter because it doesnt reach the window anyways)
+        return
+    #TODO: inner spider structure that doesnt matters
+
+  
   ## Calculate the way of the axion through the telescope by manually reflecting the ray on the two mirror layers and then ending up before the detector ##
 
   var
@@ -814,7 +836,7 @@ proc traceAxion(res: var Axion,
   for j in 0..<expSetup.allR1.len:
     # get rid of where the X-rays hit the glass frontal
     if vectorEntranceXRTCircular[0] > expSetup.allR1[j] and
-        vectorEntranceXRTCircular[0] < expSetup.allR1[j] + 0.2:
+        vectorEntranceXRTCircular[0] < expSetup.allR1[j] + expSetup.allThickness[j]: #0.2 thickness
       return
     if expSetup.allR1[j] - vectorEntranceXRTCircular[0] > 0.0:
       dist.add(expSetup.allR1[j] - vectorEntranceXRTCircular[0])
@@ -862,18 +884,7 @@ proc traceAxion(res: var Axion,
     vectorAfterMirrors = getVectoraAfterMirror(pointAfterMirror1, pointMirror1,
         pointMirror2, beta3, "vectorAfter")
     pointAfterMirror2 = pointMirror2 + 200.0 * vectorAfterMirrors
-    angle1 = getVectoraAfterMirror(pointEntranceXRTZylKart,
-        pointExitCBZylKart, pointMirror1, beta, "angle")
-    angle2 = getVectoraAfterMirror(pointAfterMirror1, pointMirror1,
-        pointMirror2, beta3, "angle")
-    alpha1 = angle1[1].round(2)
-    alpha2 = angle2[1].round(2)
-    energyAxReflection1 = dfTable[fmt"goldfile{alpha1:4.2f}"]["PhotonEnergy(eV)"].toTensor(
-            float).toRawSeq.lowerBound(energyAx * 1000.0)
-    energyAxReflection2 = dfTable[fmt"goldfile{alpha2:4.2f}"]["PhotonEnergy(eV)"].toTensor(
-            float).toRawSeq.lowerBound(energyAx * 1000.0)
-    reflectionProb1 = dfTable[fmt"goldfile{alpha1:4.2f}"]["Reflectivity"].toTensor(float)[energyAxReflection1]
-    reflectionProb2 = dfTable[fmt"goldfile{alpha2:4.2f}"]["Reflectivity"].toTensor(float)[energyAxReflection2]
+
   #if angle1[1] < 0.2 or angle2[1] < 0.2:
     #echo getVectoraAfterMirror(pointEntranceXRTZylKart,
           #pointExitCBZylKart, pointMirror1, beta, "angle"), " ", getVectoraAfterMirror(pointAfterMirror1, pointMirror1,
@@ -952,56 +963,79 @@ proc traceAxion(res: var Axion,
     probConversionMagnet = conversionProb(expSetup.B, g_agamma, pathCB)
   
     distancePipe = (pointDetectorWindow[2] - pointExitCBZylKart[2]) * 1e-3 #m
-    # for setup including gas: functions are in axionmass/axionmass
-    #probConversionMagnetGas = axionConversionProb2(m_a, energyAx, pGas, tGas, (pathCB * 1e-3),
-    #                                               expSetup.radiusCB, g_agamma, B)
-    #absorbtionXrays = intensitySuppression2(energyAx, (pathCB * 1e-3) , distancePipe,
-    #                                        pGas, tGas, roomTemp) #room temperature in K
+    
+    probConversionMagnetGas = axionConversionProb2(mAxion, energyAx, expSetup.pGas, expSetup.tGas, (pathCB * 1e-3),
+                                                   expSetup.radiusCB, g_agamma, expSetup.B) # for setup including gas: functions are in axionmass/axionMassforMagnet
+    absorbtionXrays = intensitySuppression2(energyAx, (pathCB * 1e-3), distancePipe,
+                                            expSetup.pGas, expSetup.tGas, roomTemp) #room temperature in K
   
   # this is the transformation probability of an axion into a photon, if an axion
   # flying straight through the magnet had one of 100%, angular dependency of the primakoff effect
-  var transmissionMagnet: float = cos(ya) * probConversionMagnet #1.0
+  var weight:float
+  var transmissionMagnet: float
   # for setup with gas
   #transmissionMagnetGas = cos(ya) * probConversionMagnetGas * absorbtionXrays
   var transmissionTelescopeEnergy: float
-  #echo probConversionMagnet
+  
   case setup
   of esCAST:
     transmissionMagnet = cos(ya) * probConversionMagnet #1.0
   of esBabyIAXO:
     transmissionMagnet = cos(ya) * probConversionMagnet #0.0 #transmissionMagnetGas
 
-  if energyAx < 2.0:
-    #total eff area of telescope = 1438.338mm² = 14.38338cm² #the last thing are the mirror seperators
-    transmissionTelescopeEnergy = (-0.013086145 * pow(energyAx, 4) +
-                                   0.250552655 * pow(energyAx, 3) -
-                                   1.541426299 * energyAx * energyAx +
-                                   2.064933639 * energyAx +
-                                   7.625254445) / (14.38338 - (4.3 * 0.2))
-  elif energyAx >= 2.0 and energyAx < 8.0:
-    transmissionTelescopeEnergy = (0.0084904 * pow(energyAx, 6) -
-                                   0.199553 * pow(energyAx, 5) +
-                                   1.75302 * pow(energyAx, 4) -
-                                   7.05939 * pow(energyAx, 3) +
-                                   12.6706 * energyAx * energyAx -
-                                   9.23947 * energyAx +
-                                   9.96953) / (14.38338 - (4.3 * 0.2))
-  else:
-    transmissionTelescopeEnergy = 0.0
-  #echo "Without gas", probConversionMagnet
-  #echo "With gas", probConversionMagnetGas
+  #if transmissionMagnet > 3.0e-24:
+  res.transmissionMagnets = transmissionMagnet
+  res.yawAngles = ya
 
-  if transmissionTelescopeEnergy < 0.0:
-    transmissionTelescopeEnergy = 0.0
-  #echo transmissionTelescopePitch
+  case setup
+  of esCAST:
+    if energyAx < 2.0:
+      #total eff area of telescope = 1438.338mm² = 14.38338cm² #the last thing are the mirror seperators
+      transmissionTelescopeEnergy = (-0.013086145 * pow(energyAx, 4) +
+                                    0.250552655 * pow(energyAx, 3) -
+                                    1.541426299 * energyAx * energyAx +
+                                    2.064933639 * energyAx +
+                                    7.625254445) / (14.38338 - (4.3 * 0.2))
+    elif energyAx >= 2.0 and energyAx < 8.0:
+      transmissionTelescopeEnergy = (0.0084904 * pow(energyAx, 6) -
+                                    0.199553 * pow(energyAx, 5) +
+                                    1.75302 * pow(energyAx, 4) -
+                                    7.05939 * pow(energyAx, 3) +
+                                    12.6706 * energyAx * energyAx -
+                                    9.23947 * energyAx +
+                                    9.96953) / (14.38338 - (4.3 * 0.2))
+    else:
+      transmissionTelescopeEnergy = 0.0
+    if transmissionTelescopeEnergy < 0.0:
+      transmissionTelescopeEnergy = 0.0
+    weight = (transmissionTelescopeEnergy *
+      transmissionTelescopePitch*transmissionTelescopeYaw *
+      transmissionMagnet) #transmission probabilities times axion emission rate times the flux fraction
+  of esBabyIAXO:
+    let
+      angle1 = getVectoraAfterMirror(pointEntranceXRTZylKart,
+      pointExitCBZylKart, pointMirror1, beta, "angle")
+      angle2 = getVectoraAfterMirror(pointAfterMirror1, pointMirror1,
+          pointMirror2, beta3, "angle")
+      alpha1 = angle1[1].round(2)
+      alpha2 = angle2[1].round(2)
+      energyAxReflection1 = dfTable[fmt"goldfile{alpha1:4.2f}"]["PhotonEnergy(eV)"].toTensor(
+              float).toRawSeq.lowerBound(energyAx * 1000.0)
+      energyAxReflection2 = dfTable[fmt"goldfile{alpha2:4.2f}"]["PhotonEnergy(eV)"].toTensor(
+              float).toRawSeq.lowerBound(energyAx * 1000.0)
+      reflectionProb1 = dfTable[fmt"goldfile{alpha1:4.2f}"]["Reflectivity"].toTensor(float)[energyAxReflection1]
+      reflectionProb2 = dfTable[fmt"goldfile{alpha2:4.2f}"]["Reflectivity"].toTensor(float)[energyAxReflection2]
+    weight = reflectionProb1 * reflectionProb2 * transmissionMagnet#also yaw and pitch dependend
+
+
 
   # var prob = (expSetup.radiusCB * expSetup.radiusCB) / (4 * pointInSun[2] * pointInSun[2]) ##Flux fraction. Is this correct??* * prob * emissionRateAxPerH
   #doesnt have to be multiplied by those two as it is already time and space determined through having 1000000 axions and multiplying the total flux (produced by readOpacityFile) of axions with the entrance area of the coldbore
   # 1000000 axions that reach the coldbore then are reached after an operating time of 2.789 \times 10^{-5}\,\si{\second}
   # var emissionRateAxPerH = emissionRateAx * 3600.00
-  var weight = (transmissionTelescopeEnergy *
-      transmissionTelescopePitch*transmissionTelescopeYaw *
-      transmissionMagnet) #transmission probabilities times axion emission rate times the flux fraction
+  
+  if weight != 0:
+    res.passedTillWindow = true
 
   ##Detector window:##
   if sqrt(pointDetectorWindow[0] * pointDetectorWindow[0] + pointDetectorWindow[
@@ -1020,7 +1054,7 @@ proc traceAxion(res: var Axion,
   var transWindow: float
   var energyAxTransWindow: int
   # TODO: assignment here of the different kinds is obviously broken. Instead of having
-  # one kinds field + the others we should have some additional field or something
+  # one kinds field + the others we should have some additional field or something #made two assignments and now it works
   ## TODO: transmission of window material etc. can also be modeled using ray tracing.
   ## probability that transmission happens at all!
   ## TODO: get the data once to avoid `toRawSeq` overhead
@@ -1146,8 +1180,8 @@ proc traceAxionWrapper(axBuf: ptr UncheckedArray[Axion],
                            dfTab, dfTable)
 
 proc calculateFluxFractions(axionRadiationCharacteristic: string,
-                            detectorWindowAperture: float, pGas: float,
-                            m_a: float, setup: ExperimentSetupKind,
+                            detectorWindowAperture: float,
+                            setup: ExperimentSetupKind,
                             year: string) = #The year is only for the way the window in front of the detector was turned.
   var
     distanceCBAxisXRTAxis = 0.0
@@ -1213,7 +1247,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
 
   let
     energies = linspace(1.0, 10000.0, 1112)
-    roomTemp = 293.15 #K
+
 
   
 
@@ -1303,13 +1337,9 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     theta = expSetup.theta
 
   let siNfile = &"./resources/Si3N4Density=3.44Thickness={expSetup.windowThickness}microns"
-  let spline = interpTrans(siNfile)
   let siFile = "./resources/SiDensity=2.33Thickness=200.microns"
-  let splineStrips = interpTrans(siFile)
   let detectorFile = "./resources/transmission-argon-30mm-1050mbar-295K.dat"
-  let splineDet = interpTrans(detectorFile)
   let alFile = &"./resources/AlDensity=2.7Thickness={expSetup.alThickness}microns"
-  let splineAl = interpTrans(alfile)
 
 
   var dfTab = initTable[string, DataFrame]()
@@ -1324,7 +1354,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     alpha: float
     dfTable = initTable[string, DataFrame]()
 
-  for i in 17..80:
+  for i in 13..83:
     alpha = (i.float * 0.01).round(2)
     goldfile = fmt"./resources/reflectivity/{alpha:4.2f}degGold0.25microns"
     dfTable[fmt"goldfile{alpha:4.2f}"] = readCsv(goldfile, sep = ' ')
@@ -1364,6 +1394,8 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   echo "Passed axions ", axionsPass.len
   #echo axionsPass[0 ..< 100]
   #echo axionsPass[0 ..< 100]
+  let axionsPassW = axions.filterIt(it.passedTillWindow)
+  echo "Passed axions until the Window ", axionsPassW.len
 
   template extractPass(n: untyped): untyped =
     let n = axionsPass.mapIt(it.n)  
@@ -1374,8 +1406,10 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   extractPass(shellNumber)
 
   extractPass(weights)
+  extractPass(transmissionMagnets)
+  extractPass(yawAngles)
   extractPass(transProbArgon)
-  
+
   extractPass(pointDataX)
   extractPass(pointDataY)
   extractPass(pointdataR)
@@ -1476,13 +1510,14 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     ggtitle("Radial distribution of the axions") +
     ggsave(&"out/radialDistribution_{year}.pdf")
   
-  let dfFluxE = seqsToDf({"Axion energy [eV]": energiesAx,
+  let dfFluxE = seqsToDf({"Axion energy [keV]": energiesAx,
                           "Transmission probability": weights})
 
-  ggplot(dfFluxE, aes("Axion energy [eV]", weight = "Transmission probability")) +
+  ggplot(dfFluxE, aes("Axion energy [keV]", weight = "Transmission probability")) +
     geom_histogram(binWidth = 0.0001) +
     ggtitle("The Axion flux after the experiment") +
     ggsave(&"out/fluxAfter_{year}.pdf") 
+
 
   let dfXY = seqsToDf({"x": pointDataX,
                        "y": pointDataY,
@@ -1501,7 +1536,15 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     ggtitle("R") +
     ggsave(&"out/R_{year}.pdf")
 
+  let dfMag = seqsToDf({"Transmission probability": transmissionMagnets,
+                       "Yaw angles": yawAngles}).arrange("Yaw angles")
 
+
+  ggplot(dfMag, aes("Yaw angles", "Transmission probability")) +
+    geom_point(size = some(0.5), alpha = some(0.1)) +
+    ylim(3.1e-24, 3.16e-24) +
+    ggtitle("The probability of the transformation of axions to X-rays in the magnet") +
+    ggsave(&"out/transMagnet_{year}.pdf")
   
   ############get the 1 and 2 sigma area ###################
   var pointR = pointdataR
@@ -1517,6 +1560,26 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   sigmaAssign.fill(sigma2, pointR.len - 1, "rest") 
   let rSigma1 = pointR[sigma1 - 1]
   let rSigma2 = pointR[sigma2 - 1]
+
+  ############get the 1 and 2 sigma area before the Window###################
+
+  var 
+    sigma1Window = (axionsPassW.len.float * 0.68).round.int
+    sigma2Window = (axionsPassW.len.float * 0.955).round.int
+    sigmaAssignW = newSeq[string](pointR.len)
+    rSigma1Window: float
+    rSigma2Window: float
+  if sigma2Window > pointR.len:
+    sigmaAssignW.fill(0, sigma1Window - 1, "sigma 1") 
+    sigmaAssignW.fill(sigma1Window, pointR.len - 1, "sigma 2")
+    rSigma1Window = pointR[sigma1Window - 1]
+  else:
+    sigmaAssignW.fill(0, sigma1Window - 1, "sigma 1") 
+    sigmaAssignW.fill(sigma1Window, sigma2Window - 1, "sigma 2")
+    sigmaAssignW.fill(sigma2Window, pointR.len - 1, "rest") 
+    rSigma1Window = pointR[sigma1Window - 1]
+    rSigma2Window = pointR[sigma2Window - 1]
+
 
   #dfRad.mutate(fn {string -> string: "Sigma" ~ sigmaAssign[parseInt(`Idx`)]})
   let 
@@ -1553,12 +1616,18 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
                         "Transmission probability": weightsSig,
                         "x": pointDataXSig,
                        "y": pointDataYSig,
-                       "Sigma" : sigmaAssign})
+                       "Sigma" : sigmaAssign,
+                       "Sigma before window": sigmaAssignW})
 
   ggplot(dfRadSig, aes("Radial component [mm]", fill = factor("Sigma"), weight = "Transmission probability")) +
     geom_histogram(binWidth = 0.001) +
     ggtitle("Radial distribution of the axions with sigma") +
     ggsave(&"out/radDistSig_{year}.pdf")
+
+  ggplot(dfRadSig, aes("Radial component [mm]", fill = factor("Sigma before window"), weight = "Transmission probability")) +
+    geom_histogram(binWidth = 0.001) +
+    ggtitle("Radial distribution of the axions with sigma from before the window") +
+    ggsave(&"out/radDistSigBeforeWindow_{year}.pdf")
   
   ggplot(dfRadSig, aes("x", "y", color = factor("Sigma"), weight = "Transmission probability")) +
     geompoint(size = some(0.5), alpha = some(0.1)) +
@@ -1660,8 +1729,8 @@ when isMainModule:
   var detectorWindowAperture: float64
   detectorWindowAperture = 14.0 #mm
 
-  calculateFluxFractions(radiationCharacteristic, detectorWindowAperture,
-                         pressGas, mAxion, esBabyIAXO,
+  calculateFluxFractions(radiationCharacteristic, detectorWindowAperture, 
+                        esBabyIAXO,
                          "2018") # radiationCharacteristic = "axionRadiation::characteristic::sar"
 
   # weight (telescopetransmission)
