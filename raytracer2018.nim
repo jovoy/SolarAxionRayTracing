@@ -102,9 +102,9 @@ const
   
 
   roomTemp = 293.15 #K
-  mAxion = 0.4                          #eV for example
+  mAxion = 0.0853#0.26978249412621896 #eV, corresponds to set p and T gas valus #0.4 #eV for example
   g_agamma = 1e-12
-var fluxesRs = newSeq[float](1000)
+
 const
   IgnoreDetWindow = false
   IgnoreGasAbs = false
@@ -647,8 +647,8 @@ proc getVarsForSetup*(setup: ExperimentSetupKind): ExperimentSetup =
       lMirror: 300.0, #mm Mirror length
       d: 0.0, #mm ## distance between center of colbore at XRT and center of XRT (where the focal point is on the minus x axis)
       B: 2.0, #T magnetic field of magnet # Rather 2-3 T, not entirely homogeneous
-      pGas: 14.3345, #pressure of the gas #for example P = 14.3345 mbar (corresponds to 1 bar at room temperature).
-      tGas: 293.15, #K only Gas in BabyIAXO
+      pGas: 36.61, #pressure of the gas #for example P = 14.3345 mbar (corresponds to 1 bar at room temperature).
+      tGas: 100.0, #293.15, #K only Gas in BabyIAXO
       depthDet: 30.0, #mm #probably not
       theta: degToRad(71.5),  #theta angle between window strips and horizontal x axis
       radiusWindow: 4.0, #mm
@@ -965,26 +965,28 @@ proc traceAxion(res: var Axion,
     distancePipe = (pointDetectorWindow[2] - pointExitCBZylKart[2]) * 1e-3 #m
     
     probConversionMagnetGas = axionConversionProb2(mAxion, energyAx, expSetup.pGas, expSetup.tGas, (pathCB * 1e-3),
-                                                   expSetup.radiusCB, g_agamma, expSetup.B) # for setup including gas: functions are in axionmass/axionMassforMagnet
+                                                   (expSetup.radiusCB * 1e-3), g_agamma, expSetup.B) # for setup including gas: functions are in axionmass/axionMassforMagnet
     absorbtionXrays = intensitySuppression2(energyAx, (pathCB * 1e-3), distancePipe,
                                             expSetup.pGas, expSetup.tGas, roomTemp) #room temperature in K
   
   # this is the transformation probability of an axion into a photon, if an axion
   # flying straight through the magnet had one of 100%, angular dependency of the primakoff effect
-  var weight:float
-  var transmissionMagnet: float
-  # for setup with gas
-  #transmissionMagnetGas = cos(ya) * probConversionMagnetGas * absorbtionXrays
-  var transmissionTelescopeEnergy: float
+  var 
+    weight:float
+    transmissionMagnet: float
+    transmissionMagnetGas = cos(ya) * probConversionMagnetGas * absorbtionXrays # for setup with gas
+    transmissionTelescopeEnergy: float
+  
   
   case setup
   of esCAST:
     transmissionMagnet = cos(ya) * probConversionMagnet #1.0
   of esBabyIAXO:
-    transmissionMagnet = cos(ya) * probConversionMagnet #0.0 #transmissionMagnetGas
+    transmissionMagnet = transmissionMagnetGas #cos(ya) * probConversionMagnet #0.0 #
+  #echo "gas ", transmissionMagnetGas, " no gas ", transmissionMagnet
 
-  #if transmissionMagnet > 3.0e-24:
   res.transmissionMagnets = transmissionMagnet
+
   res.yawAngles = ya
 
   case setup
@@ -1537,14 +1539,21 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     ggsave(&"out/R_{year}.pdf")
 
   let dfMag = seqsToDf({"Transmission probability": transmissionMagnets,
-                       "Yaw angles": yawAngles}).arrange("Yaw angles")
+                       "Angles between path and magnetic field": yawAngles,
+                       "Axion energy[keV]": energiesAx}).arrange("Angles between path and magnetic field")
 
 
-  ggplot(dfMag, aes("Yaw angles", "Transmission probability")) +
+  ggplot(dfMag, aes("Angles between path and magnetic field", "Transmission probability")) +
     geom_point(size = some(0.5), alpha = some(0.1)) +
     ylim(3.1e-24, 3.16e-24) +
     ggtitle("The probability of the transformation of axions to X-rays in the magnet") +
     ggsave(&"out/transMagnet_{year}.pdf")
+
+  ggplot(dfMag, aes("Axion energy[keV]", "Transmission probability")) +
+    geom_point(size = some(0.5), alpha = some(0.1)) +
+    #ylim(3.1e-24, 3.16e-24) +
+    ggtitle("The probability of the transformation of axions to X-rays in the magnet") +
+    ggsave(&"out/transMagnetE_{year}.pdf")
   
   ############get the 1 and 2 sigma area ###################
   var pointR = pointdataR

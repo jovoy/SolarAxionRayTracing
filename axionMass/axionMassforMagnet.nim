@@ -1,6 +1,6 @@
 import sequtils, seqmath, ggplotnim, strformat, algorithm, nlopt, options, strutils
 
-proc density(p: float, temp = 4.2): float =
+proc density(p: float, temp:float ): float =
   ## returns the density of the gas for the given pressure.
   ## The pressure is assumed in `mbar` and the temperature (in `K`).
   ## The default temperature corresponds to BabyIAXO aim.
@@ -77,7 +77,6 @@ proc axionConversionProb2*(m_a : float, energyAx : float, pressure : float, temp
   # both `g_agamma` and `B` only scale the absolute value `P`, does not matter
   let energyGamma = energyAx #in keV
   ## for a given pressure in `mbar` returns the attenuation length
-  ## for a given pressure in `mbar` returns the attenuation length
   ## `Γ` in units of `eV`.
   # multiply by `100` to convert `Γ` from `1 / cm` to `1 / m`
   # multiply by `1.97e-7` to convert `1 / m` to `1 / eV`
@@ -111,3 +110,9 @@ proc intensitySuppression2*(energy : float, distanceMagnet : float, distancePipe
   let rhoPipe = density(pressure, tempPipe)
   # factor 100 is to convert `distance` to `cm` from `m`
   result = exp(-massAtt * rhoPipe * distancePipe * 100) * exp(-massAtt * rhoMagnet * distanceMagnet * 100)
+
+when isMainModule:
+  echo effPhotonMass2(36.61, 10.0, 0.35, 100.0) #for 1 bar at room temperature: T=4.2K -> p=15.38mbar  and T=100K -> p=366.1mbar -> axion_mass=0.2698eV
+                                                #for 0.5 bar at room temperature: T=4.2K -> p=xmbar  and T=100K -> p=183.05mbar -> axion_mass=0.1907eV
+                                                #for 0.3 bar at room temperature: T=4.2K -> p=xmbar  and T=100K -> p=109.8mbar -> axion_mass=0.1477eV
+                                                #for 0.1 bar at room temperature: T=4.2K -> p=xmbar  and T=100K -> p=36.61mbar -> axion_mass=0.0853eV
