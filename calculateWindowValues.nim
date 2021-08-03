@@ -13,7 +13,7 @@ let
   dAndwPerStrip = radiusWindow * 2.0 / (numberOfStrips.float + 1.0)  #width and distance between strips per strip; 
                                                                      #the width on both sides is a whole width 
                                                                      #(Don't know what to do about the additional string width) 
-                                                                     #not important at high strip number but at low
+                                                                     #not important at high strip number but at low like CAST
 
 var
   lengthStrip: float
