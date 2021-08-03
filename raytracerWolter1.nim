@@ -91,18 +91,30 @@ var
   areaSpiderStrips = (allR1[57] * allR1[57] - allR3[0] * allR3[0]) * PI * (2.5 * 16.0 / 360.0) * 0.01 - (radiusAreaMirrorF * radiusAreaMirrorF * PI * (2.5 * 16.0 / 360.0) * 0.01) #cm^2 
   areaInnerCircles = (((64.7 * 64.7 * PI)) + (((130.7 + 20.9) * (130.7 + 20.9) * PI) - (130.7 * 130.7 * PI) )) * 0.01 #cm² from picture #closed in the middle
   areaInnerStrips = (130.7 - 49.5 + 15.2) * 15.2 * 0.01 #cm² from picture
-echo areaMirrorFronts + areaSpiderStrips + areaInnerCircles + areaInnerStrips
+echo 1.0 - (areaMirrorFronts + areaSpiderStrips + areaInnerCircles + areaInnerStrips) / totalArea
 
 
 let dfRef = seqsToDf({"Reflectivity": reflectivity,
-                      "Photon Energy[eV]": energies}).mutate(f{"EffArea" ~ `Reflectivity` * (totalArea - areaMirrorFronts - areaSpiderStrips - areaInnerCircles - areaInnerStrips)})
+                      "Photon Energy[eV]": energies})
+              .mutate(f{"EffArea" ~ `Reflectivity` * (totalArea - areaMirrorFronts - areaSpiderStrips - areaInnerCircles - areaInnerStrips)},
+                      f{"TotalEfficiency" ~ `Reflectivity` * (1.0 - (areaMirrorFronts + areaSpiderStrips + areaInnerCircles + areaInnerStrips) / totalArea)})
 ggplot(dfRef, aes("Photon Energy[eV]", "EffArea")) +
   geom_line() +
   #xlim(100.0, 10000.0) +
   scale_x_log10() +
   #scale_y_log10() +
   ggtitle("The reflectivity od the XMM telescope depending on the photon energy") +
-  ggsave(&"out/Reflectivity.pdf")
+  ggsave(&"out/XMM_Reflectivity_area.pdf")
+
+echo dfRef
+ggplot(dfRef) +
+  geom_line(aes("Photon Energy[eV]", "Reflectivity")) +
+  geom_line(aes("Photon Energy[eV]", "TotalEfficiency")) +
+  #xlim(100.0, 10000.0) +
+  scale_x_log10() +
+  #scale_y_log10() +
+  ggtitle("The reflectivity od the XMM telescope depending on the photon energy") +
+  ggsave(&"out/XMM_Reflectivity.pdf")
 
 let dfRefAlpha = seqsToDf({"Reflectivity": reflectivityAlpha,
                       "Angles": angles}).mutate(f{"EffArea" ~ `Reflectivity` * (totalArea - areaMirrorFronts - areaSpiderStrips - areaInnerCircles - areaInnerStrips)})
@@ -112,7 +124,7 @@ ggplot(dfRefAlpha, aes("Angles", "EffArea")) +
   scale_x_log10() +
   #scale_y_log10() +
   ggtitle("The reflectivity od the XMM telescope depending on the reflection angle") +
-  ggsave(&"out/ReflectivityAlpha.pdf")
+  ggsave(&"out/XMM_ReflectivityAlpha.pdf")
 
 var energy1500 = dfRef["Photon Energy[eV]"].toTensor(float).toRawSeq.lowerBound(1500.0)
 echo "Effective Area at 1.5 keV ", dfRef["EffArea"].toTensor(float)[energy1500]
