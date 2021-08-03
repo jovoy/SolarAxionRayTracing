@@ -49,7 +49,7 @@ type
     lMirror*: float
     d*: float
     B*: float
-    pGas*: float
+    pGasRoom*: float
     tGas*: float
     depthDet*: float
     radiusWindow*: float
@@ -96,7 +96,7 @@ type
 const
   RAYTRACER_DISTANCE_SUN_EARTH = 1.5e14 #mm #ok
   radiusSun = 6.9e11                    #mm #ok
-  numberOfPointsSun = 1_000_000            #100000 for statistics   #37734 for CAST if BabyIaxo 10 mio  #26500960 corresponding to 100_000 axions at CAST, doesnt work
+  numberOfPointsSun = 10_000_000            #100000 for statistics   #37734 for CAST if BabyIaxo 10 mio  #26500960 corresponding to 100_000 axions at CAST, doesnt work
   # 1000000 axions that reach the coldbore then are reached after an operating time of 2.789 \times 10^{-5}\,\si{\second} for CAST
   
 
@@ -558,7 +558,7 @@ proc getVarsForSetup*(setup: ExperimentSetupKind): ExperimentSetup =
       lMirror: 225.0, #mm Mirror length
       d: 83.0, #mm ## distance between center of colbore at XRT and center of XRT (where the focal point is on the minus x axis)
       B: 9.0, #T magnetic field of magnet
-      pGas: 14.3345, #pressure of the gas
+      pGasRoom: 1.0, #bar pressure of the gas
       tGas: 1.7, #K
       depthDet: 30.0, #mm
       #stripDistWindow: 2.3,  #mm
@@ -602,7 +602,7 @@ proc getVarsForSetup*(setup: ExperimentSetupKind): ExperimentSetup =
       lMirror: 300.0, #mm Mirror length
       d: 0.0, #mm ## distance between center of colbore at XRT and center of XRT (where the focal point is on the minus x axis)
       B: 2.0, #T magnetic field of magnet # Rather 2-3 T, not entirely homogeneous
-      pGas: 36.61, #pressure of the gas #for example P = 14.3345 mbar (corresponds to 1 bar at room temperature).
+      pGasRoom: 1.0, #bar, pressure of the gas #for example P = 14.3345 mbar (corresponds to 1 bar at room temperature).
       tGas: 100.0, #293.15, #K only Gas in BabyIAXO
       depthDet: 30.0, #mm #probably not
       radiusWindow: 4.0, #mm
@@ -658,7 +658,7 @@ proc traceAxion(res: var Axion,
   ## Get a random point in the sun, biased by the emission rate, which is higher
   ## at smalller radii, so this will give more points in the center of the sun ##
   let pointInSun = getRandomPointFromSolarModel(centerVecs.centerSun, radiusSun, emRatesRadiusCumSum)
-  
+
   ## Get a random point at the end of the coldbore of the magnet to take all axions into account that make it to this point no matter where they enter the magnet ##
   let pointExitCBMagneticField = getRandomPointOnDisk(
       centerVecs.centerExitCBMagneticField, expSetup.radiusCB)
@@ -901,11 +901,13 @@ proc traceAxion(res: var Axion,
     probConversionMagnet = conversionProb(expSetup.B, g_agamma, pathCB)
   
     distancePipe = (pointDetectorWindow[2] - pointExitCBZylKart[2]) * 1e-3 #m
-    
-    probConversionMagnetGas = axionConversionProb2(mAxion, energyAx, expSetup.pGas, expSetup.tGas, (pathCB * 1e-3),
+    pGas = expSetup.pGasRoom / roomTemp * expSetup.tGas
+    effPhotonMass = effPhotonMass2(pGas, (pathCB * 1e-3), (expSetup.radiusCB * 1e-3), expSetup.tGas)
+    probConversionMagnetGas = axionConversionProb2(mAxion, energyAx, pGas, expSetup.tGas, (pathCB * 1e-3),
                                                    (expSetup.radiusCB * 1e-3), g_agamma, expSetup.B) # for setup including gas: functions are in axionmass/axionMassforMagnet
     absorbtionXrays = intensitySuppression2(energyAx, (pathCB * 1e-3), distancePipe,
-                                            expSetup.pGas, expSetup.tGas, roomTemp) #room temperature in K
+                                            pGas, expSetup.tGas, roomTemp) #room temperature in K
+  #echo "axion mass in [eV] ", mAxion, " effective photon mass in [eV] ", effPhotonMass
 
   ## this is the transformation probability of an axion into a photon, if an axion
   ## flying straight through the magnet had one of 100%, angular dependency of the primakoff effect
@@ -966,8 +968,8 @@ proc traceAxion(res: var Axion,
       reflectionProb1 = dfTable[fmt"goldfile{alpha1:4.2f}"]["Reflectivity"].toTensor(float)[energyAxReflection1]
       reflectionProb2 = dfTable[fmt"goldfile{alpha2:4.2f}"]["Reflectivity"].toTensor(float)[energyAxReflection2]
     weight = reflectionProb1 * reflectionProb2 * transmissionMagnet#also yaw and pitch dependend
-  if alpha1 < 0.45 or alpha1 > 1.11:
-    echo alpha1, " ", alpha2
+  #if alpha1 < 0.45 or alpha1 > 1.11:
+    #echo alpha1, " ", alpha2
   
   
   if weight != 0:
@@ -1507,28 +1509,31 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   var 
     sigma1Weight = (sumWeights * 0.68)
     sigma2Weight = (sumWeights * 0.955)
-    sigmaAssignWeight : seq[string]
+    sigmaAssignWeight = newSeq[string]((pointR.len.float * 0.63).round.int + 1)
     rSigma1W : float
     rSigma2W : float
-  
-  #[for i in (pointR.len.float * 0.67).round.int..<pointR.len:
-    if sum(weightsSig[0..i]) < sigma1Weight:
+    weightSum = sum(weightsSig[0..(pointR.len.float * 0.63).round.int])
+  sigmaAssignWeight.fill(0, (pointR.len.float * 0.63).round.int, "sigma 1") 
+
+  for i in (pointR.len.float * 0.63).round.int + 1..<pointR.len:
+    weightSum += weightsSig[i]
+    if weightSum < sigma1Weight:
       rSigma1W = pointR[i]
       sigmaAssignWeight.add("sigma 1") 
-    elif sum(weightsSig[0..i]) < sigma2Weight and sum(weightsSig[0..i]) >= sigma1Weight:
+    elif weightSum < sigma2Weight and weightSum >= sigma1Weight:
       rSigma2W = pointR[i]
       sigmaAssignWeight.add("sigma 2")
     else:
       sigmaAssignWeight.add("rest") 
   echo rSigma1W, "vs ", rSigma1
-  echo rSigma2W, "vs ", rSigma2]#
+  echo rSigma2W, "vs ", rSigma2
 
 
   let dfRadSig = seqsToDf({"Radial component [mm]": pointdataRSig,
                         "Transmission probability": weightsSig,
                         "x": pointDataXSig,
                        "y": pointDataYSig,
-                       "Sigma" : sigmaAssign,
+                       "Sigma" : sigmaAssignWeight,
                        "Sigma before window": sigmaAssignW})
 
   ggplot(dfRadSig, aes("Radial component [mm]", fill = factor("Sigma"), weight = "Transmission probability")) +
@@ -1613,8 +1618,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
  # echo "Probability of it originating from an axion if a photon hits at x = 5,3mm and y = 8,4mm (in this model):"
  # echo (heatmaptable3[53][84]) * 100.0  #echo heatmaptable3[x][y]
 
-  drawfancydiagrams("Axion Model Fluxfraction", heatmaptable2, 256, year, rSigma1, rSigma2) #rSigma1W, rSigma2W) the latter is actually right but takes too long
-                                                                                            #difference of 0.7% for sigma 1 and 1.1% for sigma 2
+  drawfancydiagrams("Axion Model Fluxfraction", heatmaptable2, 256, year, rSigma1W, rSigma2W) #rSigma1, rSigma2)
 
   when false:
     fluxFractionTotal = integralTotal #/ integralNormalisation
