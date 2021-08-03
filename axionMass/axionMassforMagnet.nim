@@ -47,7 +47,7 @@ proc molarAmount(p, vol, temp: float): float =
   result = pressure * vol / (gasConstant * temp)
   #echo "Molar amount for P = ", pressure, " Pa is ", result
 
-proc effPhotonMass2(p : float, length : float, radBore : float, temp : float): float =
+proc effPhotonMass2*(p : float, length : float, radBore : float, temp : float): float =
   ## calculates the effective photon (and thus axion mass) given
   ## a certain helium pressure in the magnet
   ## length and radBore in m
