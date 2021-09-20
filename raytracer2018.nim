@@ -11,6 +11,7 @@ import numericalnim
 import glm
 import ggplotnim
 import weave
+import cligen
 
 ##################rayTracer###############################
 
