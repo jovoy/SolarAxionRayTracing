@@ -108,12 +108,7 @@ const
   mAxion = 0.0853#0.26978249412621896 #eV, corresponds to set p and T gas valus #0.4 #eV for example
   g_agamma = 1e-12
 
-const
-  IgnoreDetWindow = false
-  IgnoreGasAbs = false
-
 ## Chipregions#####
-
 
 const
   CHIPREGIONS_CHIP_X_MIN = 0.0
@@ -673,7 +668,8 @@ proc traceAxion(res: var Axion,
                 stage: string,
                 detectorWindowAperture: float,
                 dfTab: Table[string, DataFrame],
-                dfTable: Table[string, DataFrame]
+                dfTable: Table[string, DataFrame],
+                flags: set[ConfigFlags]
                ) =
   ## Get a random point in the sun, biased by the emission rate, which is higher
   ## at smalller radii, so this will give more points in the center of the sun ##
@@ -1020,7 +1016,7 @@ proc traceAxion(res: var Axion,
           float).lowerBound(energyAx * 1000.0)
       transWindow = dfTab["siFile"]["Transmission"].toTensor(float)[energyAxTransWindow] *
                     dfTab["alFile"]["Transmission"].toTensor(float)[energyAxTransWindow]
-      when not IgnoreDetWindow:
+      if cfIgnoreDetWindow notin flags:
         weight *= transWindow
       res.transProbWindow = transWindow
       res.transProbDetector = transWindow
@@ -1033,7 +1029,8 @@ proc traceAxion(res: var Axion,
           float).lowerBound(energyAx * 1000.0)
       transWindow = dfTab["siNfile"]["Transmission"].toTensor(float)[energyAxTransWindow] *
                     dfTab["alFile"]["Transmission"].toTensor(float)[energyAxTransWindow]
-      when not IgnoreDetWindow:
+
+      if cfIgnoreDetWindow notin flags:
         weight *= transWindow
       res.transprobWindow = transWindow
       res.transProbDetector = transWindow
@@ -1047,7 +1044,7 @@ proc traceAxion(res: var Axion,
       float).lowerBound(energyAx * 1000.0)
   let transDet = dfTab["detectorFile"]["Transmission"].toTensor(float)[energyAxTransDet]
 
-  when not IgnoreGasAbs:
+  if cfIgnoreGasAbs notin flags:
     weight *= 1.0 - transDet
   res.transProbArgon = transDet
   res.transProbDetector = transDet
@@ -1108,14 +1105,16 @@ proc traceAxionWrapper(axBuf: ptr UncheckedArray[Axion],
                        stage: string,
                        detectorWindowAperture: float,
                        dfTab: Table[string, DataFrame],
-                       dfTable: Table[string, DataFrame]
+                       dfTable: Table[string, DataFrame],
+                       flags: set[ConfigFlags]
                        ) =
   echo "Starting weave!"
   parallelFor iSun in 0 ..< bufLen:
-    captures: {axBuf, centerVecs, expSetup, emRates, emRatesRadiusCumSum, emRateCDFs,
-               energies, stripDistWindow,
-               stripWidthWindow, theta,
-               setup, year, stage, detectorWindowAperture, dfTab, dfTable}
+    captures: { axBuf, centerVecs, expSetup, emRates, emRatesRadiusCumSum, emRateCDFs,
+                energies, stripDistWindow,
+                stripWidthWindow, theta,
+                setup, year, stage, detectorWindowAperture, dfTab, dfTable,
+                flags }
     axBuf[iSun].traceAxion(centerVecs,
                            expSetup,
                            emRates, emRatesRadiusCumSum, emRateCDFs,
