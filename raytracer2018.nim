@@ -21,6 +21,9 @@ type
   ExperimentSetupKind = enum
     esCAST, esBabyIAXO
 
+  WindowYearKind = enum
+    wy2017, wy2018
+
   CenterVectors = ref object
     centerEntranceCB: Vec3[float]
     centerExitCB: Vec3[float]
@@ -172,6 +175,18 @@ proc initCenterVectors(expSetup: ExperimentalSetup): CenterVectors =
                          centerExitPipeVT3XRT: centerExitPipeVT3XRT,
                          centerExitCBMagneticField: centerExitCBMagneticField,
                          centerSun: centerSun)
+
+proc toRad(wyKind: WindowYearKind): float =
+  ## Returns the radians corresponding to the angle of the detector window
+  ## as it was installed in 2017 and 2018 of the CAST data taking campaign.
+  ##
+  ## Deduced from the calibration data & X-ray finger runs.
+  ## TODO: Add reference to the sourcing of these numbers.
+  case year
+  of wy2017:
+    result = degToRad(10.8)
+  of wy2018:
+    result = degToRad(71.5)
 
 
 var fluxFractionGold = 0.0 #dies muss eine globale var sein
