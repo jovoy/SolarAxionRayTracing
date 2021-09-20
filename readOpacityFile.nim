@@ -374,9 +374,20 @@ proc freefreeEmrate(alpha, gae, energy, ne, me, temp, nzZ2, w, y: float): float 
                 exp(-energy/temp)) /
            (3.0 * sqrt(2.0 * temp) * pow(me, 3.5) * energy)
 
-proc primakoff(temp, energy, gagamma, ks2, alpha, ne, me: float): float =
+# Some auxilliary functions for Primakoff rate and degeneracy calculation
+proc primakoff_bracket(t: float, u: float): float =
+  var analytical_integral = 0.0
+  if u > 1.0:  analytical_integral += (u * u - 1.0)* ln((u - 1.0)/( u + 1.0))
+  var v = u + t
+  if v > 1.0: analytical_integral -= (v * v - 1.0) * ln((v - 1.0) / (v + 1.0))
+  analytical_integral *= 0.5 / t
+  analytical_integral -= 1.0
+  result = analytical_integral
+
+
+proc primakoff(temp, energy, gagamma, ks2, alpha, ne, me: float, n_Z2: float): float =
   let
-    prefactor6 = gagamma * gagamma * alpha * pow(197.327053e-10,3.0) / 8.0
+    prefactor6 = gagamma * gagamma * 1e-12 * alpha  / 8.0
     omPlSq = omegaPlasmonSq(alpha, ne, me)
     z = energy / temp
     om2 = energy * energy
@@ -388,12 +399,18 @@ proc primakoff(temp, energy, gagamma, ks2, alpha, ne, me: float): float =
   else:
     let 
       phase_factor = 2.0 / (sqrt(1.0 - 1.0 / x) * (exp(z) - 1.0))
-    result = (gagamma * gagamma * 1e-12 * temp * ks2) /
+      n_dens = ne + n_Z2 * pow(197.327053e-10,3.0)  #;avg_degeneracy_factor(r)*
+      s = 2.0*energy*sqrt(om2 - omPlSq)
+      t = ks2 / s
+      u = (2.0 * om2 - omPlSq) / s
+      analytical_integral = primakoff_bracket(t, u)
+    result = prefactor6 * phase_factor * n_dens * analytical_integral
+    #[result = (gagamma * gagamma * 1e-12 * temp * ks2) /
              (32.0 * PI) *
              ((1.0 + (ks2 / (4.0 * energy * energy))) *
                  ln(1.0 + (4.0 * energy * energy) / ks2) - 1.0) *
              2.0 * sqrt(1.0 - (4.0 * PI * ne) / (me * energy * energy)) /
-             (exp(energy/temp) - 1.0)
+             (exp(energy/temp) - 1.0)]#
 
 proc longPlasmon(energy: float, ne: float, me: float, alpha: float, bfieldR: float, temp: float, opacity: float, gagamma: float): float =
   let 
@@ -789,7 +806,7 @@ proc main*(): Tensor[float] =
         term2 = term2(alpha, g_ae, energy_keV, n_e_keV, m_e_keV, temp_keV)# completes the Compton contribution #keV
         term3 = bremsEmrate(alpha, g_ae, energy_keV, n_e_keV, m_e_keV, temp_keV, w, y) # contribution from ee-bremsstahlung
         compton = comptonEmrate(alpha, g_ae, energy_keV, n_e_keV, m_e_keV, temp_keV)
-        primakoff = primakoff(temp_keV, energy_keV, gagamma, debye_scale_squared, alpha, n_e_keV, m_e_keV)
+        primakoff = primakoff(temp_keV, energy_keV, gagamma, debye_scale_squared, alpha, n_e_keV, m_e_keV, n_Z[R][2])
         longPlas = longPlasmon(energy_keV, n_e_keV, m_e_keV, alpha, bfieldR, temp_keV, absCoef, gagamma) #is correct with the absorbtion coefficient
         transPlas = transPlasmon(energy_keV, n_e_keV, m_e_keV, alpha, bfieldR, temp_keV, absCoef, gagamma) #is correct with the absorbtion coefficient
       term1s[R, iEindex] = term1
@@ -799,7 +816,7 @@ proc main*(): Tensor[float] =
       primakoffs[R, iEindex] = primakoff
       longPlasmons[R, iEindex] = longPlas
       transPlasmons[R, iEindex] = transPlas
-      let total_emrate = compton +  term1 + term3 + ffterm + longPlas + transPlas
+      let total_emrate = compton +  term1 + term3 + ffterm + longPlas + transPlas + primakoff
       let total_emrate_s = total_emrate / (6.58e-19) # in 1/sec
       emratesS[R, iEindex] = total_emrate
       emratesInS[R, iEindex] = total_emrate_s
@@ -836,7 +853,7 @@ proc main*(): Tensor[float] =
   diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, comptons, "Compton Flux")
   diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, term3s, "EE Flux")
   diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, ffterms, "FF Flux")
-  diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, primakoffs, "Primakoff Flux · 50")
+  diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, primakoffs, "Primakoff Flux")
   diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, longPlasmons, "LP Flux")
   diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, transPlasmons, "TP Flux")
   echo diffFluxDf
