@@ -1,6 +1,5 @@
 # stdlib
 import math, strutils, algorithm, random, sequtils, os, strformat, tables
-import json except `{}`
 
 # TODO: axionMass will be minified and the important stuff extracted
 import axionMass/axionMassforMagnet
@@ -10,7 +9,6 @@ import seqmath except linspace
 import arraymancer except readCsv, linspace
 import numericalnim
 import glm
-# import plotly
 import ggplotnim
 import weave
 
