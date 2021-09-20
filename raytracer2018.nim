@@ -420,16 +420,18 @@ proc interpTrans(fname: string): InterpolatorType[float] =
   result = newCubicSpline(df["PhotonEnergy(eV)"].toTensor(float).toRawSeq,
                           df["Transmission"].toTensor(float).toRawSeq)
 
-## Now some functions for the graphs later, that store the data in heatmaps and then give them out with plotly ##
+## Now some functions for the graphs later, that store the data in heatmaps ##
 
-proc prepareheatmap(numberofrows: int, numberofcolumns: int,
+proc prepareHeatmap(numberOfRows: int, numberOfColumns: int,
                     start_x: float, stop_x: float, start_y: float,
                     stop_y: float,
                     data_X: seq[float], data_Y: seq[float], weight1: seq[float],
-                    norm: float64): seq[seq[float]] =
-  ## This function prepares a heatmap out of given X and Y values with the z value (the number of entries in a certain pixel) as the weight of the event of the X and Y value ##
-
-  var stepsize_X = 0.0 # number of colums is the number of entries in the array in the seq and number of rows is the number of arrays in the seq
+                    norm: float64): Tensor[float] =
+  ## This function prepares a heatmap out of given X and Y values with the z value
+  ## (the number of entries in a certain pixel) as the weight of the event of the
+  ## X and Y value
+  # compute sizes based on number of coulmns / rows
+  var stepsize_X = 0.0
   stepsize_X = (stop_x - start_x)/float(numberofrows)
   var stepsize_Y = 0.0
   stepsize_Y = (stop_y - start_y)/float(numberofcolumns)
@@ -440,21 +442,11 @@ proc prepareheatmap(numberofrows: int, numberofcolumns: int,
     |-------|-------|-------|
     |-------|-------|-------|
   ]#
-  var heatmaptable = newSeqWith(numberofrows, newSeq[float](numberofcolumns))
-  # TODO: clean up!
+  result = zeros[float]([numberOfRows, numberOfColumns])
   for i, value in data_X:
     var coord_X = floor((data_X[i] - start_x) / stepsize_X).int
     var coord_Y = floor((data_Y[i] - start_y) / stepsize_Y).int
-    heatmaptable[coord_Y][coord_X] = heatmaptable[coord_Y][coord_X] + 1*weight1[i]/norm
-
-    # if coord_X >= 0 and coord_Y >= 0 and coord_X <= float(numberofrows) and
-    #   coord_Y <= float(numberofcolumns)::
-    #   heatmaptable[int(coord_Y)][int(coord_X)] = heatmaptable[int(
-    #     coord_Y)][int(coord_X)] + 1*weight1[i]/norm
-  result = heatmaptable
-
-proc getMaxVal(table: seq[seq[float]]): float =
-  result = table.mapIt(max(it)).max
+    result[coord_Y, coord_X] = result[coord_Y, coord_X] + 1*weight1[i]/norm
 
 proc lowerBound[T](t: Tensor[T], val: T): int =
   ## returns the index of the first element in `t` that is not less than
@@ -469,7 +461,7 @@ proc lowerBound[T](t: Tensor[T], val: T): int =
     val)
 
 proc drawfancydiagrams(diagramtitle: string,
-                       objectstodraw: seq[seq[float]],
+                       objectstodraw: Tensor[float],
                        width: int,
                        year: string,
                        rSigma1: float,
@@ -483,7 +475,7 @@ proc drawfancydiagrams(diagramtitle: string,
     for x in 0 ..< width:
       xs[y * width + x] = x
       ys[y * width + x] = y
-      zs[y * width + x] = objectstodraw[y][x]
+      zs[y * width + x] = objectstodraw[y, x]
 
   #d.zmin = 0.0
   #d.zmax = 5e-22
@@ -1609,13 +1601,13 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     endX = 14.0  #- distanceCBAxisXRTAxis * 0.01
     beginY = 0.0 #- distanceCBAxisXRTAxis * 0.01
     endY = 14.0  #- distanceCBAxisXRTAxis * 0.01
-  var heatmaptable1 = prepareheatmap(3000, 3000, beginX, endX, beginY, endY,
+  var heatmaptable1 = prepareHeatmap(3000, 3000, beginX, endX, beginY, endY,
       pointdataX, pointdataY, weights,
       numberOfPointsSun) #colour scale is now the number of points in one pixel divided by the the number of all events
-  var heatmaptable2 = prepareheatmap(256, 256, beginX, endX, beginY, endY,
+  var heatmaptable2 = prepareHeatmap(256, 256, beginX, endX, beginY, endY,
       pointdataX, pointdataY, weights, 1.0)
-  var heatmaptable3 = prepareheatmap(3000, 3000, beginX, endX, beginY, endY,
-      pointdataX, pointdataY, weights, getMaxVal(heatmaptable2)) # if change number of rows: has to be in the maxVal as well
+  var heatmaptable3 = prepareHeatmap(3000, 3000, beginX, endX, beginY, endY,
+                                     pointdataX, pointdataY, weights, heatmaptable2.max) # if change number of rows: has to be in the maxVal as well
  # echo "Probability of it originating from an axion if a photon hits at x = 5,3mm and y = 8,4mm (in this model):"
  # echo (heatmaptable3[53][84]) * 100.0  #echo heatmaptable3[x][y]
 
