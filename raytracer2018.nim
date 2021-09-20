@@ -521,6 +521,25 @@ proc plotHeatmap(diagramtitle: string,
     ggtitle("Solar axion image for axion electron flux") +
     ggsave(&"out/axion_image_{year}.pdf")
 
+proc plotSolarModel(df: DataFrame) =
+  ## A few plots for the solar model that are mainly for debugging.
+  let df = df.mutate(f{"Energy" ~ (`Energy` * 9 + 1.0) * 0.001})
+  ggplot(emRatesDf, aes("Radius", "Flux")) +
+    geom_point() +
+    ggsave("/tmp/rad_flux.pdf")
+  ggplot(emRatesDf, aes("Energy", "Flux")) +
+    geom_point() +
+    ggsave("/tmp/energy_flux.pdf")
+  ggplot(emRatesDf, aes("Energy", "Flux", color = factor("Radius"))) +
+    geom_line() +
+    xlim(0, 0.1) +
+    ggsave("/tmp/energy_rad_flux.pdf")
+  let emRatesDfRad = emRatesDf.group_by("Radius").summarize(f{float: "SumFlux" << sum(`Flux`)})
+  echo emRatesDfRad
+  ggplot(emRatesDfRad, aes("Radius", "SumFlux")) +
+    geom_line() +
+    ggsave("/tmp/flux_radius_sum.pdf")
+
 ############done with the functions, let's use them############
 
 proc getVarsForSetup*(setup: ExperimentSetupKind): ExperimentSetup =
@@ -1164,23 +1183,6 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     energies = linspace(1.0, 10000.0, 1112)
 
 
-
-  ## TODO: make the code use tensor for the emission rates!
-  var emRatesDf = readCsv("solar_model_tensor.csv")
-    .rename(f{"Radius" <- "dimension_1"}, f{"Energy" <- "dimension_2"}, f{"Flux" <- "value"})
-    #.mutate(f{"Energy" ~ (`Energy` * 9 + 1.0) * 0.001})
-  #ggplot(emRatesDf, aes("Radius", "Flux")) + geom_point() + ggsave("/tmp/rad_flux.pdf")
-  #ggplot(emRatesDf, aes("Energy", "Flux")) + geom_point() + ggsave("/tmp/energy_flux.pdf")
-  #ggplot(emRatesDf, aes("Energy", "Flux", color = factor("Radius"))) +
-  #  geom_line() +
-  #  xlim(0, 0.1) +
-  #  ggsave("/tmp/energy_rad_flux.pdf")
-  #
-  #let emRatesDfRad = emRatesDf.group_by("Radius").summarize(f{float: "SumFlux" << sum(`Flux`)})
-  #echo emRatesDfRad
-  #ggplot(emRatesDfRad, aes("Radius", "SumFlux")) +
-  #  geom_line() +
-  #  ggsave("/tmp/flux_radius_sum.pdf")
 
 
   let emRatesTensor = emRatesDf["Flux"].toTensor(float)
