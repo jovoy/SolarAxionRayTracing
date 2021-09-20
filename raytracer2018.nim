@@ -132,6 +132,47 @@ randomize(299792458)
 func conversionProb*(B, g_agamma, length: float): float {.inline.} =
   result = 0.025 * B * B * g_agamma * g_agamma * (1 / (1.44 * 1.2398)) *
     (1 / (1.44 * 1.2398)) * (length * 1e-3) * (length * 1e-3) #g_agamma= 1e-12
+proc initCenterVectors(expSetup: ExperimentalSetup): CenterVectors =
+  ## Initializes all the center vectors
+  var centerSun = vec3(0.0)
+  centerSun[0] = 0
+  centerSun[1] = 0
+  centerSun[2] = RAYTRACER_DISTANCE_SUN_EARTH
+
+  var centerEntranceCB = vec3(0.0)
+  centerEntranceCB[0] = 0
+  centerEntranceCB[1] = 0
+  centerEntranceCB[2] = 0 #coldboreBlockedLength # was 0 anyway
+
+  var centerExitCBMagneticField = vec3(0.0)
+  centerExitCBMagneticField[0] = 0
+  centerExitCBMagneticField[1] = 0
+  centerExitCBMagneticField[2] = expSetup.RAYTRACER_LENGTH_COLDBORE_9T
+
+  var centerExitCB = vec3(0.0)
+  centerExitCB[0] = 0
+  centerExitCB[1] = 0
+  centerExitCB[2] = expSetup.RAYTRACER_LENGTH_COLDBORE
+
+  var centerExitPipeCBVT3 = vec3(0.0)
+  centerExitPipeCBVT3[0] = 0
+  centerExitPipeCBVT3[1] = 0
+  centerExitPipeCBVT3[2] = expSetup.RAYTRACER_LENGTH_COLDBORE +
+      expSetup.RAYTRACER_LENGTH_PIPE_CB_VT3
+
+  var centerExitPipeVT3XRT = vec3(0.0)
+  centerExitPipeVT3XRT[0] = 0
+  centerExitPipeVT3XRT[1] = 0
+  centerExitPipeVT3XRT[2] = expSetup.RAYTRACER_LENGTH_COLDBORE +
+      expSetup.RAYTRACER_LENGTH_PIPE_CB_VT3 +
+      expSetup.RAYTRACER_LENGTH_PIPE_VT3_XRT
+  result = CenterVectors(centerEntranceCB: centerEntranceCB,
+                         centerExitCB: centerExitCB,
+                         centerExitPipeCBVT3: centerExitPipeCBVT3,
+                         centerExitPipeVT3XRT: centerExitPipeVT3XRT,
+                         centerExitCBMagneticField: centerExitCBMagneticField,
+                         centerSun: centerSun)
+
 
 var fluxFractionGold = 0.0 #dies muss eine globale var sein
 proc getFluxFractionGold(): float64 =
@@ -1139,43 +1180,6 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
 
   let expSetup = getVarsForSetup(setup)
 
-  #let
-  #  radiusColdbore = expSetup.radiusCB * 1e-3
-  #  circleX = circleEdges( allR1)
-  #  circleY = circleEdges( allR1)
-  #  circleTotal = circleEdges( allR1)
-  var centerSun = vec3(0.0)
-  centerSun[0] = 0
-  centerSun[1] = 0
-  centerSun[2] = RAYTRACER_DISTANCE_SUN_EARTH
-
-  var centerEntranceCB = vec3(0.0)
-  centerEntranceCB[0] = 0
-  centerEntranceCB[1] = 0
-  centerEntranceCB[2] = 0 #coldboreBlockedLength # was 0 anyway
-
-  var centerExitCBMagneticField = vec3(0.0)
-  centerExitCBMagneticField[0] = 0
-  centerExitCBMagneticField[1] = 0
-  centerExitCBMagneticField[2] = expSetup.RAYTRACER_LENGTH_COLDBORE_9T
-
-  var centerExitCB = vec3(0.0)
-  centerExitCB[0] = 0
-  centerExitCB[1] = 0
-  centerExitCB[2] = expSetup.RAYTRACER_LENGTH_COLDBORE
-
-  var centerExitPipeCBVT3 = vec3(0.0)
-  centerExitPipeCBVT3[0] = 0
-  centerExitPipeCBVT3[1] = 0
-  centerExitPipeCBVT3[2] = expSetup.RAYTRACER_LENGTH_COLDBORE +
-      expSetup.RAYTRACER_LENGTH_PIPE_CB_VT3
-
-  var centerExitPipeVT3XRT = vec3(0.0)
-  centerExitPipeVT3XRT[0] = 0
-  centerExitPipeVT3XRT[1] = 0
-  centerExitPipeVT3XRT[2] = expSetup.RAYTRACER_LENGTH_COLDBORE +
-      expSetup.RAYTRACER_LENGTH_PIPE_CB_VT3 +
-      expSetup.RAYTRACER_LENGTH_PIPE_VT3_XRT
 
   var
     integralNormalisation = 0.0
@@ -1628,6 +1632,8 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     echo getFluxFraction("region: gold")
     echo "Flux fraction total"
     echo fluxFractionTotal
+
+  let centerVecs = expSetup.initCenterVectors()
 
 proc main(ignoreDetWindow = false, ignoreGasAbs = false,
           ignoreConvProb = false, ignoreGoldReflect = false) =
