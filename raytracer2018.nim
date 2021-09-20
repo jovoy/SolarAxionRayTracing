@@ -89,6 +89,12 @@ type
     shellNumber: int
     energiesPre: float
 
+  ConfigFlags = enum
+    cfIgnoreDetWindow,   ## use to ignore the detector window absorbtion
+    cfIgnoreGasAbs,      ## use to ignore the gas transmission
+    cfIgnoreGoldReflect, ## use to ignore gold reflectivity (use 1.0)
+    cfIgnoreConvProb     ## use to ignore axion conversion probability
+
 ################################
 # VARIABLES from rayTracer.h
 const
@@ -1623,21 +1629,25 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     echo "Flux fraction total"
     echo fluxFractionTotal
 
-proc main() =
-  # TODO: make these characteristics a mix of enums + something part of
-  # `ExperimentSetup` object
-  var radiationCharacteristic: string ##axionRadiation::characteristic radiationCharacteristic(axionRadiation::characteristic::sar);
-  radiationCharacteristic = "axionRadiation::characteristic::sar"
+proc main(ignoreDetWindow = false, ignoreGasAbs = false,
+          ignoreConvProb = false, ignoreGoldReflect = false) =
   var coldboreBlockedLength: float64
   coldboreBlockedLength = 0.0
   var detectorWindowAperture: float64
   detectorWindowAperture = 14.0 #mm
 
-  calculateFluxFractions(radiationCharacteristic, detectorWindowAperture,
+  var flags: set[ConfigFlags]
+  if ignoreDetWindow:   flags.incl cfIgnoreDetWindow
+  if ignoreGasAbs:      flags.incl cfIgnoreGasAbs
+  if ignoreConvProb:    flags.incl cfIgnoreConvProb
+  if ignoreGoldReflect: flags.incl cfIgnoreGoldReflect
+
+  calculateFluxFractions(detectorWindowAperture,
                          esCAST,
                          "2018",
-                         "vacuum") # radiationCharacteristic = "axionRadiation::characteristic::sar"
+                         "vacuum",
+                         flags) # radiationCharacteristic = "axionRadiation::characteristic::sar"
 
 
 when isMainModule:
-  main()
+  dispatch main
