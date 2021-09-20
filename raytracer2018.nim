@@ -460,12 +460,12 @@ proc lowerBound[T](t: Tensor[T], val: T): int =
     ),
     val)
 
-proc drawfancydiagrams(diagramtitle: string,
-                       objectstodraw: Tensor[float],
-                       width: int,
-                       year: string,
-                       rSigma1: float,
-                       rSigma2: float) =
+proc plotHeatmap(diagramtitle: string,
+                 objectsToDraw: Tensor[float],
+                 width: int,
+                 year: string,
+                 rSigma1: float,
+                 rSigma2: float) =
   ## this function draws a hdiagram out a given heatmap ##
   var
     xs = newSeq[int](width * width)
@@ -475,15 +475,14 @@ proc drawfancydiagrams(diagramtitle: string,
     for x in 0 ..< width:
       xs[y * width + x] = x
       ys[y * width + x] = y
-      zs[y * width + x] = objectstodraw[y, x]
+      zs[y * width + x] = objectsToDraw[y, x]
 
   #d.zmin = 0.0
   #d.zmax = 5e-22
 
-  var
+  let
     yr = linspace(- rSigma1, rSigma1, xs.len)
     yr2 = linspace(- rSigma2, rSigma2, xs.len)
-
 
   var df = seqsToDf({ "x" : xs,
                       "y" : ys,
@@ -506,17 +505,15 @@ proc drawfancydiagrams(diagramtitle: string,
   makeMinMax(min, Y)
   makeMinMax(max, Y)
 
-
-
   echo df
   #echo df.filter(f{`z` > 0.0})
   ggplot(df, aes("x-axis [mm]", "y-axis [mm]", fill = "z")) +
     geom_raster() +
     scale_x_continuous() + scale_y_continuous() + scale_fill_continuous("z") +
-    geompoint(aes("xr", "yr"), color = some(parseHex("F92672")), size = some(0.5)) +
-    geompoint(aes("xrneg", "yr"), color = some(parseHex("F92672")), size = some(0.5)) +
-    geompoint(aes("xr2", "yr2"), color = some(parseHex("ffa420")), size = some(0.5)) +
-    geompoint(aes("xrneg2", "yr2"), color = some(parseHex("ffa420")), size = some(0.5)) +
+    geom_point(aes("xr", "yr"), color = some(parseHex("F92672")), size = some(0.5)) +
+    geom_point(aes("xrneg", "yr"), color = some(parseHex("F92672")), size = some(0.5)) +
+    geom_point(aes("xr2", "yr2"), color = some(parseHex("ffa420")), size = some(0.5)) +
+    geom_point(aes("xrneg2", "yr2"), color = some(parseHex("ffa420")), size = some(0.5)) +
     # geom_line(aes = aes(xMin = minX(), xMax = maxX(), y = minY())) +
     # geom_line(aes = aes(xMin = minX(), xMax = maxX(), y = maxY())) +
     # geom_line(aes = aes(yMin = minY(), yMax = maxY(), x = minX())) +
@@ -1255,13 +1252,11 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
   let detectorFile = "./resources/transmission-argon-30mm-1050mbar-295K.dat"
   let alFile = &"./resources/AlDensity=2.7Thickness={expSetup.alThickness}microns"
 
-
   var dfTab = initTable[string, DataFrame]()
   dfTab["siFile"] = readCsv(siFile, sep = ' ')
   dfTab["siNfile"] = readCsv(siNfile, sep = ' ')
   dfTab["detectorFile"] = readCsv(detectorFile, sep = ' ')
   dfTab["alFile"] = readCsv(alFile, sep = ' ')
-
 
   var
     goldfile: string
@@ -1280,8 +1275,9 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
                                  centerExitCBMagneticField: centerExitCBMagneticField,
                                  centerSun: centerSun)
 
-  ## In the following we will go over a number of points in the sun, whose location and energy will be biased by the emission rate and whose track will be
-  ## calculated through the CAST experimental setup from 2018 at VT3
+  ## In the following we will go over a number of points in the sun, whose location and
+  ## energy will be biased by the emission rate and whose track will be through the CAST
+  ## experimental setup from 2018 at VT3
   var axions = newSeq[Axion](numberOfPointsSun)
   var axBuf = cast[ptr UncheckedArray[Axion]](axions[0].addr)
   echo "start"
@@ -1611,7 +1607,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
  # echo "Probability of it originating from an axion if a photon hits at x = 5,3mm and y = 8,4mm (in this model):"
  # echo (heatmaptable3[53][84]) * 100.0  #echo heatmaptable3[x][y]
 
-  drawfancydiagrams("Axion Model Fluxfraction", heatmaptable2, 256, year, rSigma1W, rSigma2W) #rSigma1, rSigma2)
+  plotHeatmap("Axion Model Fluxfraction", heatmaptable2, 256, year, rSigma1W, rSigma2W) #rSigma1, rSigma2)
 
   when false:
     fluxFractionTotal = integralTotal #/ integralNormalisation
@@ -1625,7 +1621,7 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     echo "Flux fraction total"
     echo fluxFractionTotal
 
-when isMainModule:
+proc main() =
   # TODO: make these characteristics a mix of enums + something part of
   # `ExperimentSetup` object
   var radiationCharacteristic: string ##axionRadiation::characteristic radiationCharacteristic(axionRadiation::characteristic::sar);
@@ -1639,3 +1635,7 @@ when isMainModule:
                          esCAST,
                          "2018",
                          "vacuum") # radiationCharacteristic = "axionRadiation::characteristic::sar"
+
+
+when isMainModule:
+  main()
