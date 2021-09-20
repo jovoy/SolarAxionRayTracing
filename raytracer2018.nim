@@ -458,6 +458,18 @@ proc prepareheatmap(numberofrows: int, numberofcolumns: int,
 proc getMaxVal(table: seq[seq[float]]): float =
   result = table.mapIt(max(it)).max
 
+proc lowerBound[T](t: Tensor[T], val: T): int =
+  ## returns the index of the first element in `t` that is not less than
+  ## `val`, or the last element if all elements are smaller than `val`.
+  ##
+  ## Implementation takes the data array of the tensor, wraps it in an open
+  ## array and hands it to the `algorithm.nim` procedure.
+  result = lowerBound(
+    toOpenArray(
+      cast[ptr UncheckedArray[T]](t.unsafe_raw_offset()), 0, t.size
+    ),
+    val)
+
 # proc serializePlot(plt: PlotJson, fname: string) =
 #   ## serializes a plotly plot so that we can run it elsewhere
 #   writeFile(fname, ( % plt).pretty)
@@ -962,16 +974,16 @@ proc traceAxion(res: var Axion,
   of esBabyIAXO:
     let
       energyAxReflection1 = dfTable[fmt"goldfile{alpha1:4.2f}"]["PhotonEnergy(eV)"].toTensor(
-              float).toRawSeq.lowerBound(energyAx * 1000.0)
+              float).lowerBound(energyAx * 1000.0)
       energyAxReflection2 = dfTable[fmt"goldfile{alpha2:4.2f}"]["PhotonEnergy(eV)"].toTensor(
-              float).toRawSeq.lowerBound(energyAx * 1000.0)
+              float).lowerBound(energyAx * 1000.0)
       reflectionProb1 = dfTable[fmt"goldfile{alpha1:4.2f}"]["Reflectivity"].toTensor(float)[energyAxReflection1]
       reflectionProb2 = dfTable[fmt"goldfile{alpha2:4.2f}"]["Reflectivity"].toTensor(float)[energyAxReflection2]
     weight = reflectionProb1 * reflectionProb2 * transmissionMagnet#also yaw and pitch dependend
   #if alpha1 < 0.45 or alpha1 > 1.11:
     #echo alpha1, " ", alpha2
-  
-  
+
+
   if weight != 0:
     res.passedTillWindow = true
 
@@ -988,22 +1000,20 @@ proc traceAxion(res: var Axion,
     x = pointDetectorWindowTurned[0]
     y = pointDetectorWindowTurned[1]
 
-  ## Get the detector Window transmission (The stripes in the window consist of a different material than the window itself):
+  ## Get the detector Window transmission (The stripes in the window consist of a different
+  ## material than the window itself)
   var transWindow: float
   var energyAxTransWindow: int
   # TODO: assignment here of the different kinds is obviously broken. Instead of having
   # one kinds field + the others we should have some additional field or something #made two assignments and now it works
   ## TODO: transmission of window material etc. can also be modeled using ray tracing.
   ## probability that transmission happens at all!
-  ## TODO: get the data once to avoid `toRawSeq` overhead
-  
-
   for i in 0..(expSetup.numberOfStrips/2).round.int - 1:
     if abs(y) > (1.0 * i.float + 0.5) * stripDistWindow + i.float * stripWidthWindow and
       abs(y) < (1.0 * i.float + 0.5) * stripDistWindow + (i.float + 1.0) * stripWidthWindow:
       energyAxTransWindow = dfTab["siFile"]["PhotonEnergy(eV)"].toTensor(
-          float).toRawSeq.lowerBound(energyAx * 1000.0) 
-      transWindow = dfTab["siFile"]["Transmission"].toTensor(float)[energyAxTransWindow] * 
+          float).lowerBound(energyAx * 1000.0)
+      transWindow = dfTab["siFile"]["Transmission"].toTensor(float)[energyAxTransWindow] *
                     dfTab["alFile"]["Transmission"].toTensor(float)[energyAxTransWindow]
       when not IgnoreDetWindow:
         weight *= transWindow
@@ -1015,8 +1025,8 @@ proc traceAxion(res: var Axion,
       res.kindsWindow = mkSi
     else:
       energyAxTransWindow = dfTab["siNfile"]["PhotonEnergy(eV)"].toTensor(
-          float).toRawSeq.lowerBound(energyAx * 1000.0) 
-      transWindow = dfTab["siNfile"]["Transmission"].toTensor(float)[energyAxTransWindow] * 
+          float).lowerBound(energyAx * 1000.0)
+      transWindow = dfTab["siNfile"]["Transmission"].toTensor(float)[energyAxTransWindow] *
                     dfTab["alFile"]["Transmission"].toTensor(float)[energyAxTransWindow]
       when not IgnoreDetWindow:
         weight *= transWindow
@@ -1029,7 +1039,7 @@ proc traceAxion(res: var Axion,
 
   ## Get the total probability that the Xray will be absorbed by the detector and therefore detected:
   let energyAxTransDet = dfTab["detectorFile"]["PhotonEnergy(eV)"].toTensor(
-      float).toRawSeq.lowerBound(energyAx * 1000.0)
+      float).lowerBound(energyAx * 1000.0)
   let transDet = dfTab["detectorFile"]["Transmission"].toTensor(float)[energyAxTransDet]
 
   when not IgnoreGasAbs:
