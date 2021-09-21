@@ -538,6 +538,7 @@ proc lowerBound[T](t: Tensor[T], val: T): int =
       cast[ptr UncheckedArray[T]](t.unsafe_raw_offset()), 0, t.size
     ),
     val)
+  result = min(result, t.size - 1)
 
 proc plotHeatmap(diagramtitle: string,
                  objectsToDraw: Tensor[float],
