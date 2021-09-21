@@ -317,6 +317,9 @@ proc getRandomEnergyFromSolarModel(vectorInSun, center: Vec3, radius: float64,
   of "emissionRate":
     let emissionRate = emissionRates[iRad][idx]
     result = emissionRate
+  else:
+    doAssert false, "This should never happen! Fix this procedure, returning two distinct" &
+      " things is dangerous!"
 
 ## The following are some functions to determine inetersection of the rays with the
 ## geometry (pipes, magnet, mirrors) of the setup ##
