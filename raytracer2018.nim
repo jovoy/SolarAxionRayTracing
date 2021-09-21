@@ -124,12 +124,15 @@ const
   RAYTRACER_DISTANCE_SUN_EARTH = 1.5e14 #mm #ok
   radiusSun = 6.9e11                    #mm #ok
   numberOfPointsSun = 10_000_000            #100000 for statistics   #37734 for CAST if BabyIaxo 10 mio  #26500960 corresponding to 100_000 axions at CAST, doesnt work
+## WARNING: cannot be `const` at the moment, due to Nim compiler bug with distinct types
+defUnit(GeV⁻¹)
+let
   # 1000000 axions that reach the coldbore then are reached after an operating time of 2.789 \times 10^{-5}\,\si{\second} for CAST
 
 
   roomTemp = 293.15 #K
   mAxion = 0.0853#0.26978249412621896 #eV, corresponds to set p and T gas valus #0.4 #eV for example
-  g_agamma = 1e-12
+  g_aγ = 1e-12.GeV⁻¹
 
 ## Chipregions#####
 
@@ -151,9 +154,6 @@ const
 
 randomize(299792458)
 
-func conversionProb*(B, g_agamma, length: float): float {.inline.} =
-  result = 0.025 * B * B * g_agamma * g_agamma * (1 / (1.44 * 1.2398)) *
-    (1 / (1.44 * 1.2398)) * (length * 1e-3) * (length * 1e-3) #g_agamma= 1e-12
 proc initCenterVectors(expSetup: ExperimentalSetup): CenterVectors =
   ## Initializes all the center vectors
   var centerSun = vec3(0.0)
@@ -209,6 +209,9 @@ proc toRad(wyKind: WindowYearKind): float =
   of wyIAXO:
     result = degToRad(0.0) # who knows
 
+func conversionProb(B: Tesla, g_aγ: GeV⁻¹, length: MilliMeter): UnitLess =
+  let L = length.mm.to(m)
+  result = pow( g_aγ * B.toNaturalUnit() * L.toNaturalUnit() / 2.0, 2.0 )
 
 var fluxFractionGold = 0.0 #dies muss eine globale var sein
 proc getFluxFractionGold(): float64 =
@@ -1031,7 +1034,7 @@ proc traceAxion(res: var Axion,
     transmissionTelescopeYaw = (6.0e-7 * pow(ya, 6.0) - 1.0e-5 * pow(ya, 5.0) -
         0.0001 * pow(ya, 4.0) + 0.0034 * pow(ya, 3.0) - 0.0292 * pow(ya, 2.0) -
         0.1534 * ya + 99.959) / 100.0
-    probConversionMagnet = conversionProb(expSetup.B, g_agamma, pathCB)
+    probConversionMagnet = conversionProb(expSetup.B, g_aγ, pathCB)
 
     distancePipe = (pointDetectorWindow[2] - pointExitCBZylKart[2]) * 1e-3 #m
     pGas = expSetup.pGasRoom / roomTemp * expSetup.tGas
