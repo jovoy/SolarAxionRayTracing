@@ -12,6 +12,7 @@ import glm
 import ggplotnim
 import weave
 import cligen
+import unchained
 
 ##################rayTracer###############################
 
@@ -21,8 +22,13 @@ type
   ExperimentSetupKind = enum
     esCAST, esBabyIAXO
 
+  StageKind = enum
+    skVacuum, skGas
+
   WindowYearKind = enum
-    wy2017, wy2018
+    wy2017 = "2017"
+    wy2018 = "2018"
+    wyIAXO = "BabyIAXO"
 
   CenterVectors = ref object
     centerEntranceCB: Vec3[float]
@@ -53,12 +59,25 @@ type
     B*: float
     pGasRoom*: float
     tGas*: float
-    depthDet*: float
-    radiusWindow*: float
-    numberOfStrips*: int
-    openAperatureRatio*: float
-    windowThickness*: float
-    alThickness*: float
+    kind: ExperimentSetupKind
+    stage: StageKind
+  DetectorSetupKind = enum
+    dkInGrid2017, # the setup as used in 2017
+    dkInGrid2018, # the setup as used in 2018
+    dkInGridIAXO  # hypothetical setup for BabyIAXO (impoved window...)
+
+  DetectorSetup = ref object # ref object for smaller size for parallel task buffer
+    windowYear: WindowYearKind
+    stripDistWindow: mm
+    stripWidthWindow: mm
+    detectorWindowAperture: mm # aperture of the detector window; isn't this just radius*2?
+    theta: rad # rotation angle of the window (deduced from `windowYear`)
+    radiusWindow: mm
+    numberOfStrips: int
+    openApertureRatio: float
+    windowThickness: μm
+    alThickness: μm
+    depthDet: mm # depth (height) of the detector volume
 
   MaterialKind = enum
     mkSi3N4 = "Si3N4"
@@ -182,11 +201,13 @@ proc toRad(wyKind: WindowYearKind): float =
   ##
   ## Deduced from the calibration data & X-ray finger runs.
   ## TODO: Add reference to the sourcing of these numbers.
-  case year
+  case wyKind
   of wy2017:
     result = degToRad(10.8)
   of wy2018:
     result = degToRad(71.5)
+  of wyIAXO:
+    result = degToRad(0.0) # who knows
 
 
 var fluxFractionGold = 0.0 #dies muss eine globale var sein
@@ -600,13 +621,12 @@ proc plotSolarModel(df: DataFrame) =
 
 ############done with the functions, let's use them############
 
-proc getVarsForSetup*(setup: ExperimentSetupKind): ExperimentSetup =
+proc newExperimentSetup*(setup: ExperimentSetupKind,
+                         stage: StageKind): ExperimentSetup =
   # TODO: clean up, possibly make this into a toml file where one can
   # input different settings!
-  result = new ExperimentSetup
   case setup
   of esCAST:
-    result = ExperimentSetup(radiusCB: 21.5, #mm
       RAYTRACER_LENGTH_COLDBORE: 9756.0, #mm half B field to end of CB #ok
       RAYTRACER_LENGTH_COLDBORE_9T: 9260.0, #mm half B field to half B field #ok
       RAYTRACER_LENGTH_PIPE_CB_VT3: 2571.5, #mm should stay the same #from beam pipe drawings #ok
@@ -617,6 +637,9 @@ proc getVarsForSetup*(setup: ExperimentSetupKind): ExperimentSetup =
       distanceCBAxisXRTAxis: 0.0, #62.1#58.44 #mm from XRT drawing #there is no difference in the axis even though the picture gets transfered 62,1mm down, but in the detector center
       RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW: 0.0, #mm #no change, because don't know
       pipes_turned: 3.0, #degree # this is the angle by which the pipes before the detector were turned in comparison to the telescope
+    result = ExperimentSetup(
+      kind: setup,
+      stage: stage,
                              # Measurements of the Telescope mirrors in the following, R1 are the radii of the mirror shells at the entrance of the mirror
       allThickness: @[0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2,
           0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2], ## the radii of the shells
@@ -632,17 +655,12 @@ proc getVarsForSetup*(setup: ExperimentSetupKind): ExperimentSetup =
       B: 9.0, #T magnetic field of magnet
       pGasRoom: 1.0, #bar pressure of the gas
       tGas: 1.7, #K
-      depthDet: 30.0, #mm
-      #stripDistWindow: 2.3,  #mm
-      #stripWidthWindow: 0.5, #mm #now calculated to these values
-      radiusWindow: 7.0, #mm
-      numberOfStrips: 4,
-      openAperatureRatio: 0.838,
-      windowThickness: 0.3, #microns
-      alThickness: 0.02 #+-0.007
     )
   of esBabyIAXO:
     result = ExperimentSetup(radiusCB: 350.0, #mm
+    result = ExperimentSetup(
+      kind: setup,
+      stage: stage,
                              # Change:
       RAYTRACER_LENGTH_COLDBORE: 11000.0, #mm not sure if this is true but this is how its written on page 61 of the 2021 BabyIAXO paper
       RAYTRACER_LENGTH_COLDBORE_9T: 10000.0, #mm I know it's not 9T here should be the actual length of pipe with a stable magnetic field; can't be same length
@@ -684,22 +702,34 @@ proc getVarsForSetup*(setup: ExperimentSetupKind): ExperimentSetup =
       alThickness: 0.015
     )
 
-proc calcWindowVals(radiusWindow: float, numberOfStrips: int, openAperatureRatio: float): seq[float] =
-  let
-    totalArea = radiusWindow * radiusWindow * PI
-    areaOfStrips = totalArea * (1.0 - openAperatureRatio)
-    dAndwPerStrip = radiusWindow * 2.0 / (numberOfStrips.float + 1.0)  #width and distance between strips per strip;
-                                                                       #the width on both sides is a whole width
-                                                                       #(Don't know what to do about the additional string width)
-                                                                       #not important at high strip number but at low like CAST
+defUnit(MilliMeter²)
+proc sqrt(x: MilliMeter²): MilliMeter =
+  ## We don't have sqrt as operator in unchained yet that does this automatically
+  ## and errors if units are not perfect squares.
+  sqrt(x.float).mm
 
+proc calcWindowVals(radiusWindow: MilliMeter,
+                    numberOfStrips: int,
+                    openApertureRatio: float): tuple[width: MilliMeter,
+                                                      dist: MilliMeter] =
+  let
+    totalArea = π * radiusWindow * radiusWindow
+    areaOfStrips = totalArea * (1.0 - openApertureRatio)
+    #width and distance between strips per strip;
+    #the width on both sides is a whole width
+    #(Don't know what to do about the additional string width)
+    #not important at high strip number but at low like CAST
+    dAndwPerStrip = radiusWindow * 2.0 / (numberOfStrips.float + 1.0)
   var
-    lengthStrip: float
-    lengthAllStrips: float
+    lengthStrip: mm
+    lengthAllStrips: mm
 
   for i in 0..(numberOfStrips/2).round.int - 1:
-    lengthStrip = sqrt(radiusWindow * radiusWindow - (i.float * dAndwPerStrip + 0.5 * dAndwPerStrip) * (i.float * dAndwPerStrip + 0.5 * dAndwPerStrip)) * 2.0
-    lengthAllStrips += lengthStrip
+    lengthStrip = sqrt(radiusWindow * radiusWindow -
+      (i.float * dAndwPerStrip + 0.5 * dAndwPerStrip) *
+        (i.float * dAndwPerStrip + 0.5 * dAndwPerStrip)
+    ) * 2.0
+    lengthAllStrips = lengthAllStrips + lengthStrip
     echo lengthStrip
 
   lengthAllStrips = lengthAllStrips * 2.0
@@ -707,25 +737,54 @@ proc calcWindowVals(radiusWindow: float, numberOfStrips: int, openAperatureRatio
   let
     widthStrips = areaOfStrips / lengthAllStrips
     distStrips = dAndwPerStrip - widthStrips
-    stripsWidthandDist = @[widthStrips, distStrips]
   echo widthStrips
   echo distStrips
-  result = stripsWidthandDist
+  result = (width: widthStrips, dist: distStrips)
+
+proc newDetectorSetup*(setup: DetectorSetupKind): DetectorSetup =
+  result = new DetectorSetup
+  case setup
+  of dkInGrid2017:
+    result.windowYear = wy2017
+    result.radiusWindow = 7.0.mm
+    result.numberOfStrips = 4
+    result.openApertureRatio = 0.838
+    result.windowThickness = 0.3.μm
+    result.alThickness = 0.02.μm # +- 0.007
+    result.depthDet = 30.0.mm
+  of dkInGrid2018:
+    result.windowYear = wy2018
+    result.radiusWindow = 7.0.mm
+    result.numberOfStrips = 4
+    result.openApertureRatio = 0.838
+    result.windowThickness = 0.3.μm
+    result.alThickness = 0.02.μm # +- 0.007
+    result.depthDet = 30.0.mm
+  of dkInGridIAXO:
+    result.windowYear = wyIAXO
+    result.depthDet = 30.0.mm # probably not
+    result.radiusWindow = 4.0.mm
+    result.numberOfStrips = 20 #maybe baby
+    result.openApertureRatio = 0.95
+    result.windowThickness = 0.1.μm #microns #options are: 0.3, 0.15 and 0.1
+    result.alThickness = 0.015.μm
+  result.detectorWindowAperture = 14.0.mm
+  let (width, dist) = calcWindowVals(result.radiusWindow,
+                                     result.numberOfStrips,
+                                     result.openApertureRatio)
+  result.stripWidthWindow = width
+  result.stripDistWindow = dist
+  result.theta = toRad(result.windowYear) # theta angle between window strips and horizontal x axis
 
 proc traceAxion(res: var Axion,
                 centerVecs: CenterVectors,
                 expSetup: ExperimentSetup,
+                detectorSetup: DetectorSetup,
                 emRates: seq[seq[float]],
                 emRatesRadiusCumSum: seq[float],
                 emRateCDFs: seq[seq[float]],
                 energies: seq[float],
-                stripDistWindow, stripWidthWindow, theta: float,
-                setup: ExperimentSetupKind,
-                year: string,
-                stage: string,
-                detectorWindowAperture: float,
                 dfTab: Table[string, DataFrame],
-                dfTable: Table[string, DataFrame],
                 flags: set[ConfigFlags]
                ) =
   ## Get a random point in the sun, biased by the emission rate, which is higher
@@ -820,7 +879,7 @@ proc traceAxion(res: var Axion,
   ## there is a 2mm wide graphite block between each glass mirror, to seperate them
   ## in the middle of the X-ray telescope. Return if hit
   ## BabyIAXO return if X-ray its the spider structure
-  case setup
+  case expSetup.kind
   of esCAST:
     if pointEntranceXRT[1] <= 1.0 and pointEntranceXRT[1] >=
         -1.0: return
@@ -990,11 +1049,10 @@ proc traceAxion(res: var Axion,
     transmissionMagnetGas = cos(ya) * probConversionMagnetGas * absorbtionXrays # for setup with gas
     transmissionTelescopeEnergy: float
 
-
-  case stage
-  of "vacuum":
+  case expSetup.stage
+  of skVacuum:
     transmissionMagnet = cos(ya) * probConversionMagnet
-  of "gas":
+  of skGas:
     transmissionMagnet = transmissionMagnetGas
 
   res.transmissionMagnets = transmissionMagnet
@@ -1008,7 +1066,7 @@ proc traceAxion(res: var Axion,
     alpha1 = angle1[1].round(2)
     alpha2 = angle2[1].round(2)
 
-  case setup
+  case expSetup.kind
   of esCAST:
     if energyAx < 2.0:
       #total eff area of telescope = 1438.338mm² = 14.38338cm² #the last thing are the mirror seperators
@@ -1152,39 +1210,31 @@ proc traceAxionWrapper(axBuf: ptr UncheckedArray[Axion],
                        bufLen: int,
                        centerVecs: CenterVectors,
                        expSetup: ExperimentSetup,
+                       detectorSetup: DetectorSetup,
                        emRates: seq[seq[float]],
                        emRatesRadiusCumSum: seq[float],
                        emRateCDFs: seq[seq[float]],
                        energies: seq[float],
-                       stripDistWindow, stripWidthWindow, theta: float,
-                       setup: ExperimentSetupKind,
-                       year: string,
-                       stage: string,
-                       detectorWindowAperture: float,
                        dfTab: Table[string, DataFrame],
-                       dfTable: Table[string, DataFrame],
                        flags: set[ConfigFlags]
                        ) =
   echo "Starting weave!"
   parallelFor iSun in 0 ..< bufLen:
     captures: { axBuf, centerVecs, expSetup, emRates, emRatesRadiusCumSum, emRateCDFs,
-                energies, stripDistWindow,
-                stripWidthWindow, theta,
-                setup, year, stage, detectorWindowAperture, dfTab, dfTable,
+                detectorSetup,
+                energies,
+                dfTab,
                 flags }
     axBuf[iSun].traceAxion(centerVecs,
                            expSetup,
+                           detectorSetup,
                            emRates, emRatesRadiusCumSum, emRateCDFs,
                            energies,
-                           stripDistWindow, stripWidthWindow, theta,
-                           setup,
-                           year,
-                           stage,
-                           detectorWindowAperture,
-                           dfTab, dfTable,
+                           dfTab,
                            flags)
 
-proc generateResultPlots(axions: seq[Axion]) =
+proc generateResultPlots(axions: seq[Axion],
+                         windowYear: WindowYearKind) =
   ## Creates all plots we want based on the raytracing result
   let axionsPass = axions.filterIt(it.passed)
   echo "Passed axions ", axionsPass.len
@@ -1505,13 +1555,12 @@ proc generateResultPlots(axions: seq[Axion]) =
     echo "Flux fraction total"
     echo fluxFractionTotal
 
-proc calculateFluxFractions(detectorWindowAperture: float,
-                            setup: ExperimentSetupKind,
-                            windowYear: WindowYearKind,
-                            stage: string,
+proc calculateFluxFractions(setup: ExperimentSetupKind,
+                            detectorSetup: DetectorSetupKind,
+                            stage: StageKind,
                             flags: set[ConfigFlags]) =
 
-  let expSetup = getVarsForSetup(setup)
+  let expSetup = newExperimentSetup(setup, stage)
   let energies = linspace(1.0, 10000.0, 1112)
 
   var
@@ -1578,19 +1627,12 @@ proc calculateFluxFractions(detectorWindowAperture: float,
   ################################################################################
   #############################Detector Window####################################
   ################################################################################
-  let
-    stripWidthWindow = calcWindowVals(expSetup.radiusWindow,
-                                      expSetup.numberOfStrips,
-                                      expSetup.openAperatureRatio)[0]
-    stripDistWindow = calcWindowVals(expSetup.radiusWindow,
-                                     expSetup.numberOfStrips,
-                                     expSetup.openAperatureRatio)[1]
-    theta = toRad(windowYear) # theta angle between window strips and horizontal x axis
+  let detectorSetup = newDetectorSetup(detectorSetup)
 
-  let siNfile = &"./resources/Si3N4Density=3.44Thickness={expSetup.windowThickness}microns"
-  let siFile = "./resources/SiDensity=2.33Thickness=200.microns"
-  let detectorFile = "./resources/transmission-argon-30mm-1050mbar-295K.dat"
-  let alFile = &"./resources/AlDensity=2.7Thickness={expSetup.alThickness}microns"
+  let siNfile = &"./resources/Si3N4Density=3.44Thickness={detectorSetup.windowThickness.float}microns.tsv"
+  let siFile = "./resources/SiDensity=2.33Thickness=200.microns.tsv"
+  let detectorFile = "./resources/transmission-argon-30mm-1050mbar-295K.tsv"
+  let alFile = &"./resources/AlDensity=2.7Thickness={detectorSetup.alThickness.float}microns.tsv"
 
   var dfTab = initTable[string, DataFrame]()
   dfTab["siFile"] = readCsv(siFile, sep = ' ')
@@ -1620,15 +1662,10 @@ proc calculateFluxFractions(detectorWindowAperture: float,
   traceAxionWrapper(axBuf, numberOfPointsSun,
                     centerVecs,
                     expSetup,
+                    detectorSetup,
                     emRates, emRatesRadiusCumSum, emRateCDFs,
                     energies,
-                    stripDistWindow, stripWidthWindow, theta,
-                    setup,
-                    year,
-                    stage,
-                    detectorWindowAperture,
                     dfTab,
-                    dfTable,
                     flags)
   exit(Weave)
 
@@ -1638,25 +1675,23 @@ proc calculateFluxFractions(detectorWindowAperture: float,
   #if(bronze and withinWindow): integralBronze = integralBronze + weight
   #if(detector and withinWindow): integralDetector = integralDetector + weight
 
-  generateResultPlots(axions)
+  generateResultPlots(axions, detectorSetup.windowYear)
 
 proc main(ignoreDetWindow = false, ignoreGasAbs = false,
           ignoreConvProb = false, ignoreGoldReflect = false) =
   var coldboreBlockedLength: float64
   coldboreBlockedLength = 0.0
-  var detectorWindowAperture: float64
-  detectorWindowAperture = 14.0 #mm
 
   var flags: set[ConfigFlags]
   if ignoreDetWindow:   flags.incl cfIgnoreDetWindow
   if ignoreGasAbs:      flags.incl cfIgnoreGasAbs
   if ignoreConvProb:    flags.incl cfIgnoreConvProb
   if ignoreGoldReflect: flags.incl cfIgnoreGoldReflect
+  echo "Flags: ", flags
 
-  calculateFluxFractions(detectorWindowAperture,
-                         esCAST,
-                         "2018",
-                         "vacuum",
+  calculateFluxFractions(esCAST,
+                         dkInGrid2017,
+                         skVacuum,
                          flags) # radiationCharacteristic = "axionRadiation::characteristic::sar"
 
 
