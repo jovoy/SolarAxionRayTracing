@@ -1181,154 +1181,11 @@ proc traceAxionWrapper(axBuf: ptr UncheckedArray[Axion],
                            year,
                            stage,
                            detectorWindowAperture,
-                           dfTab, dfTable)
+                           dfTab, dfTable,
+                           flags)
 
-proc calculateFluxFractions(axionRadiationCharacteristic: string,
-                            detectorWindowAperture: float,
-                            setup: ExperimentSetupKind,
-                            year: string,
-                            stage: string) = #The year is only for the way the window in front of the detector was turned.
-  var
-    distanceCBAxisXRTAxis = 0.0
-    pipes_turned = 0.0
-    ##Telescope transmission needs to be changed as well
-
-  let expSetup = getVarsForSetup(setup)
-
-
-  var
-    integralNormalisation = 0.0
-    integralTotal = 0.0
-    integralDetector = 0.0
-    integralBronze = 0.0
-    integralSilver = 0.0
-    integralGold = 0.0
-
-  let
-    energies = linspace(1.0, 10000.0, 1112)
-
-
-
-
-  let emRatesTensor = emRatesDf["Flux"].toTensor(float)
-    .reshape([emRatesDf.filter(fn {`Radius` == 0}).len, emRatesDf.filter(
-        fn {`Energy` == 0}).len])
-  let emRates = emRatesTensor
-    .toRawSeq
-    .reshape2D([emRatesTensor.shape[1], emRatesTensor.shape[0]])
-  doAssert emRates[0].len == 1112
-  var emRatesRadiusCumSum = emRates.mapIt(it.sum).cumSum()
-  # normalize to one
-  emRatesRadiusCumSum.applyIt(it / emRatesRadiusCumSum[^1])
-
-  ## Compute all normalized CDFs of the emission rates for each radius
-  var emRateCDFs = newSeq[seq[float]]()
-  for iRad, f in emRates:
-    var cdf = toSeq(0 ..< energies.len).mapIt(f[it] * energies[it] * energies[it] / (2 * Pi * Pi))
-      .cumSum()
-    cdf.applyIt(it / cdf[^1])
-    emRateCDFs.add cdf
-
-  ## sample from random point and plot
-  when false:
-    var es = newSeq[float]()
-    var ems = newSeq[float]()
-    var rs = newSeq[float]()
-    var ts = newSeq[float]()
-    var ps = newSeq[float]()
-
-    for i in 0 ..< 100_000:
-      let pos = getRandomPointFromSolarModel(centerSun, radiusSun, emratesRadiusCumSum)
-      let r = (pos - centerSun).length()
-      let energyAx = getRandomEnergyFromSolarModel(
-        pos, centerSun, radiusSun, energies, emrates, emRateCDFs, "energy"
-      )
-      let em = getRandomEnergyFromSolarModel(
-        pos, centerSun, radiusSun, energies, emrates, emRateCDFs, "emissionRate"
-      )
-      ts.add arccos(pos[2] / r)
-      ps.add arctan(pos[1] / pos[0])
-      es.add energyAx
-      ems.add em
-      rs.add r
-
-    let df = seqsToDf(es, ems, rs)
-    ggplot(df, aes("es")) + geom_histogram(bins = 500) + ggsave("/tmp/es.pdf")
-    ggplot(df, aes("rs")) + geom_histogram(bins = 300) + ggsave("/tmp/rs.pdf")
-    ggplot(df, aes("ems")) + geom_histogram(bins = 500) + ggsave("/tmp/ems.pdf")
-    ggplot(df, aes("ts")) + geom_histogram() + ggsave("/tmp/ts.pdf")
-    ggplot(df, aes("ps")) + geom_histogram() + ggsave("/tmp/ps.pdf")
-
-
-
-  ################################################################################
-  #############################Detector Window####################################
-  ################################################################################
-  var
-    stripWidthWindow = calcWindowVals(expSetup.radiusWindow, expSetup.numberOfStrips, expSetup.openAperatureRatio)[0]
-    stripDistWindow = calcWindowVals(expSetup.radiusWindow, expSetup.numberOfStrips, expSetup.openAperatureRatio)[1]
-    theta: float   #theta angle between window strips and horizontal x axis
-  case year
-  of "2017":
-    theta = degToRad(10.8)
-  of "2018":
-    theta = degToRad(71.5)
-
-  let siNfile = &"./resources/Si3N4Density=3.44Thickness={expSetup.windowThickness}microns"
-  let siFile = "./resources/SiDensity=2.33Thickness=200.microns"
-  let detectorFile = "./resources/transmission-argon-30mm-1050mbar-295K.dat"
-  let alFile = &"./resources/AlDensity=2.7Thickness={expSetup.alThickness}microns"
-
-  var dfTab = initTable[string, DataFrame]()
-  dfTab["siFile"] = readCsv(siFile, sep = ' ')
-  dfTab["siNfile"] = readCsv(siNfile, sep = ' ')
-  dfTab["detectorFile"] = readCsv(detectorFile, sep = ' ')
-  dfTab["alFile"] = readCsv(alFile, sep = ' ')
-
-  var
-    goldfile: string
-    alpha: float
-    dfTable = initTable[string, DataFrame]()
-
-  for i in 13..83:
-    alpha = (i.float * 0.01).round(2)
-    goldfile = fmt"./resources/reflectivity/{alpha:4.2f}degGold0.25microns"
-    dfTable[fmt"goldfile{alpha:4.2f}"] = readCsv(goldfile, sep = ' ')
-
-  let centerVecs = CenterVectors(centerEntranceCB: centerEntranceCB,
-                                 centerExitCB: centerExitCB,
-                                 centerExitPipeCBVT3: centerExitPipeCBVT3,
-                                 centerExitPipeVT3XRT: centerExitPipeVT3XRT,
-                                 centerExitCBMagneticField: centerExitCBMagneticField,
-                                 centerSun: centerSun)
-
-  ## In the following we will go over a number of points in the sun, whose location and
-  ## energy will be biased by the emission rate and whose track will be through the CAST
-  ## experimental setup from 2018 at VT3
-  var axions = newSeq[Axion](numberOfPointsSun)
-  var axBuf = cast[ptr UncheckedArray[Axion]](axions[0].addr)
-  echo "start"
-  init(Weave)
-  traceAxionWrapper(axBuf, numberOfPointsSun,
-                    centerVecs,
-                    expSetup,
-                    emRates, emRatesRadiusCumSum, emRateCDFs,
-                    energies,
-                    stripDistWindow, stripWidthWindow, theta,
-                    setup,
-                    year,
-                    stage,
-                    detectorWindowAperture,
-                    dfTab,
-                    dfTable)
-  exit(Weave)
-
-  # walk the axions and determine `integralTotal` and `integral*`
-  #if(gold and withinWindow): integralGold = integralGold + weight
-  #if(silver and withinWindow): integralSilver = integralSilver + weight
-  #if(bronze and withinWindow): integralBronze = integralBronze + weight
-  #if(detector and withinWindow): integralDetector = integralDetector + weight
-
+proc generateResultPlots(axions: seq[Axion]) =
+  ## Creates all plots we want based on the raytracing result
   let axionsPass = axions.filterIt(it.passed)
   echo "Passed axions ", axionsPass.len
   let axionsPassW = axions.filterIt(it.passedTillWindow)
@@ -1648,7 +1505,140 @@ proc calculateFluxFractions(axionRadiationCharacteristic: string,
     echo "Flux fraction total"
     echo fluxFractionTotal
 
+proc calculateFluxFractions(detectorWindowAperture: float,
+                            setup: ExperimentSetupKind,
+                            windowYear: WindowYearKind,
+                            stage: string,
+                            flags: set[ConfigFlags]) =
+
+  let expSetup = getVarsForSetup(setup)
+  let energies = linspace(1.0, 10000.0, 1112)
+
+  var
+    integralNormalisation = 0.0
+    integralTotal = 0.0
+    integralDetector = 0.0
+    integralBronze = 0.0
+    integralSilver = 0.0
+    integralGold = 0.0
+
+  ## TODO: make the code use tensor for the emission rates!
+  var emRatesDf = readCsv("solar_model_tensor.csv")
+    .rename(f{"Radius" <- "dimension_1"}, f{"Energy" <- "dimension_2"}, f{"Flux" <- "value"})
+
+  let emRatesTensor = emRatesDf["Flux"].toTensor(float)
+    .reshape([emRatesDf.filter(fn {`Radius` == 0}).len, emRatesDf.filter(
+        fn {`Energy` == 0}).len])
+  let emRates = emRatesTensor
+    .toRawSeq
+    .reshape2D([emRatesTensor.shape[1], emRatesTensor.shape[0]])
+  doAssert emRates[0].len == 1112
+  var emRatesRadiusCumSum = emRates.mapIt(it.sum).cumSum()
+  # normalize to one
+  emRatesRadiusCumSum.applyIt(it / emRatesRadiusCumSum[^1])
+
+  ## Compute all normalized CDFs of the emission rates for each radius
+  var emRateCDFs = newSeq[seq[float]]()
+  for iRad, f in emRates:
+    var cdf = toSeq(0 ..< energies.len).mapIt(f[it] * energies[it] * energies[it] / (2 * Pi * Pi))
+      .cumSum()
+    cdf.applyIt(it / cdf[^1])
+    emRateCDFs.add cdf
+
+  ## sample from random point and plot
+  when false:
+    var es = newSeq[float]()
+    var ems = newSeq[float]()
+    var rs = newSeq[float]()
+    var ts = newSeq[float]()
+    var ps = newSeq[float]()
+
+    for i in 0 ..< 100_000:
+      let pos = getRandomPointFromSolarModel(centerSun, radiusSun, emratesRadiusCumSum)
+      let r = (pos - centerSun).length()
+      let energyAx = getRandomEnergyFromSolarModel(
+        pos, centerSun, radiusSun, energies, emrates, emRateCDFs, "energy"
+      )
+      let em = getRandomEnergyFromSolarModel(
+        pos, centerSun, radiusSun, energies, emrates, emRateCDFs, "emissionRate"
+      )
+      ts.add arccos(pos[2] / r)
+      ps.add arctan(pos[1] / pos[0])
+      es.add energyAx
+      ems.add em
+      rs.add r
+
+    let df = seqsToDf(es, ems, rs)
+    ggplot(df, aes("es")) + geom_histogram(bins = 500) + ggsave("/tmp/es.pdf")
+    ggplot(df, aes("rs")) + geom_histogram(bins = 300) + ggsave("/tmp/rs.pdf")
+    ggplot(df, aes("ems")) + geom_histogram(bins = 500) + ggsave("/tmp/ems.pdf")
+    ggplot(df, aes("ts")) + geom_histogram() + ggsave("/tmp/ts.pdf")
+    ggplot(df, aes("ps")) + geom_histogram() + ggsave("/tmp/ps.pdf")
+
+  ################################################################################
+  #############################Detector Window####################################
+  ################################################################################
+  let
+    stripWidthWindow = calcWindowVals(expSetup.radiusWindow,
+                                      expSetup.numberOfStrips,
+                                      expSetup.openAperatureRatio)[0]
+    stripDistWindow = calcWindowVals(expSetup.radiusWindow,
+                                     expSetup.numberOfStrips,
+                                     expSetup.openAperatureRatio)[1]
+    theta = toRad(windowYear) # theta angle between window strips and horizontal x axis
+
+  let siNfile = &"./resources/Si3N4Density=3.44Thickness={expSetup.windowThickness}microns"
+  let siFile = "./resources/SiDensity=2.33Thickness=200.microns"
+  let detectorFile = "./resources/transmission-argon-30mm-1050mbar-295K.dat"
+  let alFile = &"./resources/AlDensity=2.7Thickness={expSetup.alThickness}microns"
+
+  var dfTab = initTable[string, DataFrame]()
+  dfTab["siFile"] = readCsv(siFile, sep = ' ')
+  dfTab["siNfile"] = readCsv(siNfile, sep = ' ')
+  dfTab["detectorFile"] = readCsv(detectorFile, sep = ' ')
+  dfTab["alFile"] = readCsv(alFile, sep = ' ')
+
+  var
+    goldfile: string
+    alpha: float
+    dfTable = initTable[string, DataFrame]()
+
+  for i in 13..83:
+    alpha = (i.float * 0.01).round(2)
+    goldfile = fmt"./resources/reflectivity/{alpha:4.2f}degGold0.25microns"
+    dfTable[fmt"goldfile{alpha:4.2f}"] = readCsv(goldfile, sep = ' ')
+
   let centerVecs = expSetup.initCenterVectors()
+
+  ## In the following we will go over a number of points in the sun, whose location and
+  ## energy will be biased by the emission rate and whose track will be through the CAST
+  ## experimental setup from 2018 at VT3
+  var axions = newSeq[Axion](numberOfPointsSun)
+  var axBuf = cast[ptr UncheckedArray[Axion]](axions[0].addr)
+  echo "start"
+  init(Weave)
+  traceAxionWrapper(axBuf, numberOfPointsSun,
+                    centerVecs,
+                    expSetup,
+                    emRates, emRatesRadiusCumSum, emRateCDFs,
+                    energies,
+                    stripDistWindow, stripWidthWindow, theta,
+                    setup,
+                    year,
+                    stage,
+                    detectorWindowAperture,
+                    dfTab,
+                    dfTable,
+                    flags)
+  exit(Weave)
+
+  # walk the axions and determine `integralTotal` and `integral*`
+  #if(gold and withinWindow): integralGold = integralGold + weight
+  #if(silver and withinWindow): integralSilver = integralSilver + weight
+  #if(bronze and withinWindow): integralBronze = integralBronze + weight
+  #if(detector and withinWindow): integralDetector = integralDetector + weight
+
+  generateResultPlots(axions)
 
 proc main(ignoreDetWindow = false, ignoreGasAbs = false,
           ignoreConvProb = false, ignoreGoldReflect = false) =
