@@ -1055,43 +1055,48 @@ proc traceAxion(res: var Axion,
     transmissionTelescopeYaw = (6.0e-7 * pow(ya, 6.0) - 1.0e-5 * pow(ya, 5.0) -
         0.0001 * pow(ya, 4.0) + 0.0034 * pow(ya, 3.0) - 0.0292 * pow(ya, 2.0) -
         0.1534 * ya + 99.959) / 100.0
-    probConversionMagnet = conversionProb(expSetup.B, g_aγ, pathCB)
-
     distancePipe = (pointDetectorWindow[2] - pointExitCBZylKart[2]).mm.to(m) # needs to be in meter
-    pGas = expSetup.pGasRoom / roomTemp * expSetup.tGas
-    ## TODO: use `unchained` in `axionMass` and avoid manual float conversions / use `to`
-    effPhotonMass = effPhotonMass2(
-      pGas.float, pathCB.to(m).float,
-      expSetup.radiusCB.to(m).float,
-      expSetup.tGas.float
-    )
-    probConversionMagnetGas = axionConversionProb2(
-      mAxion, energyAx, pGas.float,
-      expSetup.tGas.float, pathCB.to(m).float,
-      expSetup.radiusCB.to(m).float,
-      g_aγ.float, expSetup.B.float
-    ) # for setup including gas: functions are in axionmass/axionMassforMagnet
-    absorbtionXrays = intensitySuppression2(
-      energyAx, pathCB.to(m).float,
-      distancePipe.float,
-      pGas.float,
-      expSetup.tGas.float,
-      roomTemp.float) #room temperature in K
-                                     #echo "axion mass in [eV] ", mAxion, " effective photon mass in [eV] ", effPhotonMass
-
   ## this is the transformation probability of an axion into a photon, if an axion
   ## flying straight through the magnet had one of 100%, angular dependency of the primakoff effect
   var
     weight:float
     transmissionMagnet: float
-    transmissionMagnetGas = cos(ya) * probConversionMagnetGas * absorbtionXrays # for setup with gas
     transmissionTelescopeEnergy: float
 
   case expSetup.stage
   of skVacuum:
+    let probConversionMagnet = if cfIgnoreConvProb notin flags:
+                                 conversionProb(expSetup.B, g_aγ, pathCB)
+                               else:
+                                 1.0
     transmissionMagnet = cos(ya) * probConversionMagnet
   of skGas:
-    transmissionMagnet = transmissionMagnetGas
+    let
+      pGas = expSetup.pGasRoom / roomTemp * expSetup.tGas
+      ## TODO: use `unchained` in `axionMass` and avoid manual float conversions / use `to`
+      effPhotonMass = effPhotonMass2(
+        pGas.float, pathCB.to(m).float,
+        expSetup.radiusCB.to(m).float,
+        expSetup.tGas.float
+      )
+      probConversionMagnetGas =
+        if cfIgnoreConvProb notin flags:
+          axionConversionProb2(
+            mAxion, energyAx, pGas.float,
+            expSetup.tGas.float, pathCB.to(m).float,
+            expSetup.radiusCB.to(m).float,
+            g_aγ.float, expSetup.B.float
+          ) # for setup including gas: functions are in axionmass/axionMassforMagnet
+        else:
+          1.0 # else perfect transmission
+      absorbtionXrays = intensitySuppression2(
+        energyAx, pathCB.to(m).float,
+        distancePipe.float,
+        pGas.float,
+        expSetup.tGas.float,
+        roomTemp.float) #room temperature in K
+    #echo "axion mass in [eV] ", mAxion, " effective photon mass in [eV] ", effPhotonMass
+    transmissionMagnet = cos(ya) * probConversionMagnetGas * absorbtionXrays # for setup with gas
 
   res.transmissionMagnets = transmissionMagnet
   res.yawAngles = ya
@@ -1126,7 +1131,7 @@ proc traceAxion(res: var Axion,
     if transmissionTelescopeEnergy < 0.0:
       transmissionTelescopeEnergy = 0.0
     weight = (transmissionTelescopeEnergy *
-      transmissionTelescopePitch*transmissionTelescopeYaw *
+      transmissionTelescopePitch * transmissionTelescopeYaw *
       transmissionMagnet) #transmission probabilities times axion emission rate times the flux fraction
   of esBabyIAXO:
     if cfIgnoreGoldReflect notin flags:
