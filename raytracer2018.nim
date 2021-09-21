@@ -1091,14 +1091,18 @@ proc traceAxion(res: var Axion,
       transmissionTelescopePitch*transmissionTelescopeYaw *
       transmissionMagnet) #transmission probabilities times axion emission rate times the flux fraction
   of esBabyIAXO:
-    let
-      energyAxReflection1 = dfTable[fmt"goldfile{alpha1:4.2f}"]["PhotonEnergy(eV)"].toTensor(
-              float).lowerBound(energyAx * 1000.0)
-      energyAxReflection2 = dfTable[fmt"goldfile{alpha2:4.2f}"]["PhotonEnergy(eV)"].toTensor(
-              float).lowerBound(energyAx * 1000.0)
-      reflectionProb1 = dfTable[fmt"goldfile{alpha1:4.2f}"]["Reflectivity"].toTensor(float)[energyAxReflection1]
-      reflectionProb2 = dfTable[fmt"goldfile{alpha2:4.2f}"]["Reflectivity"].toTensor(float)[energyAxReflection2]
-    weight = reflectionProb1 * reflectionProb2 * transmissionMagnet#also yaw and pitch dependend
+    if cfIgnoreGoldReflect notin flags:
+      let
+        energyAxReflection1 = dfTab[fmt"goldfile{alpha1:4.2f}"]["PhotonEnergy(eV)"].toTensor(
+                float).lowerBound(energyAx * 1000.0)
+        energyAxReflection2 = dfTab[fmt"goldfile{alpha2:4.2f}"]["PhotonEnergy(eV)"].toTensor(
+                float).lowerBound(energyAx * 1000.0)
+        reflectionProb1 = dfTab[fmt"goldfile{alpha1:4.2f}"]["Reflectivity"].toTensor(float)[energyAxReflection1]
+        reflectionProb2 = dfTab[fmt"goldfile{alpha2:4.2f}"]["Reflectivity"].toTensor(float)[energyAxReflection2]
+      weight = reflectionProb1 * reflectionProb2 * transmissionMagnet#also yaw and pitch dependend
+    else:
+      # without gold reflection just use perfect reflectivity
+      weight = transmissionMagnet#also yaw and pitch dependend
 
   if weight != 0:
     res.passedTillWindow = true
@@ -1639,16 +1643,14 @@ proc calculateFluxFractions(setup: ExperimentSetupKind,
   dfTab["siNfile"] = readCsv(siNfile, sep = ' ')
   dfTab["detectorFile"] = readCsv(detectorFile, sep = ' ')
   dfTab["alFile"] = readCsv(alFile, sep = ' ')
-
-  var
-    goldfile: string
-    alpha: float
-    dfTable = initTable[string, DataFrame]()
-
-  for i in 13..83:
-    alpha = (i.float * 0.01).round(2)
-    goldfile = fmt"./resources/reflectivity/{alpha:4.2f}degGold0.25microns"
-    dfTable[fmt"goldfile{alpha:4.2f}"] = readCsv(goldfile, sep = ' ')
+  if cfIgnoreGoldReflect notin flags:
+    var
+      goldfile: string
+      alpha: float
+    for i in 13..83:
+      alpha = (i.float * 0.01).round(2)
+      goldfile = fmt"./resources/reflectivity/{alpha:4.2f}degGold0.25microns"
+      dfTab[fmt"goldfile{alpha:4.2f}"] = readCsv(goldfile, sep = ' ')
 
   let centerVecs = expSetup.initCenterVectors()
 
