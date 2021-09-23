@@ -1,7 +1,6 @@
 # stdlib
 import math, strutils, algorithm, random, sequtils, os, strformat, tables
 
-# TODO: axionMass will be minified and the important stuff extracted
 import axionMass/axionMassforMagnet
 
 # nimble
@@ -581,11 +580,11 @@ proc plotHeatmap(diagramtitle: string,
 
   var df = seqsToDf({ "x" : xs,
                       "y" : ys,
-                      "z" : zs,
+                      "photon flux" : zs,
                       "yr0": yr,
                       "yr02": yr2})
-    .mutate(f{float: "x-axis [mm]" ~ `x` * 14.0 / width.float},
-            f{float: "y-axis [mm]" ~ `y` * 14.0 / width.float},
+    .mutate(f{float: "x-position [mm]" ~ `x` * 14.0 / width.float},
+            f{float: "y-position [mm]" ~ `y` * 14.0 / width.float},
             f{float: "xr" ~ sqrt(rSigma1 * rSigma1 - `yr0` * `yr0`) + 7.0},
             f{float: "xrneg" ~ - sqrt(rSigma1 * rSigma1 - `yr0` * `yr0`) + 7.0},
             f{float: "yr" ~ `yr0` + 7.0},
@@ -600,21 +599,48 @@ proc plotHeatmap(diagramtitle: string,
   makeMinMax(min, Y)
   makeMinMax(max, Y)
 
+  let
+    width = 720.0
+    height = 586.0
+  
   echo df
   #echo df.filter(f{`z` > 0.0})
-  ggplot(df, aes("x-axis [mm]", "y-axis [mm]", fill = "z")) +
+  ggplot(df, aes("x-position [mm]", "y-position [mm]", fill = "photon flux")) +
     geom_raster() +
-    scale_x_continuous() + scale_y_continuous() + scale_fill_continuous("z") +
-    geom_point(aes("xr", "yr"), color = some(parseHex("F92672")), size = some(0.5)) +
-    geom_point(aes("xrneg", "yr"), color = some(parseHex("F92672")), size = some(0.5)) +
-    geom_point(aes("xr2", "yr2"), color = some(parseHex("ffa420")), size = some(0.5)) +
-    geom_point(aes("xrneg2", "yr2"), color = some(parseHex("ffa420")), size = some(0.5)) +
+    scale_x_continuous() + scale_y_continuous() + scale_fill_continuous("photon flux") +
+    geompoint(aes("xr", "yr"), color = some(parseHex("eab90c")), size = some(0.5)) +
+    geompoint(aes("xrneg", "yr"), color = some(parseHex("eab90c")), size = some(0.5)) +
+    geompoint(aes("xr2", "yr2"), color = some(parseHex("07529a")), size = some(0.5)) +
+    geompoint(aes("xrneg2", "yr2"), color = some(parseHex("07529a")), size = some(0.5)) +
     # geom_line(aes = aes(xMin = minX(), xMax = maxX(), y = minY())) +
     # geom_line(aes = aes(xMin = minX(), xMax = maxX(), y = maxY())) +
     # geom_line(aes = aes(yMin = minY(), yMax = maxY(), x = minX())) +
     # geom_line(aes = aes(yMin = minY(), yMax = maxY(), x = maxX())) +
-    ggtitle("Solar axion image for axion electron flux") +
-    ggsave(&"out/axion_image_{year}.pdf")
+    backgroundColor(parseHex("8cc7d4")) +
+    gridLineColor(parseHex("8cc7d4")) +
+    canvasColor(parseHex("8cc7d4")) +
+    #theme_transparent() +
+    ggtitle("Simulated X-ray signal distribution on the detector chip") +
+    ggsave(&"out/axion_image_{year}.pdf", width = width, height = height)
+
+  ggplot(df, aes("x-position [mm]", "y-position [mm]", fill = "photon flux")) +
+    geom_raster() +
+    scale_x_continuous() + scale_y_continuous() + scale_fill_continuous("photon flux") +
+    geompoint(aes("xr", "yr"), color = some(parseHex("eab90c")), size = some(0.5)) +
+    geompoint(aes("xrneg", "yr"), color = some(parseHex("eab90c")), size = some(0.5)) +
+    geompoint(aes("xr2", "yr2"), color = some(parseHex("07529a")), size = some(0.5)) +
+    geompoint(aes("xrneg2", "yr2"), color = some(parseHex("07529a")), size = some(0.5)) +
+    # geom_line(aes = aes(xMin = minX(), xMax = maxX(), y = minY())) +
+    # geom_line(aes = aes(xMin = minX(), xMax = maxX(), y = maxY())) +
+    # geom_line(aes = aes(yMin = minY(), yMax = maxY(), x = minX())) +
+    # geom_line(aes = aes(yMin = minY(), yMax = maxY(), x = maxX())) +
+    #annotate("sigma 1",                  # add our text annotation
+          #x = 5.0, y = 0.1,                # at this location in 'data space'
+          #backgroundColor = transparent) + # transparent background as we do manual TeX line breaks
+    #canvasColor(parseHex("62bed3b0")) +
+    theme_transparent() +
+    ggtitle("Simulated X-ray signal distribution on the detector chip") +
+    ggsave(&"out/axion_image_{year}.png")
 
 proc plotSolarModel(df: DataFrame) =
   ## A few plots for the solar model that are mainly for debugging.
@@ -653,7 +679,7 @@ proc newExperimentSetup*(setup: ExperimentSetupKind,
       radiusPipeCBVT3: 39.64.mm, #30.0 # smallest aperture between end of CB and VT3
       RAYTRACER_LENGTH_PIPE_VT3_XRT: 150.0.mm, # from drawings #198.2 #mm from XRT drawing #ok
       radiusPipeVT3XRT: 35.0.mm, #25.0 # from drawing #35.0 #m irrelevant, large enough to not loose anything # needs to be mm #ok
-      RAYTRACER_FOCAL_LENGTH_XRT: 1300.0.mm, #1485.0 # is from llnl XRT https://iopscience.iop.org/article/10.1088/1475-7516/2015/12/008/pdf #1600.0 # was the Telescope of 2014 (MPE XRT) also: Aperatur changed #ok
+      RAYTRACER_FOCAL_LENGTH_XRT: 1485.0.mm, #1300.0 # is from llnl XRT https://iopscience.iop.org/article/10.1088/1475-7516/2015/12/008/pdf #1600.0 # was the Telescope of 2014 (MPE XRT) also: Aperatur changed #ok
       distanceCBAxisXRTAxis: 0.0.mm, #62.1#58.44 # from XRT drawing #there is no difference in the axis even though the picture gets transfered 62,1mm down, but in the detector center
       RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW: 0.0.mm, # #no change, because don't know
       pipes_turned: 3.0.°, #degree # this is the angle by which the pipes before the detector were turned in comparison to the telescope
@@ -1170,6 +1196,10 @@ proc traceAxion(res: var Axion,
   ## Get the detector Window transmission (The stripes in the window consist of a different
   ## material than the window itself)
   var transWindow: float
+  var transWindows: seq[float]
+  var energiesWindows: seq[float]
+  var transCaths: seq[float]
+  var energiesCaths: seq[float]
   var energyAxTransWindow: int
   # TODO: assignment here of the different kinds is obviously broken. Instead of having
   # one kinds field + the others we should have some additional field or something #made two assignments and now it works
@@ -1196,11 +1226,23 @@ proc traceAxion(res: var Axion,
     else:
       energyAxTransWindow = dfTab["siNfile"]["PhotonEnergy(eV)"].toTensor(
           float).lowerBound(energyAx * 1000.0)
-      transWindow = dfTab["siNfile"]["Transmission"].toTensor(float)[energyAxTransWindow] *
-                    dfTab["alFile"]["Transmission"].toTensor(float)[energyAxTransWindow]
-
-      if cfIgnoreDetWindow notin flags:
-        weight *= transWindow
+      transWindows = dfTab["siNfile"]["Transmission"].toTensor(float).toRawSeq 
+      energiesWindows = dfTab["siNfile"]["PhotonEnergy(eV)"].toTensor(float).toRawSeq
+      transCaths = dfTab["alFile"]["Transmission"].toTensor(float).toRawSeq
+      energiesCaths = dfTab["alFile"]["PhotonEnergy(eV)"].toTensor(float).toRawSeq
+      let spline = newCubicSpline(energiesWindows, transWindows)
+      let splineCath = newCubicSpline(energiesCaths, transCaths)
+      transWindow = spline.eval(energyAx * 1000.0) * splineCath.eval(energyAx * 1000.0)
+      
+      if dfTab["siNfile"]["PhotonEnergy(eV)"].toTensor(float)[energyAxTransWindow - 1] < 300.0:
+        #echo "new ", energyAx, " ",transWindow
+        if cfIgnoreDetWindow notin flags:
+          weight *= transWindow 
+      #transWindow = dfTab["siNfile"]["Transmission"].toTensor(float)[energyAxTransWindow] #*
+                    #dfTab["alFile"]["Transmission"].toTensor(float)[energyAxTransWindow]
+      else:
+        if cfIgnoreDetWindow notin flags:
+          weight *= transWindow
       res.transprobWindow = transWindow
       res.transProbDetector = transWindow
       res.energiesAxAll = energyAx
@@ -1229,7 +1271,11 @@ proc traceAxion(res: var Axion,
   pointDetectorWindow[0] = - pointDetectorWindow[0] + CHIPREGIONS_CHIP_CENTER_X.float # for the view from the detector to the sun
   pointDetectorWindow[1] = pointDetectorWindow[1] + CHIPREGIONS_CHIP_CENTER_Y.float
 
-
+  case expSetup.kind
+  of esCAST:
+    weight *= 3.585e3 * 3600.0 * 1.5 * 90.0 #for CAST at 10 mio, three months
+  of esBabyIAXO:
+    weight *= 9.5e5 * 3600.0 * 12.0 * 90.0#9.5e5 * 3600.0 * 12.0 * 90.0 for three months at 1 mio axions at BabyIAXO 
   ## assign final axion position & weight
   res.pointdataX = pointDetectorWindow[0]
   res.pointdataY = pointDetectorWindow[1]
@@ -1358,7 +1404,7 @@ proc generateResultPlots(axions: seq[Axion],
                          "Energies": energiesAx,
                          "Shell": shellNumber})
     .filter(f{Value: isNull(df["Shell"][idx]).toBool == false})
-
+  
   ggplot(dfDet, aes("Deviation [mm]")) +
     geom_histogram(binWidth = 0.001) +
     ggtitle("Deviation of X-rays detector entrance to readout") +
@@ -1397,10 +1443,22 @@ proc generateResultPlots(axions: seq[Axion],
                           "Transmission probability": weights})
 
   ggplot(dfFluxE, aes("Axion energy [keV]", weight = "Transmission probability")) +
-    geom_histogram(binWidth = 0.0001) +
-    ggtitle("The Axion flux after the experiment") +
-    ggsave(&"out/fluxAfter_{windowYear}.pdf")
+    geom_histogram(binWidth = 0.00001, lineWidth= some(1.2)) +
+    #backgroundColor(parseHex("8cc7d4")) +
+    gridLineColor(parseHex("8cc7d4")) +
+    canvasColor(parseHex("8cc7d4")) +
+    #theme_transparent() +
+    ylab("photon flux") + 
+    ylim(0.0, 1e-07) +
+    ggtitle("Simulated photon flux depending on the energy of the axion") +
+    ggsave(&"out/fluxAfter_{windowYear}.pdf") 
 
+  ggplot(dfFluxE, aes("Axion energy [keV]", weight = "Transmission probability")) +
+    geom_histogram(binWidth = 0.0001, lineWidth= some(1.2)) +
+    theme_transparent() +
+    ggtitle("Simulated photon flux depending on the energy of the axion") +
+    ggsave(&"out/fluxAfter_{windowYear}.png") 
+  #[
 
   let dfXY = seqsToDf({"x": pointDataX,
                        "y": pointDataY,
@@ -1433,7 +1491,7 @@ proc generateResultPlots(axions: seq[Axion],
     geom_point(size = some(0.5), alpha = some(0.1)) +
     #ylim(3.1e-24, 3.16e-24) +
     ggtitle("The probability of the transformation of axions to X-rays in the magnet") +
-    ggsave(&"out/transMagnetE_{windowYear}.pdf")
+    ggsave(&"out/transMagnetE_{windowYear}.pdf")]#
 
   ############get the 1 and 2 sigma area ###################
   var pointR = pointdataR
@@ -1458,8 +1516,10 @@ proc generateResultPlots(axions: seq[Axion],
     sigmaAssignW = newSeq[string](pointR.len)
     rSigma1Window: float
     rSigma2Window: float
-  if sigma2Window > pointR.len:
-    sigmaAssignW.fill(0, sigma1Window - 1, "sigma 1")
+  if sigma1Window > pointR.len:
+    sigmaAssignW.fill(0, pointR.len - 1, "sigma 2")
+  elif sigma1Window < pointR.len and sigma2Window > pointR.len:
+    sigmaAssignW.fill(0, sigma1Window - 1, "sigma 1") 
     sigmaAssignW.fill(sigma1Window, pointR.len - 1, "sigma 2")
     rSigma1Window = pointR[sigma1Window - 1]
   else:
@@ -1563,14 +1623,14 @@ proc generateResultPlots(axions: seq[Axion],
                             "Flux after experiment": weights })
   dfFluxE2.write_csv(&"axion_gae_1e13_gagamma_{g_aγ.float}_flux_after_exp_N_{numberOfPointsSun}.csv")
   ggplot(dfFluxE2, aes("Axion energy [keV]", weight = "Flux after experiment")) +
-    geom_histogram(binWidth = 0.1) +
+    geom_histogram(binWidth = 0.0001, lineWidth= some(1.2)) +
     ylab("The flux after the experiment") +
     ggsave(&"out/FluxEafter_{windowYear}.pdf")
 
   let dfFluxE3 = seqsToDf({"Axion energy [keV]": energiesPre})
 
   ggplot(dfFluxE3, aes("Axion energy [keV]")) +
-    geom_histogram(binWidth = 0.1) +
+    geom_histogram(binWidth = 0.0001, lineWidth= some(1.2)) +
     ylab("The flux before the experiment") +
     ggsave(&"out/FluxE_before_experiment_{windowYear}.pdf")
 
@@ -1613,7 +1673,7 @@ proc calculateFluxFractions(setup: ExperimentSetupKind,
                             flags: set[ConfigFlags]) =
 
   let expSetup = newExperimentSetup(setup, stage)
-  let energies = linspace(1.0, 10000.0, 1112)
+  let energies = linspace(1.0, 10000.0, 10000)
 
   var
     integralNormalisation = 0.0
@@ -1633,7 +1693,7 @@ proc calculateFluxFractions(setup: ExperimentSetupKind,
   let emRates = emRatesTensor
     .toRawSeq
     .reshape2D([emRatesTensor.shape[1], emRatesTensor.shape[0]])
-  doAssert emRates[0].len == 1112
+  doAssert emRates[0].len == 10000
   var emRatesRadiusCumSum = emRates.mapIt(it.sum).cumSum()
   # normalize to one
   emRatesRadiusCumSum.applyIt(it / emRatesRadiusCumSum[^1])
