@@ -405,12 +405,12 @@ proc primakoff(temp, energy, gagamma, ks2, alpha, ne, me: float, n_Z2: float): f
       u = (2.0 * om2 - omPlSq) / s
       analytical_integral = primakoff_bracket(t, u)
     result = prefactor6 * phase_factor * n_dens * analytical_integral
-    #[result = (gagamma * gagamma * 1e-12 * temp * ks2) /
-             (32.0 * PI) *
-             ((1.0 + (ks2 / (4.0 * energy * energy))) *
-                 ln(1.0 + (4.0 * energy * energy) / ks2) - 1.0) *
-             2.0 * sqrt(1.0 - (4.0 * PI * ne) / (me * energy * energy)) /
-             (exp(energy/temp) - 1.0)]#
+  #[result = (gagamma * gagamma * 1e-12 * temp * ks2) /
+          (32.0 * PI) *
+          ((1.0 + (ks2 / (4.0 * energy * energy))) *
+              ln(1.0 + (4.0 * energy * energy) / ks2) - 1.0) *
+          2.0 * sqrt(1.0 - (4.0 * PI * ne) / (me * energy * energy)) /
+          (exp(energy/temp) - 1.0)]##[]#
 
 proc longPlasmon(energy: float, ne: float, me: float, alpha: float, bfieldR: float, temp: float, opacity: float, gagamma: float): float =
   let 
@@ -442,7 +442,7 @@ proc transPlasmon(energy: float, ne: float, me: float, alpha: float, bfieldR: fl
     deltaPsq = energy*energy * pow(sqrt(1.0-omPlSq/(energy*energy))-1.0, 2.0)  # transfered momentum squared
     #deltaPsq = pow(0.5*omPlSq/energy, 2.0) #transfered momentum squared
     average_b_field_sq = pow(bfieldR, 2.0) / 3.0
-    deltaTsq = gagamma*gagamma * 1e-12* average_b_field_sq / 4.0
+    deltaTsq = gagamma*gagamma * 1e-12 * average_b_field_sq / 4.0
   result = geom_factor * photon_polarization * gamma * deltaTsq / ( (deltaPsq+pow(0.5*gamma, 2.0)) * (exp(u) - 1.0) ) 
   
 
@@ -468,7 +468,7 @@ proc getFluxFraction(energies: seq[float], df: DataFrame,
   var radii: seq[float]
   var E: seq[float]
   for e in energies:
-    var iEindexx = ((e - 1.0) / 9.0).toInt
+    var iEindexx = ((e - 1.0)).toInt
     var diff_flux = 0.0
     var r_last = 0.0
     var summm = 0.0
@@ -529,7 +529,7 @@ proc getFluxFractionR(energies: seq[float], df: DataFrame,
   var E: seq[float]
   for e in energies:
     var 
-      iEindexx = ((e - 1.0) / 9.0).toInt
+      iEindexx = ((e - 1.0)).toInt
       diff_flux = 0.0
       diff_fluxR = 0.0
       r_last = 0.0
@@ -584,7 +584,7 @@ proc main*(): Tensor[float] =
   ## First lets access the solar model and calculate some necessary values
   const solarModel = "./ReadSolarModel/resources/AGSS09_solar_model_stripped.dat"
   var df = readSolarModel(solarModel)
-  let nElems = 1112 # TODO: clarify exact number
+  let nElems = 10000 # TODO: clarify exact number
   let energies = linspace(1.0, 10000.0, nElems)
 
   let nRadius = df["Rho"].len
@@ -610,8 +610,8 @@ proc main*(): Tensor[float] =
   let noElement = @[3, 4, 5, 9, 15, 17, 19, 21, 22, 23, 27]
   const
     alpha = 1.0 / 137.0
-    g_ae = 1e-13 # Redondo 2013: 0.511e-10
-    gagamma = 1e-11 #1e-12 #the latter for DFSZ
+    g_ae = 1e-12 # Redondo 2013: 0.511e-10
+    gagamma = 1e-10 #1e-12 #the latter for DFSZ
     m_e_keV = 510.998 #keV
     e_charge = sqrt(4.0 * PI * alpha)#1.0
     kB = 1.380649e-23
@@ -721,6 +721,7 @@ proc main*(): Tensor[float] =
     ops = newSeqOfCap[float](100_000)
 
   echo "Walking all radii again..."
+  
   for R in 0 ..< nRadius:
     #echo "Radius ", R
     n_eInt = n_es[R]
@@ -740,7 +741,7 @@ proc main*(): Tensor[float] =
       let energy_keV = iE * 0.001 #w * temp_keV
       var energy_J = 1.60218e-16 * energy_keV
       var w = energy_keV / temp_keV #toFloat(dfMesh["u"][iE.int])
-      var iEindex = ((iE - 1.0) / 9.0).toInt
+      var iEindex = (iE - 1.0).toInt 
       var table = 1.0
       var prevMesh = 1.0
       let debye_scale = sqrt( (4.0 * PI * alpha / temp_keV) *
@@ -750,6 +751,7 @@ proc main*(): Tensor[float] =
                                 (n_e_keV + n_Z[R][1] * 7.645e-24 +
                                  4.0 * n_Z[R][2] * 7.645e-24 )
       let y = debye_scale / (sqrt( 2.0 * m_e_keV * temp_keV))
+      
       if w >= 20.0 or w <= 0.0732: #because the tables dont go beyond that, apparently because the axion production beyond that is irrelevant #except for He, maybe find a better solution
         for (Z_str, Z) in iterEnum(ElementKind):
           # TODO: avoid looping over unneeded elements here
@@ -758,13 +760,13 @@ proc main*(): Tensor[float] =
           sum = sum + n_Z[R][Z] * 0.0
         absCoefs[R, iEindex] = sum * 1.97327e-8 * 0.528e-8 * 0.528e-8 *
                                (1.0 - exp(-energy_keV / temp_keV))
-      else :
+      else:
         for (Z_str, Z) in iterEnum(ElementKind):
           # TODO: avoid looping over unneeded elements here
           if Z in noElement:
             continue
           table = spline.eval(w)
-          if iEindex == 11 :
+          if iEindex == 100 :
             zs.add(Z)
             rs.add((R.float * 0.0005 + 0.0015))
             nZs.add(n_Z[R][Z])
@@ -793,7 +795,6 @@ proc main*(): Tensor[float] =
         absCoef = sum * 1.97327e-8 * 0.528e-8 * 0.528e-8 * (1.0 - exp(-energy_keV / temp_keV)) # is in keV
 
         absCoefs[R, iEindex] = absCoef
-
       ## Now it's left to calculate the emission rates
       ## making the same approximation as for n_e calculation
       
@@ -801,14 +802,17 @@ proc main*(): Tensor[float] =
       let nZZ2_raffelt_keV = (rho[R] / amu) * 7.683e-24 #seems to be correct
       let ffterm = freefreeEmrate(alpha, g_ae, energy_keV, n_e_keV, m_e_keV, temp_keV, nZZ2_raffelt_keV, w, y)
       ## includes contribution from ff, fb and bb processes and a part of the Comption contribution ## keV³ / keV² = keV :
+
       let 
         term1 = term1(g_ae, energy_keV, (absCoefs[R, iEindex]), e_charge, m_e_keV, temp_keV)
         term2 = term2(alpha, g_ae, energy_keV, n_e_keV, m_e_keV, temp_keV)# completes the Compton contribution #keV
         term3 = bremsEmrate(alpha, g_ae, energy_keV, n_e_keV, m_e_keV, temp_keV, w, y) # contribution from ee-bremsstahlung
         compton = comptonEmrate(alpha, g_ae, energy_keV, n_e_keV, m_e_keV, temp_keV)
         primakoff = primakoff(temp_keV, energy_keV, gagamma, debye_scale_squared, alpha, n_e_keV, m_e_keV, n_Z[R][2])
-        longPlas = longPlasmon(energy_keV, n_e_keV, m_e_keV, alpha, bfieldR, temp_keV, absCoef, gagamma) #is correct with the absorbtion coefficient
-        transPlas = transPlasmon(energy_keV, n_e_keV, m_e_keV, alpha, bfieldR, temp_keV, absCoef, gagamma) #is correct with the absorbtion coefficient
+        longPlas = longPlasmon(energy_keV, n_e_keV, m_e_keV, alpha, bfieldR, temp_keV, (absCoefs[R, iEindex]), gagamma) #is correct with the absorbtion coefficient
+        transPlas = transPlasmon(energy_keV, n_e_keV, m_e_keV, alpha, bfieldR, temp_keV, (absCoefs[R, iEindex]), gagamma) #is correct with the absorbtion coefficient
+      #if energy_keV == 4.0: echo energy_keV, " ", primakoff
+      #if energy_keV == 5.0: echo energy_keV, " ", primakoff
       term1s[R, iEindex] = term1
       comptons[R, iEindex] = compton
       term3s[R, iEindex] = term3
@@ -816,10 +820,12 @@ proc main*(): Tensor[float] =
       primakoffs[R, iEindex] = primakoff
       longPlasmons[R, iEindex] = longPlas
       transPlasmons[R, iEindex] = transPlas
-      let total_emrate = compton +  term1 + term3 + ffterm + longPlas + transPlas + primakoff
+      let total_emrate = compton +  term1 + term3 + ffterm #+ longPlas + transPlas + primakoff
       let total_emrate_s = total_emrate / (6.58e-19) # in 1/sec
       emratesS[R, iEindex] = total_emrate
       emratesInS[R, iEindex] = total_emrate_s
+      #if w <= 0.0732 :
+        #echo transPlas
       # if want to have absorbtion coefficient of a radius and energy: R = (r (in % of sunR) - 0.0015) / 0.0005
 
       #if iEindex == 110:
@@ -894,6 +900,9 @@ proc main*(): Tensor[float] =
     geom_line() + #size = some(0.5)
     xlab("Axion energy [eV]") +
     ylab("Flux [keV⁻¹ y⁻¹ m⁻²]") +
+    scale_y_continuous() +
+    scale_x_continuous() +
+    ylim(0.0, 1e23) +
     ggtitle(&"Differential solar axion flux for g_ae = {g_ae}, g_aγ = {g_agamma} GeV⁻¹") +
     margin(right = 6.5) +
     ggsave("out/diffFlux.pdf", width = 800, height = 480)
