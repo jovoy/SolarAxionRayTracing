@@ -42,19 +42,21 @@ let dfTransProb = seqsToDf({"Photon energy [eV]": energies,
                               "Si3N4 0.15um": transSiN015,
                               "Si3N4 0.1um": transSiN01,
                               "Si 200um": transSi,
-                              "TransAr": transDet,
+                              #"TransAr": transDet,
                               "Al 0.02um": transAl002,
-                              "Al 0.015um": transAl0015,}).mutate(f{"Ar 30000um" ~ 1.0 - `TransAr`}).arrange("Photon energy [eV]")
-let dfTransProbNew = dfTransProb.gather(["Si3N4 0.3um", "Si3N4 0.15um", "Si3N4 0.1um", "Si 200um", "Ar 30000um", 
+                              "Al 0.015um": transAl0015})#.mutate(f{"Ar 3cm" ~ 1.0 - `TransAr`}).arrange("Photon energy [eV]")
+let dfTransProbNew = dfTransProb.gather(["Si3N4 0.3um", "Si3N4 0.15um", "Si3N4 0.1um", "Si 200um", #"Ar 3cm", 
                                          "Al 0.02um", "Al 0.015um"], key = "Material", value = "Transmission Probability")
 echo dfTransProbNew
 ggplot(dfTransProbNew) +
   geom_line(aes("Photon energy [eV]", "Transmission Probability", color = "Material")) +
-  #[geom_line(aes("Photon energy [eV]", "Si3N4 0.15um", color = "Si3N4 0.15um")) +
-  geom_line(aes("Photon energy [eV]", "Si3N4 0.1um", color = "Si3N4 0.1um")) +
-  geom_line(aes("Photon energy [eV]", "Si 200um", color = "Si 200um")) +
-  geom_line(aes("Photon energy [eV]", "Absorption Probability Ar 30000um", color = "Ar 30000um")) +
-  geom_line(aes("Photon energy [eV]", "Al 0.02um", color = "Al 0.02um")) +
-  geom_line(aes("Photon energy [eV]", "Al 0.015um", color = "Al 0.015um")) +]#
   #ggtitle("The transmission probability for different window material with different thicknesses as well as the absorption probability of 3 cm Argon gas") +
   ggsave(&"out/TransProb.pdf")
+
+let dfTransBest = seqsToDf({"Photon energy [eV]": energies,
+                            "Si3N4": transSiN01,
+                            "Al": transAl0015}).mutate(f{"SiNAl" ~ `Si3N4` * `Al`})
+
+ggplot(dfTransBest) +
+  geom_line(aes("Photon energy [eV]", "SiNAl")) +
+  ggsave(&"out/TransProbBest.pdf")
