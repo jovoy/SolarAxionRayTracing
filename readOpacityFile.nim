@@ -344,6 +344,7 @@ proc bfield(r:float): float = #r in sun radius percentage
     if z < 1.0: result += bfield_outer_T*(1.0 - z)
   
   return result/(1.0e6 * sqrt(4.0 * PI) * 1.4440271 * 1.0e-3) # in keV^2
+    
 
 
 proc omegaPlasmonSq(alpha:float, ne: float, me: float): float = #Routine to return the plasma freqeuency squared (in keV^2) of the zone around the distance r from the centre of the Sun.
@@ -385,7 +386,7 @@ proc primakoff_bracket(t: float, u: float): float =
   result = analytical_integral
 
 
-proc primakoff(temp, energy, gagamma, ks2, alpha, ne, me: float, n_Z2: float): float =
+proc primakoff(temp, energy, gagamma, ks2, alpha, ne, me: float, n_Z2: float, n_Z1: float): float =
   let
     prefactor6 = gagamma * gagamma * 1e-12 * alpha  / 8.0
     omPlSq = omegaPlasmonSq(alpha, ne, me)
@@ -399,7 +400,7 @@ proc primakoff(temp, energy, gagamma, ks2, alpha, ne, me: float, n_Z2: float): f
   else:
     let 
       phase_factor = 2.0 / (sqrt(1.0 - 1.0 / x) * (exp(z) - 1.0))
-      n_dens = ne + n_Z2 * pow(197.327053e-10,3.0)  #;avg_degeneracy_factor(r)*
+      n_dens = ne + n_Z1 * 7.645e-24 + 4.0 * n_Z2 * 7.645e-24# ne + n_Z2 * pow(197.327053e-10,3.0)  #;avg_degeneracy_factor(r)*
       s = 2.0*energy*sqrt(om2 - omPlSq)
       t = ks2 / s
       u = (2.0 * om2 - omPlSq) / s
@@ -606,6 +607,7 @@ proc main*(): Tensor[float] =
     temperature: int
     temperatures: seq[int]
     rs3: seq[float]
+    alphaR: seq[float]
 
   let noElement = @[3, 4, 5, 9, 15, 17, 19, 21, 22, 23, 27]
   const
@@ -664,6 +666,11 @@ proc main*(): Tensor[float] =
         n_eInt = 74 + iNe * 2
     n_es.add(n_eInt)
     rs3.add(iRadius.float * 0.0005 + 0.0015)
+    var metallicity = 1.0 - n_Z[iRadius][1] - n_Z[iRadius][2]
+    var alphaRs = 0.0
+    #for k in 2..< 29:
+      #alphaRs += n_Z[iRadius][k+1] / metallicity #* ionisationsqr_element(r, element) / aAt(k)
+    #alphaR.add(alphaRs)
 
   var dfTemp = seqsToDf({ "Radius": rs3,
                         "Temp": temperatures,
@@ -730,6 +737,7 @@ proc main*(): Tensor[float] =
       n_esR = n_es[R].float
       temp = temperatures[R].float
       bfieldR = bfield(R/nRadius) #or something like that
+    
     for iE in energies:
       var sum = 0.0
       var opacitySum = 0.0
@@ -744,6 +752,8 @@ proc main*(): Tensor[float] =
       var iEindex = (iE - 1.0).toInt 
       var table = 1.0
       var prevMesh = 1.0
+      
+      #let n_bar_keV = n_Z[R][1] * 7.645e-24 + n_Z[R][2] * 7.645e-24 + alphaR[R] * metallicity(r)) * density(r)/((1.0E+9*eV2g)*atomic_mass_unit
       let debye_scale = sqrt( (4.0 * PI * alpha / temp_keV) *
                               (n_e_keV + n_Z[R][1] * 7.645e-24 +
                                4.0 * n_Z[R][2] * 7.645e-24 ))
@@ -808,7 +818,7 @@ proc main*(): Tensor[float] =
         term2 = term2(alpha, g_ae, energy_keV, n_e_keV, m_e_keV, temp_keV)# completes the Compton contribution #keV
         term3 = bremsEmrate(alpha, g_ae, energy_keV, n_e_keV, m_e_keV, temp_keV, w, y) # contribution from ee-bremsstahlung
         compton = comptonEmrate(alpha, g_ae, energy_keV, n_e_keV, m_e_keV, temp_keV)
-        primakoff = primakoff(temp_keV, energy_keV, gagamma, debye_scale_squared, alpha, n_e_keV, m_e_keV, n_Z[R][2])
+        primakoff = primakoff(temp_keV, energy_keV, gagamma, debye_scale_squared, alpha, n_e_keV, m_e_keV, n_Z[R][2], n_Z[R][1])
         longPlas = longPlasmon(energy_keV, n_e_keV, m_e_keV, alpha, bfieldR, temp_keV, (absCoefs[R, iEindex]), gagamma) #is correct with the absorbtion coefficient
         transPlas = transPlasmon(energy_keV, n_e_keV, m_e_keV, alpha, bfieldR, temp_keV, (absCoefs[R, iEindex]), gagamma) #is correct with the absorbtion coefficient
       #if energy_keV == 4.0: echo energy_keV, " ", primakoff
@@ -832,7 +842,7 @@ proc main*(): Tensor[float] =
         #echo fNew(w, y), " for r ", (R.float * 0.0005 + 0.0015), " and e ", energy_keV
       #echo total_emrate
 
-  echo longPlasmons[0]
+  #echo longPlasmons[0]
   echo "creating all plots..."
 
   var dfNZ = seqsToDf({ "Radius": rs,
