@@ -333,17 +333,18 @@ proc bfield(r:float): float = #r in sun radius percentage
     bfield_outer_T = 4.0
     lambda1 = 10.0*radius_cz + 1.0
     lambda_factor = (1.0 + lambda1)*pow(1.0 + 1.0/lambda1, lambda1);
-  var result = 0.0
-  if r < radius_cz + size_tach:
+  var bfield = 0.0
+  if r < (radius_cz + size_tach):
     var x = pow(r/radius_cz, 2.0)
-    if x < 1.0: result += bfield_rad_T * lambda_factor * x * pow(1.0-x, lambda1)
-    var y = pow((r - radius_cz)/size_tach, 2.0)
-    if y < 1.0: result += bfield_tach_T * (1.0-y)
+    if x < 1.0: bfield = bfield_rad_T * lambda_factor * x * pow(1.0-x, lambda1)
+    var y = pow(((r - radius_cz) / size_tach), 2.0)
+    if y < 1.0: bfield = bfield_tach_T * (1.0-y)
   else:
     var z = pow((r - radius_outer)/size_outer, 2.0)
-    if z < 1.0: result += bfield_outer_T*(1.0 - z)
+    if z < 1.0: bfield = bfield_outer_T*(1.0 - z)
+    else: bfield = 0.0
   
-  return result/(1.0e6 * sqrt(4.0 * PI) * 1.4440271 * 1.0e-3) # in keV^2
+  result = bfield/(1.0e6 * sqrt(4.0 * PI) * 1.4440271 * 1.0e-3) # in keV^2
     
 
 
@@ -424,7 +425,7 @@ proc longPlasmon(energy: float, ne: float, me: float, alpha: float, bfieldR: flo
   let
     xi2 = gammaL*energy
     fwhm = sqrt(om2 + xi2) - sqrt(om2 - xi2) # FWHM of Lorentz/Cauchy peak
-  # if (gsl_pow_2(om2 - om_pl_sq) > 100.0 * om2*gammaL*gammaL) { return 0; } //just integrate around resonance
+  #### if (gsl_pow_2(om2 - om_pl_sq) > 100.0 * om2*gammaL*gammaL) { return 0; } //just integrate around resonance
   if abs(energy - sqrt(omPlSq)) > 18.0*fwhm: return 0 # Just integrate around resonance
   let 
     average_bfield_sq = bfieldR*bfieldR/3.0
@@ -589,7 +590,7 @@ proc main*(): Tensor[float] =
   let energies = linspace(1.0, 10000.0, nElems)
 
   let nRadius = df["Rho"].len
-
+  
   ## now let's plot radius against temperature colored by density
   ggplot(df, aes("Radius", "Temp", color = "Rho")) +
     geom_line() +
@@ -600,14 +601,18 @@ proc main*(): Tensor[float] =
     n_Z = newSeqWith(nRadius, newSeq[float](29)) #29 elements
     n_e: float
     n_e_old: float
+    n_esfloat: seq[float]
     n_es: seq[int]
     n_eInt: int
     distNe: float
     distTemp: float
     temperature: int
     temperatures: seq[int]
+    tempFloat: seq[float]
     rs3: seq[float]
     alphaR: seq[float]
+    bfields: seq[float]
+    ompls: seq[float]
 
   let noElement = @[3, 4, 5, 9, 15, 17, 19, 21, 22, 23, 27]
   const
@@ -655,19 +660,24 @@ proc main*(): Tensor[float] =
     for Z in 0..<elements.len:
       n_e += (rho[iRadius]/amu) * charges[Z] * df[elements[Z]][iRadius, float] / atomicMass[Z] # (g/cm³ /g) = 1/cm³
     n_e_old = (rho[iRadius]/amu) * (1 + df[elements[0]][iRadius, float]/2)
+    n_esfloat.add(n_e)
     for iTemp in 0..90:
       distTemp = log(df["Temp"][iRadius, float], 10.0) / 0.025 - float(140 + 2 * iTemp)
       if abs(distTemp) <= 1.0:
         temperature = 140 + 2 * iTemp
     temperatures.add(temperature)
+    tempFloat.add(df["Temp"][iRadius, float])
     for iNe in 0..17:
       distNe = log(n_e, 10.0) / 0.25 - float(74 + iNe * 2)
       if abs(distNe) <= 1.0:
         n_eInt = 74 + iNe * 2
     n_es.add(n_eInt)
     rs3.add(iRadius.float * 0.0005 + 0.0015)
+    ompls.add(omegaPlasmonSq(alpha, (n_e * 7.683e-24), m_e_keV))
+    bfields.add(bfield(0.0015 + iRadius.float * 0.0005))
     var metallicity = 1.0 - n_Z[iRadius][1] - n_Z[iRadius][2]
     var alphaRs = 0.0
+    #echo n_e * 7.683e-24, " ", pow(10.0, (n_eInt.float * 0.25)) * 7.683e-24
     #for k in 2..< 29:
       #alphaRs += n_Z[iRadius][k+1] / metallicity #* ionisationsqr_element(r, element) / aAt(k)
     #alphaR.add(alphaRs)
@@ -681,6 +691,19 @@ proc main*(): Tensor[float] =
     geom_point() +
     ggtitle("Radius versus temperature of solar mode, colored by density") +
     ggsave("out/radius_temp_ne.pdf")
+
+  var dfPlas = seqsToDf({ "Radius": rs3,
+                        "Omega": ompls,
+                        "B": bfields})
+  ggplot(dfPlas, aes("Radius", "Omega")) +
+    geom_line() +
+    scale_y_log10()+
+    ggtitle("Radius versus plasma frequency") +
+    ggsave("out/radius_omegapl.pdf")
+  ggplot(dfPlas, aes("Radius", "B")) +
+    geom_line() +
+    ggtitle("Radius versus B field") +
+    ggsave("out/radius_B.pdf")
 
 
 
@@ -720,6 +743,7 @@ proc main*(): Tensor[float] =
     posOP = zeros[int](nRadius, nElems)
     ironOpE: seq[float]
     n_e_keV: float
+    temp_keV: float
     zs = newSeqOfCap[int](100_000)
     rs = newSeqOfCap[float](100_000)
     rs2 = newSeqOfCap[float](100_000)
@@ -732,26 +756,30 @@ proc main*(): Tensor[float] =
   for R in 0 ..< nRadius:
     #echo "Radius ", R
     n_eInt = n_es[R]
+    
     temperature = temperatures[R]
     let
       n_esR = n_es[R].float
+      n_eFloat = n_esfloat[R] * 7.683e-24
       temp = temperatures[R].float
-      bfieldR = bfield(R/nRadius) #or something like that
-    
+      radius = 0.0015 + R.float * 0.0005
+      bfieldR = bfield(radius) #or something like that
+    n_e_keV = pow(10.0, (n_esR * 0.25)) * 7.683e-24 # was 1/cm³ #correct conversion
+    n_e_keV = n_eFloat
+    #echo n_e_keV, " ", n_eFloat
+    temp_keV = pow(10.0, (temp * 0.025)) * 8.617e-8 # was K # correct conversion
+    let temp_keVFloat = tempFloat[R] * 8.617e-8
+    temp_keV = temp_keVFloat
+    var temp_K = pow(10.0, (temp * 0.025))
     for iE in energies:
-      var sum = 0.0
-      var opacitySum = 0.0
-      var absCoef = 0.0
-      n_e_keV = pow(10.0, (n_esR * 0.25)) * 7.683e-24 # was 1/cm³ #correct conversion
-      let temp_keV = pow(10.0, (temp * 0.025)) * 8.617e-8 # was K # correct conversion
-      var temp_K = pow(10.0, (temp * 0.025))
-
-      let energy_keV = iE * 0.001 #w * temp_keV
-      var energy_J = 1.60218e-16 * energy_keV
-      var w = energy_keV / temp_keV #toFloat(dfMesh["u"][iE.int])
-      var iEindex = (iE - 1.0).toInt 
-      var table = 1.0
-      var prevMesh = 1.0
+      var
+        sum = 0.0
+        absCoef = 0.0
+        table = 1.0
+      let
+        energy_keV = iE * 0.001 #w 
+        w = energy_keV / temp_keV #toFloat(dfMesh["u"][iE.int])
+        iEindex = (iE - 1.0).toInt 
       
       #let n_bar_keV = n_Z[R][1] * 7.645e-24 + n_Z[R][2] * 7.645e-24 + alphaR[R] * metallicity(r)) * density(r)/((1.0E+9*eV2g)*atomic_mass_unit
       let debye_scale = sqrt( (4.0 * PI * alpha / temp_keV) *
@@ -834,6 +862,7 @@ proc main*(): Tensor[float] =
       let total_emrate_s = total_emrate / (6.58e-19) # in 1/sec
       emratesS[R, iEindex] = total_emrate
       emratesInS[R, iEindex] = total_emrate_s
+      
       #if w <= 0.0732 :
         #echo transPlas
       # if want to have absorbtion coefficient of a radius and energy: R = (r (in % of sunR) - 0.0015) / 0.0005
@@ -841,6 +870,7 @@ proc main*(): Tensor[float] =
       #if iEindex == 110:
         #echo fNew(w, y), " for r ", (R.float * 0.0005 + 0.0015), " and e ", energy_keV
       #echo total_emrate
+    #echo R, " ", omegaPlasmonSq(alpha, n_e_keV, m_e_keV)
 
   #echo longPlasmons[0]
   echo "creating all plots..."
@@ -910,9 +940,10 @@ proc main*(): Tensor[float] =
     geom_line() + #size = some(0.5)
     xlab("Axion energy [eV]") +
     ylab("Flux [keV⁻¹ y⁻¹ m⁻²]") +
-    scale_y_continuous() +
-    scale_x_continuous() +
-    ylim(0.0, 1e23) +
+    scale_y_log10() +
+    scale_x_log10() +
+    #ylim(0.0, 1e23) +
+    xlim(0.0, 1000.0) +
     ggtitle(&"Differential solar axion flux for g_ae = {g_ae}, g_aγ = {g_agamma} GeV⁻¹") +
     margin(right = 6.5) +
     ggsave("out/diffFlux.pdf", width = 800, height = 480)
