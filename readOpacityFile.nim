@@ -344,7 +344,7 @@ proc bfield(r:float): float = #r in sun radius percentage
     if z < 1.0: bfield = bfield_outer_T*(1.0 - z)
     else: bfield = 0.0
   
-  result = bfield/(1.0e6 * sqrt(4.0 * PI) * 1.4440271 * 1.0e-3) # in keV^2
+  result = bfield/(1.0e6 * 1.4440271 * 1.0e-3 * sqrt(4.0 * PI)) # in keV^2
     
 
 
@@ -682,7 +682,7 @@ proc main*(): Tensor[float] =
       #alphaRs += n_Z[iRadius][k+1] / metallicity #* ionisationsqr_element(r, element) / aAt(k)
     #alphaR.add(alphaRs)
 
-  var dfTemp = seqsToDf({ "Radius": rs3,
+  #[var dfTemp = seqsToDf({ "Radius": rs3,
                         "Temp": temperatures,
                         "Ne": n_es})
   echo dfTemp
@@ -703,7 +703,7 @@ proc main*(): Tensor[float] =
   ggplot(dfPlas, aes("Radius", "B")) +
     geom_line() +
     ggtitle("Radius versus B field") +
-    ggsave("out/radius_B.pdf")
+    ggsave("out/radius_B.pdf")]#
 
 
 
@@ -767,7 +767,7 @@ proc main*(): Tensor[float] =
     n_e_keV = pow(10.0, (n_esR * 0.25)) * 7.683e-24 # was 1/cm³ #correct conversion
     n_e_keV = n_eFloat
     #echo n_e_keV, " ", n_eFloat
-    temp_keV = pow(10.0, (temp * 0.025)) * 8.617e-8 # was K # correct conversion
+    let temp_keVTable = pow(10.0, (temp * 0.025)) * 8.617e-8 # was K # correct conversion
     let temp_keVFloat = tempFloat[R] * 8.617e-8
     temp_keV = temp_keVFloat
     var temp_K = pow(10.0, (temp * 0.025))
@@ -778,17 +778,16 @@ proc main*(): Tensor[float] =
         table = 1.0
       let
         energy_keV = iE * 0.001 #w 
-        w = energy_keV / temp_keV #toFloat(dfMesh["u"][iE.int])
+        w = energy_keV / temp_keVTable #toFloat(dfMesh["u"][iE.int])
         iEindex = (iE - 1.0).toInt 
       
       #let n_bar_keV = n_Z[R][1] * 7.645e-24 + n_Z[R][2] * 7.645e-24 + alphaR[R] * metallicity(r)) * density(r)/((1.0E+9*eV2g)*atomic_mass_unit
-      let debye_scale = sqrt( (4.0 * PI * alpha / temp_keV) *
-                              (n_e_keV + n_Z[R][1] * 7.645e-24 +
-                               4.0 * n_Z[R][2] * 7.645e-24 ))
-      let debye_scale_squared = (4.0 * PI * alpha / temp_keV) *
+      let 
+        debye_scale_squared = (4.0 * PI * alpha / temp_keV) *
                                 (n_e_keV + n_Z[R][1] * 7.645e-24 +
                                  4.0 * n_Z[R][2] * 7.645e-24 )
-      let y = debye_scale / (sqrt( 2.0 * m_e_keV * temp_keV))
+        debye_scale = sqrt(debye_scale_squared)
+        y = debye_scale / (sqrt( 2.0 * m_e_keV * temp_keV))
       
       if w >= 20.0 or w <= 0.0732: #because the tables dont go beyond that, apparently because the axion production beyond that is irrelevant #except for He, maybe find a better solution
         for (Z_str, Z) in iterEnum(ElementKind):
@@ -846,11 +845,13 @@ proc main*(): Tensor[float] =
         term2 = term2(alpha, g_ae, energy_keV, n_e_keV, m_e_keV, temp_keV)# completes the Compton contribution #keV
         term3 = bremsEmrate(alpha, g_ae, energy_keV, n_e_keV, m_e_keV, temp_keV, w, y) # contribution from ee-bremsstahlung
         compton = comptonEmrate(alpha, g_ae, energy_keV, n_e_keV, m_e_keV, temp_keV)
+      let
         primakoff = primakoff(temp_keV, energy_keV, gagamma, debye_scale_squared, alpha, n_e_keV, m_e_keV, n_Z[R][2], n_Z[R][1])
-        longPlas = longPlasmon(energy_keV, n_e_keV, m_e_keV, alpha, bfieldR, temp_keV, (absCoefs[R, iEindex]), gagamma) #is correct with the absorbtion coefficient
+        longPlas = longPlasmon(energy_keV, n_e_keV, m_e_keV, alpha, bfieldR, temp_keV, (absCoefs[R, iEindex]), gagamma) #is correct with the absorbtion coefficient #https://arxiv.org/pdf/2006.10415.pdf make similar log pictures
         transPlas = transPlasmon(energy_keV, n_e_keV, m_e_keV, alpha, bfieldR, temp_keV, (absCoefs[R, iEindex]), gagamma) #is correct with the absorbtion coefficient
       #if energy_keV == 4.0: echo energy_keV, " ", primakoff
       #if energy_keV == 5.0: echo energy_keV, " ", primakoff
+
       term1s[R, iEindex] = term1
       comptons[R, iEindex] = compton
       term3s[R, iEindex] = term3
@@ -858,7 +859,7 @@ proc main*(): Tensor[float] =
       primakoffs[R, iEindex] = primakoff
       longPlasmons[R, iEindex] = longPlas
       transPlasmons[R, iEindex] = transPlas
-      let total_emrate = compton +  term1 + term3 + ffterm #+ longPlas + transPlas + primakoff
+      let total_emrate = compton +  term1 + term3 + ffterm + longPlas + transPlas + primakoff
       let total_emrate_s = total_emrate / (6.58e-19) # in 1/sec
       emratesS[R, iEindex] = total_emrate
       emratesInS[R, iEindex] = total_emrate_s
@@ -875,14 +876,14 @@ proc main*(): Tensor[float] =
   #echo longPlasmons[0]
   echo "creating all plots..."
 
-  var dfNZ = seqsToDf({ "Radius": rs,
+  #[var dfNZ = seqsToDf({ "Radius": rs,
                         "nZ": nZs,
                         "Z": zs})
   echo dfNZ
   ggplot(dfNZ, aes("Radius", "nZ", color = "Z")) +
     geom_point() +
     ggtitle("Radius versus atomic density for different Z") +
-    ggsave("out/radius_nZ_Z.pdf")
+    ggsave("out/radius_nZ_Z.pdf")]#
 
   #var dfOp = seqsToDf({ "Radius": rs2,
   #                      "opacity": ops,
@@ -940,10 +941,10 @@ proc main*(): Tensor[float] =
     geom_line() + #size = some(0.5)
     xlab("Axion energy [eV]") +
     ylab("Flux [keV⁻¹ y⁻¹ m⁻²]") +
-    scale_y_log10() +
-    scale_x_log10() +
-    #ylim(0.0, 1e23) +
-    xlim(0.0, 1000.0) +
+    ylim(0, 1.5e23) +
+    #xlim(0.0, 1000.0) +
+    #scale_y_log10() + #scale_y_continuous() +
+    #scale_x_log10() +
     ggtitle(&"Differential solar axion flux for g_ae = {g_ae}, g_aγ = {g_agamma} GeV⁻¹") +
     margin(right = 6.5) +
     ggsave("out/diffFlux.pdf", width = 800, height = 480)
