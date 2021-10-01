@@ -131,7 +131,7 @@ let
 
   roomTemp = 293.15.K
   mAxion = 0.0853#0.26978249412621896 #eV, corresponds to set p and T gas valus #0.4 #eV for example
-  g_aγ = 1e-12.GeV⁻¹
+  g_aγ = 1e-10.GeV⁻¹
 
 ## Chipregions#####
 
@@ -1234,15 +1234,14 @@ proc traceAxion(res: var Axion,
       let splineCath = newCubicSpline(energiesCaths, transCaths)
       transWindow = spline.eval(energyAx * 1000.0) * splineCath.eval(energyAx * 1000.0)
       
-      if dfTab["siNfile"]["PhotonEnergy(eV)"].toTensor(float)[energyAxTransWindow - 1] < 300.0:
-        #echo "new ", energyAx, " ",transWindow
-        if cfIgnoreDetWindow notin flags:
-          weight *= transWindow 
+      #if dfTab["siNfile"]["PhotonEnergy(eV)"].toTensor(float)[energyAxTransWindow - 1] < 300.0:
+        #echo energyAx, " ", transWindow
+        
+      if cfIgnoreDetWindow notin flags:
+        weight *= transWindow 
       #transWindow = dfTab["siNfile"]["Transmission"].toTensor(float)[energyAxTransWindow] #*
                     #dfTab["alFile"]["Transmission"].toTensor(float)[energyAxTransWindow]
-      else:
-        if cfIgnoreDetWindow notin flags:
-          weight *= transWindow
+      
       res.transprobWindow = transWindow
       res.transProbDetector = transWindow
       res.energiesAxAll = energyAx
@@ -1445,11 +1444,12 @@ proc generateResultPlots(axions: seq[Axion],
   ggplot(dfFluxE, aes("Axion energy [keV]", weight = "Transmission probability")) +
     geom_histogram(binWidth = 0.00001, lineWidth= some(1.2)) +
     #backgroundColor(parseHex("8cc7d4")) +
-    gridLineColor(parseHex("8cc7d4")) +
-    canvasColor(parseHex("8cc7d4")) +
+    #gridLineColor(parseHex("8cc7d4")) +
+    #canvasColor(parseHex("8cc7d4")) +
     #theme_transparent() +
     ylab("photon flux") + 
-    ylim(0.0, 1e-07) +
+    #ylim(0.0, 0.0001) +
+    #xlim(0.0, 1.0) +
     ggtitle("Simulated photon flux depending on the energy of the axion") +
     ggsave(&"out/fluxAfter_{windowYear}.pdf") 
 
@@ -1673,7 +1673,7 @@ proc calculateFluxFractions(setup: ExperimentSetupKind,
                             flags: set[ConfigFlags]) =
 
   let expSetup = newExperimentSetup(setup, stage)
-  let energies = linspace(1.0, 10000.0, 10000)
+  let energies = linspace(1.0, 15000.0, 15000)
 
   var
     integralNormalisation = 0.0
@@ -1684,16 +1684,17 @@ proc calculateFluxFractions(setup: ExperimentSetupKind,
     integralGold = 0.0
 
   ## TODO: make the code use tensor for the emission rates!
-  var emRatesDf = readCsv("solar_model_tensor.csv")
+  var emRatesDf = readCsv("solar_model_tensor15.csv")
     .rename(f{"Radius" <- "dimension_1"}, f{"Energy" <- "dimension_2"}, f{"Flux" <- "value"})
-
+  
   let emRatesTensor = emRatesDf["Flux"].toTensor(float)
     .reshape([emRatesDf.filter(fn {`Radius` == 0}).len, emRatesDf.filter(
         fn {`Energy` == 0}).len])
   let emRates = emRatesTensor
     .toRawSeq
     .reshape2D([emRatesTensor.shape[1], emRatesTensor.shape[0]])
-  doAssert emRates[0].len == 10000
+  
+  doAssert emRates[0].len == 15000
   var emRatesRadiusCumSum = emRates.mapIt(it.sum).cumSum()
   # normalize to one
   emRatesRadiusCumSum.applyIt(it / emRatesRadiusCumSum[^1])
@@ -1759,7 +1760,7 @@ proc calculateFluxFractions(setup: ExperimentSetupKind,
       alpha = (i.float * 0.01).round(2)
       goldfile = fmt"./resources/reflectivity/{alpha:4.2f}degGold0.25microns"
       dfTab[fmt"goldfile{alpha:4.2f}"] = readCsv(goldfile, sep = ' ')
-
+  echo dfTab
   let centerVecs = expSetup.initCenterVectors()
 
   ## In the following we will go over a number of points in the sun, whose location and
@@ -1799,7 +1800,7 @@ proc main(ignoreDetWindow = false, ignoreGasAbs = false,
   if ignoreGoldReflect: flags.incl cfIgnoreGoldReflect
   echo "Flags: ", flags
 
-  calculateFluxFractions(esCAST,
+  calculateFluxFractions(esBabyIAXO,
                          dkInGrid2017,
                          skVacuum,
                          flags) # radiationCharacteristic = "axionRadiation::characteristic::sar"

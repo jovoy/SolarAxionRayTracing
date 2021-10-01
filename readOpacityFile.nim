@@ -586,8 +586,8 @@ proc main*(): Tensor[float] =
   ## First lets access the solar model and calculate some necessary values
   const solarModel = "./ReadSolarModel/resources/AGSS09_solar_model_stripped.dat"
   var df = readSolarModel(solarModel)
-  let nElems = 10000 # TODO: clarify exact number
-  let energies = linspace(1.0, 10000.0, nElems)
+  let nElems = 15000 # TODO: clarify exact number
+  let energies = linspace(1.0, 15000.0, nElems)
 
   let nRadius = df["Rho"].len
   
@@ -895,7 +895,7 @@ proc main*(): Tensor[float] =
   #  ggsave("out/radius_op_energies.pdf")
 
   var diffFluxDf = newDataFrame()
-  diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, emratesS, "Total flux")
+  diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, emratesS, "Total ABC flux")
   diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, term1s, "FB BB Flux")
   diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, comptons, "Compton Flux")
   diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, term3s, "EE Flux")
@@ -937,17 +937,18 @@ proc main*(): Tensor[float] =
                                 "Fluxfraction [keV⁻¹y⁻¹m⁻²]": fluxes,
                                 "type": kinds })]#
   
-  ggplot(difffluxDf, aes("Energy", "diffFlux", color = "type")) +
+  #[ggplot(difffluxDf, aes("Energy", "diffFlux", color = "type")) +
     geom_line() + #size = some(0.5)
     xlab("Axion energy [eV]") +
     ylab("Flux [keV⁻¹ y⁻¹ m⁻²]") +
     ylim(0, 1.5e23) +
     #xlim(0.0, 1000.0) +
-    #scale_y_log10() + #scale_y_continuous() +
+    #scale_y_log10() + #
+    scale_y_continuous() +
     #scale_x_log10() +
     ggtitle(&"Differential solar axion flux for g_ae = {g_ae}, g_aγ = {g_agamma} GeV⁻¹") +
     margin(right = 6.5) +
-    ggsave("out/diffFlux.pdf", width = 800, height = 480)
+    ggsave("out/diffFlux.pdf", width = 800, height = 480)]#
 
   result = emratesS
 
@@ -955,7 +956,7 @@ when isMainModule:
   
   let solarModel = main()
   echo "writing to csv"
-  solarModel.to_csv("solar_model_tensor.csv")
+  solarModel.to_csv("solar_model_tensor15.csv")
 
   when false:
     ## TODO: better approach to store the full "solar model" as a CSV from a DF
