@@ -3,3 +3,5 @@
 The main part of the ray tracer can be found in raytracer2018.nim. To run it, different files like X-Ray reflectivity of different materials are needed but can be requested. The possibility to change from BabyIAXO to CAST is in the very bottom of the file.
 
 The calculation of the gas phase can be found in the folder axionMass and the emission rates from the sun are calculated in readOpacityFile.nim and readSolarModel.nim.
+
+![alt text](https://github.com/jovoy/AxionElectronLimit/blob/master/out/BabyIAXO/DFSZFlux.png
