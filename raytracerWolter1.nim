@@ -51,9 +51,9 @@ for i in 17..80:
   alpha = (i.float * 0.01).round(2)
   goldfile = fmt"./resources/reflectivity/{alpha:4.2f}degGold0.25microns"
   dfTable[fmt"goldfile{alpha:4.2f}"] = readCsv(goldfile, sep = ' ')
+echo dfTable
 
-
-for l in 0..499:
+for l in 0..<999:
   reflectionProbE = 0.0
   for j in 17..80:    
     alpha1 = (j.float * 0.01).round(2)
@@ -70,12 +70,12 @@ for j in 17..80:
   for l in 0..499:  
     
     reflectionProb = dfTable[fmt"goldfile{alpha1:4.2f}"]["Reflectivity"].toTensor(float)[l]
-    echo reflectionProb
+    #echo reflectionProb
     reflectionProbAlpha += reflectionProb * 19.98 * 0.0001  #dont know why the 0.0001
   angles.add(alpha1)
   reflectivityAlpha.add(reflectionProbAlpha)
-echo angles
-echo reflectivityAlpha
+#echo angles
+#echo reflectivityAlpha
 
 ######now the things that have to be substracted from the total area################################
 
@@ -110,10 +110,11 @@ echo dfRef
 ggplot(dfRef) +
   geom_line(aes("Photon Energy[eV]", "Reflectivity")) +
   geom_line(aes("Photon Energy[eV]", "TotalEfficiency")) +
-  #xlim(100.0, 10000.0) +
-  scale_x_log10() +
+  xlim(0.0, 15000.0) +
+  #scale_x_log10() +
   #scale_y_log10() +
-  ggtitle("The reflectivity od the XMM telescope depending on the photon energy") +
+  ylab("Total efficiency [%]") +
+  ggtitle("The reflectivity of the XMM telescope") +
   ggsave(&"out/XMM_Reflectivity.pdf")
 
 let dfRefAlpha = seqsToDf({"Reflectivity": reflectivityAlpha,
