@@ -4,4 +4,4 @@ The main part of the ray tracer can be found in raytracer2018.nim. To run it, di
 
 The calculation of the gas phase can be found in the folder axionMass and the emission rates from the sun are calculated in readOpacityFile.nim and readSolarModel.nim.
 
-![alt text](https://github.com/jovoy/AxionElectronLimit/blob/master/out/BabyIAXO/DFSZFlux.png
+![alt text](https://github.com/jovoy/AxionElectronLimit/blob/master/out/BabyIAXO/DFSZFlux.png?raw=true)
