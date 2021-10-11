@@ -8,3 +8,6 @@ Here is for example the flux of a DFSZ axion with 57Fe and plasmon contributions
 #+ATTR_HTML: :style margin-left: auto; margin-right: auto;
 [[https://github.com/jovoy/AxionElectronLimit/blob/master/out/BabyIAXO/DFSZFlux.png?raw=true]]
 
+And here the same for a KSVZ axion:
+#+ATTR_HTML: :style margin-left: auto; margin-right: auto;
+[[https://github.com/jovoy/AxionElectronLimit/blob/master/out/BabyIAXO/KSVZFlux.png?raw=true]]
