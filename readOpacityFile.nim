@@ -414,7 +414,7 @@ proc primakoff(temp, energy, gagamma, ks2, alpha, ne, me: float, n_Z2: float, n_
           2.0 * sqrt(1.0 - (4.0 * PI * ne) / (me * energy * energy)) /
           (exp(energy/temp) - 1.0)]##[]#
 
-proc longPlasmon(energy: float, ne: float, me: float, alpha: float, bfieldR: float, temp: float, opacity: float, gagamma: float): float =
+proc longPlasmon(energy: float, ne: float, me: float, alpha: float, bfieldR: float, temp: float, opacity: float, gagamma: float): float = #https://arxiv.org/pdf/2101.08789.pdf
   let 
     omPlSq = omegaPlasmonSq(alpha, ne, me)
     prefactor = gagamma * gagamma * 1e-12
@@ -446,6 +446,20 @@ proc transPlasmon(energy: float, ne: float, me: float, alpha: float, bfieldR: fl
     average_b_field_sq = pow(bfieldR, 2.0) / 3.0
     deltaTsq = gagamma*gagamma * 1e-12 * average_b_field_sq / 4.0
   result = geom_factor * photon_polarization * gamma * deltaTsq / ( (deltaPsq+pow(0.5*gamma, 2.0)) * (exp(u) - 1.0) ) 
+
+proc iron(ganuclei: float, temp: float, energy: float, rho: float): float = #https://iopscience.iop.org/article/10.1088/1475-7516/2009/12/002/pdf
+  let
+    tau_gamma = 1.3e-6 * 1.519e18 #1/keV was s
+    n = 3.0e17 * 1.7826e-30 #1/keV was g⁻1
+    e_gamma = 14.4 #keV
+    m_Fe = 56.9353928 * 1.6605e-24 * 5.60958616722e29 #was g now keV
+    u = e_gamma/temp #what about k? is correct no k
+    w_1 = 4.0 * exp(-u)/(2.0 + 4.0 * exp(-u)) # the former is used in the paper as an approximation #2.0 * exp(-u) #
+    gamma_frac = 1.82 * ganuclei * ganuclei
+    sigma = e_gamma * sqrt(temp / m_Fe)  #in keV
+    n_a = n * w_1 * gamma_frac / tau_gamma  #in no units #/ 5.60958616722e29 * 4.135665538536e-18
+  #echo w_1, " ", 4.0 * exp(-u)/(2.0 + 4.0 * exp(-u))
+  result = n_a * exp(- pow(energy - e_gamma, 2.0) / (2.0 * sigma * sigma)) * rho * sqrt(2.0 * PI) * PI/ (sigma * energy * energy) #because of the way the flux is portrait
   
 
 proc getFluxFraction(energies: seq[float], df: DataFrame,
@@ -617,8 +631,10 @@ proc main*(): Tensor[float] =
   let noElement = @[3, 4, 5, 9, 15, 17, 19, 21, 22, 23, 27]
   const
     alpha = 1.0 / 137.0
-    g_ae = 1e-12 # Redondo 2013: 0.511e-10
-    gagamma = 1e-10 #1e-12 #the latter for DFSZ
+    g_ae = 2e-15#5e-12 # Redondo 2013: 0.511e-10  #1e-11 #
+    gagamma = 2e-12 #the latter for DFSZ  #1e-9 #5e-10 #
+    m_a = 0.0853 #eV
+    ganuclei = 1e-9 #1.475e-8 * m_a #KSVZ model #no units  #1e-7
     m_e_keV = 510.998 #keV
     e_charge = sqrt(4.0 * PI * alpha)#1.0
     kB = 1.380649e-23
@@ -740,6 +756,8 @@ proc main*(): Tensor[float] =
     primakoffs = zeros[float](nRadius, nElems)
     longPlasmons = zeros[float](nRadius, nElems)
     transPlasmons = zeros[float](nRadius, nElems)
+    iron57s = zeros[float](nRadius, nElems)
+    abc = zeros[float](nRadius, nElems)
     posOP = zeros[int](nRadius, nElems)
     ironOpE: seq[float]
     n_e_keV: float
@@ -764,7 +782,8 @@ proc main*(): Tensor[float] =
       temp = temperatures[R].float
       radius = 0.0015 + R.float * 0.0005
       bfieldR = bfield(radius) #or something like that
-    n_e_keV = pow(10.0, (n_esR * 0.25)) * 7.683e-24 # was 1/cm³ #correct conversion
+      rho_keV = rho[R] * 7.683e-24 * 5.60958616722e29 #g/cm³ to keV⁴
+    n_e_keV = pow(10.0, (n_esR * 0.25)) * 7.683e-24 # was 1/cm³ #correct conversion #now keV³
     n_e_keV = n_eFloat
     #echo n_e_keV, " ", n_eFloat
     let temp_keVTable = pow(10.0, (temp * 0.025)) * 8.617e-8 # was K # correct conversion
@@ -849,6 +868,7 @@ proc main*(): Tensor[float] =
         primakoff = primakoff(temp_keV, energy_keV, gagamma, debye_scale_squared, alpha, n_e_keV, m_e_keV, n_Z[R][2], n_Z[R][1])
         longPlas = longPlasmon(energy_keV, n_e_keV, m_e_keV, alpha, bfieldR, temp_keV, (absCoefs[R, iEindex]), gagamma) #is correct with the absorbtion coefficient #https://arxiv.org/pdf/2006.10415.pdf make similar log pictures
         transPlas = transPlasmon(energy_keV, n_e_keV, m_e_keV, alpha, bfieldR, temp_keV, (absCoefs[R, iEindex]), gagamma) #is correct with the absorbtion coefficient
+        iron57 = iron(ganuclei, temp_keV, energy_keV, rho_keV)
       #if energy_keV == 4.0: echo energy_keV, " ", primakoff
       #if energy_keV == 5.0: echo energy_keV, " ", primakoff
 
@@ -859,7 +879,9 @@ proc main*(): Tensor[float] =
       primakoffs[R, iEindex] = primakoff
       longPlasmons[R, iEindex] = longPlas
       transPlasmons[R, iEindex] = transPlas
-      let total_emrate = compton +  term1 + term3 + ffterm + longPlas + transPlas + primakoff
+      iron57s[R, iEindex] = iron57
+      abc[R, iEindex] = compton +  term1 + term3 + ffterm
+      let total_emrate = compton +  term1 + term3 + ffterm + longPlas + transPlas + primakoff #+ iron57
       let total_emrate_s = total_emrate / (6.58e-19) # in 1/sec
       emratesS[R, iEindex] = total_emrate
       emratesInS[R, iEindex] = total_emrate_s
@@ -895,7 +917,7 @@ proc main*(): Tensor[float] =
   #  ggsave("out/radius_op_energies.pdf")
 
   var diffFluxDf = newDataFrame()
-  diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, emratesS, "Total ABC flux")
+  diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, abc, "Total ABC flux")
   diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, term1s, "FB BB Flux")
   diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, comptons, "Compton Flux")
   diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, term3s, "EE Flux")
@@ -903,7 +925,14 @@ proc main*(): Tensor[float] =
   diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, primakoffs, "Primakoff Flux")
   diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, longPlasmons, "LP Flux")
   diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, transPlasmons, "TP Flux")
+  diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, iron57s, "57Fe Flux")
   echo diffFluxDf
+  let 
+    ironflux = getFluxFractionR(energies, df, n_es, temperatures, iron57s, "57Fe Flux")
+  echo ironflux
+  let
+    ir = ironflux["diffFlux"].toTensor(float).torawseq
+  echo "57Fe Flux ", ir.foldl(a + b) * 0.001 / ganuclei / ganuclei * 3.171e-12 , " g_aN² cm⁻2 s⁻1"
   #let diffFluxDf = seqsToDf({ "Energy / eV" : energies,
   #                            "Flux / keV⁻¹ m⁻² yr⁻¹" : diff_fluxs })
   #diffFluxDf.write_csv(&"axion_diff_flux_gae_{g_ae}_gagamma_{g_agamma}.csv")
@@ -937,18 +966,19 @@ proc main*(): Tensor[float] =
                                 "Fluxfraction [keV⁻¹y⁻¹m⁻²]": fluxes,
                                 "type": kinds })]#
   
-  #[ggplot(difffluxDf, aes("Energy", "diffFlux", color = "type")) +
+  ggplot(difffluxDf, aes("Energy", "diffFlux", color = "type")) +
     geom_line() + #size = some(0.5)
     xlab("Axion energy [eV]") +
     ylab("Flux [keV⁻¹ y⁻¹ m⁻²]") +
-    ylim(0, 1.5e23) +
+    #ylim(0, 2.5e24) +
     #xlim(0.0, 1000.0) +
+    xlim(0.0, 15000.0) +
     #scale_y_log10() + #
     scale_y_continuous() +
     #scale_x_log10() +
-    ggtitle(&"Differential solar axion flux for g_ae = {g_ae}, g_aγ = {g_agamma} GeV⁻¹") +
+    ggtitle(&"Differential solar axion flux for g_ae = {g_ae}, g_aγ = {g_agamma} GeV⁻¹, g_aN = {ganuclei}") +
     margin(right = 6.5) +
-    ggsave("out/diffFlux.pdf", width = 800, height = 480)]#
+    ggsave("out/diffFlux.pdf", width = 800, height = 480)
 
   result = emratesS
 
