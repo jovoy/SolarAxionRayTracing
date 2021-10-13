@@ -1082,7 +1082,6 @@ proc traceAxion(res: var Axion,
   var
     weight:float
     transmissionMagnet: float
-    transmissionTelescopeEnergy: float
 
   case expSetup.stage
   of skVacuum:
@@ -1190,12 +1189,6 @@ proc traceAxion(res: var Axion,
 
   ## Get the detector Window transmission (The stripes in the window consist of a different
   ## material than the window itself)
-  var transWindow: float
-  var transWindows: seq[float]
-  var energiesWindows: seq[float]
-  var transCaths: seq[float]
-  var energiesCaths: seq[float]
-  var energyAxTransWindow: int
   # TODO: assignment here of the different kinds is obviously broken. Instead of having
   # one kinds field + the others we should have some additional field or something #made two assignments and now it works
   ## TODO: transmission of window material etc. can also be modeled using ray tracing.
@@ -1219,24 +1212,14 @@ proc traceAxion(res: var Axion,
       res.kinds = mkSi
       res.kindsWindow = mkSi
     else:
-      energyAxTransWindow = dfTab["siNfile"]["PhotonEnergy(eV)"].toTensor(
-          float).lowerBound(energyAx * 1000.0)
-      transWindows = dfTab["siNfile"]["Transmission"].toTensor(float).toRawSeq 
-      energiesWindows = dfTab["siNfile"]["PhotonEnergy(eV)"].toTensor(float).toRawSeq
-      transCaths = dfTab["alFile"]["Transmission"].toTensor(float).toRawSeq
-      energiesCaths = dfTab["alFile"]["PhotonEnergy(eV)"].toTensor(float).toRawSeq
-      let spline = newCubicSpline(energiesWindows, transWindows)
-      let splineCath = newCubicSpline(energiesCaths, transCaths)
-      transWindow = spline.eval(energyAx * 1000.0) * splineCath.eval(energyAx * 1000.0)
-      
-      #if dfTab["siNfile"]["PhotonEnergy(eV)"].toTensor(float)[energyAxTransWindow - 1] < 300.0:
-        #echo energyAx, " ", transWindow
-        
+      ## IMPORTANT: it is *required* that all the `*File` DFs contain the ``exact same``
+      ## energy values. This is a given for the files in `resources` from henkel.gov!
+      let energyIdx = dfTab["siNfile"]["PhotonEnergy(eV)"].toTensor(
+          float).lowerBound(energyAx.to(eV).float)
+      let transWindow = dfTab["siNfile"]["Transmission", float][energyIdx]
+      let transCath   = dfTab["alFile"]["Transmission", float][energyIdx]
       if cfIgnoreDetWindow notin flags:
-        weight *= transWindow 
-      #transWindow = dfTab["siNfile"]["Transmission"].toTensor(float)[energyAxTransWindow] #*
-                    #dfTab["alFile"]["Transmission"].toTensor(float)[energyAxTransWindow]
-      
+        weight *= (transWindow * transCath)
       res.transprobWindow = transWindow
       res.transProbDetector = transWindow
       res.energiesAxAll = energyAx
