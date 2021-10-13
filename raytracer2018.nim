@@ -794,7 +794,7 @@ proc newDetectorSetup*(setup: DetectorSetupKind): DetectorSetup =
     result.depthDet = 30.0.mm
   of dkInGridIAXO:
     result.windowYear = wyIAXO
-    result.depthDet = 30.0.mm 
+    result.depthDet = 30.0.mm
     result.radiusWindow = 4.0.mm
     result.numberOfStrips = 20 #maybe baby
     result.openApertureRatio = 0.95
@@ -1252,7 +1252,7 @@ proc traceAxion(res: var Axion,
   of esCAST:
     weight *= 3.585e3 * 3600.0 * 1.5 * 90.0 #for CAST at 10 mio, three months
   of esBabyIAXO:
-    weight *= 9.5e6 * 3600.0 * 12.0 * 90.0#9.5e6 * 3600.0 * 12.0 * 90.0 for three months at 1 mio axions at BabyIAXO 
+    weight *= 9.5e6 * 3600.0 * 12.0 * 90.0#9.5e6 * 3600.0 * 12.0 * 90.0 for three months at 1 mio axions at BabyIAXO
   ## assign final axion position & weight
   res.pointdataX = pointDetectorWindow[0]
   res.pointdataY = pointDetectorWindow[1]
@@ -1418,17 +1418,6 @@ proc generateResultPlots(axions: seq[Axion],
 
   let dfFluxE = seqsToDf({ "Axion energy [keV]": energiesAx.mapIt(it.float),
                            "Transmission probability": weights })
-  ggplot(dfFluxE, aes("Axion energy [keV]", weight = "Transmission probability")) +
-    geom_histogram(binWidth = 0.00001, lineWidth= some(1.2)) +
-    #backgroundColor(parseHex("8cc7d4")) +
-    #gridLineColor(parseHex("8cc7d4")) +
-    #canvasColor(parseHex("8cc7d4")) +
-    #theme_transparent() +
-    ylab("photon flux") + 
-    #ylim(0.0, 0.0001) +
-    #xlim(0.0, 1.0) +
-    ggtitle("Simulated photon flux depending on the energy of the axion") +
-    ggsave(&"out/fluxAfter_{windowYear}.pdf") 
 
   ggplot(dfFluxE, aes("Axion energy [keV]", weight = "Transmission probability")) +
     geom_histogram(binWidth = 0.00001, lineWidth= some(1.2)) +
@@ -1436,17 +1425,29 @@ proc generateResultPlots(axions: seq[Axion],
     #gridLineColor(parseHex("8cc7d4")) +
     #canvasColor(parseHex("8cc7d4")) +
     #theme_transparent() +
-    ylab("photon flux") + 
+    ylab("photon flux") +
+    #ylim(0.0, 0.0001) +
+    #xlim(0.0, 1.0) +
+    ggtitle("Simulated photon flux depending on the energy of the axion") +
+    ggsave(&"out/fluxAfter_{windowYear}.pdf")
+
+  ggplot(dfFluxE, aes("Axion energy [keV]", weight = "Transmission probability")) +
+    geom_histogram(binWidth = 0.00001, lineWidth= some(1.2)) +
+    #backgroundColor(parseHex("8cc7d4")) +
+    #gridLineColor(parseHex("8cc7d4")) +
+    #canvasColor(parseHex("8cc7d4")) +
+    #theme_transparent() +
+    ylab("photon flux") +
     #ylim(0.0, 0.0001) +
     xlim(0.0, 1.0) +
     ggtitle("Simulated photon flux depending on the energy of the axion") +
-    ggsave(&"out/fluxAfterZoomed_{windowYear}.pdf") 
+    ggsave(&"out/fluxAfterZoomed_{windowYear}.pdf")
 
   ggplot(dfFluxE, aes("Axion energy [keV]", weight = "Transmission probability")) +
     geom_histogram(binWidth = 0.0001, lineWidth= some(1.2)) +
     theme_transparent() +
     ggtitle("Simulated photon flux depending on the energy of the axion") +
-    ggsave(&"out/fluxAfter_{windowYear}.png") 
+    ggsave(&"out/fluxAfter_{windowYear}.png")
   #[
 
   let dfXY = seqsToDf({"x": pointDataX,
@@ -1508,7 +1509,7 @@ proc generateResultPlots(axions: seq[Axion],
   if sigma1Window > pointR.len:
     sigmaAssignW.fill(0, pointR.len - 1, "sigma 2")
   elif sigma1Window < pointR.len and sigma2Window > pointR.len:
-    sigmaAssignW.fill(0, sigma1Window - 1, "sigma 1") 
+    sigmaAssignW.fill(0, sigma1Window - 1, "sigma 1")
     sigmaAssignW.fill(sigma1Window, pointR.len - 1, "sigma 2")
     rSigma1Window = pointR[sigma1Window - 1]
   else:
@@ -1522,10 +1523,10 @@ proc generateResultPlots(axions: seq[Axion],
   #dfRad.mutate(fn {string -> string: "Sigma" ~ sigmaAssign[parseInt(`Idx`)]})
   let
     dfRadOrg = dfRad.arrange("Radial component [mm]")
-    pointdataRSig = dfRadOrg["Radial component [mm]"].toTensor(float)
-    weightsSig = dfRadOrg["Transmission probability"].toTensor(float)
-    pointDataXSig = dfRadOrg["x"].toTensor(float)
-    pointDataYSig = dfRadOrg["y"].toTensor(float)
+    pointdataRSig = dfRadOrg["Radial component [mm]", float]
+    weightsSig = dfRadOrg["Transmission probability", float]
+    pointDataXSig = dfRadOrg["x", float]
+    pointDataYSig = dfRadOrg["y", float]
     sumWeights = sum(weightsSig)
 
 
@@ -1675,14 +1676,14 @@ proc calculateFluxFractions(setup: ExperimentSetupKind,
   ## TODO: make the code use tensor for the emission rates!
   var emRatesDf = readCsv("solar_model_tensor15KSVZhighIron.csv")
     .rename(f{"Radius" <- "dimension_1"}, f{"Energy" <- "dimension_2"}, f{"Flux" <- "value"})
-  
-  let emRatesTensor = emRatesDf["Flux"].toTensor(float)
+
+  let emRatesTensor = emRatesDf["Flux", float]
     .reshape([emRatesDf.filter(fn {`Radius` == 0}).len, emRatesDf.filter(
         fn {`Energy` == 0}).len])
   let emRates = emRatesTensor
     .toRawSeq
     .reshape2D([emRatesTensor.shape[1], emRatesTensor.shape[0]])
-  
+
   doAssert emRates[0].len == 15000
   var emRatesRadiusCumSum = emRates.mapIt(it.sum).cumSum()
   # normalize to one
