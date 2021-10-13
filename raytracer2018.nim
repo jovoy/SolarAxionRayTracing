@@ -285,40 +285,40 @@ proc getRandomPointFromSolarModel(center: Vec3, radius: MilliMeter,
   let z = cos(degToRad(angle2)) * r
   result = vec3(x.float, y.float, z.float) + center
 
-proc getRandomEnergyFromSolarModel(vectorInSun, center: Vec3, radius: MilliMeter,
-                                   energies: seq[float],
-                                   emissionRates: seq[seq[float]],
-                                   emRateCDFs: seq[seq[float]],
-                                   computeType: string): float =
+template genGetRandomFromSolar(name, arg, typ, retTyp, body: untyped): untyped =
+  ## This templates generates a procedure, which either returns a random energy
+  ## for an event at a given radius or a random emission rate, biased
+  ## by the emission rates at that radius.
+  ## This only works if the energies to from are evenly distributed
+  proc `name`(vectorInSun, center: Vec3, radius: MilliMeter,
+              arg: typ,
+              emRateCDFs: seq[seq[float]],
+              ): retTyp =
+    var
+      rad = (vectorInSun - center).length.mm
+      r = rad / radius # `UnitLess` radius
+      iRad {.inject.}: int
+      indexRad = (r - 0.0015) / 0.0005
+    if indexRad - 0.5 > floor(indexRad):
+      iRad = int(ceil(indexRad))
+    else: iRad = int(floor(indexRad))
+    # get the normalized (to 1) CDF for this radius
+    let cdfEmRate = emRateCDFs[iRad]
+    # sample an index based on this CDF
+    let idx {.inject.} = cdfEmRate.lowerBound(rand(1.0))
+    body
 
-  ## This function gives a random energy for an event at a given radius, biased
-  ## by the emissionrates at that radius. This only works if the energies to
-  ## choose from are evenly distributed ##
-  var
-    rad = (vectorInSun - center).length.mm
-    r = rad / radius # `UnitLess` radius
-    iRad: int
-    indexRad = (r - 0.0015) / 0.0005
-  if indexRad - 0.5 > floor(indexRad):
-    iRad = int(ceil(indexRad))
-  else: iRad = int(floor(indexRad))
-  # get the normalized (to 1) CDF for this radius
-  let cdfEmRate = emRateCDFs[iRad]
-  # sample an index based on this CDF
-  let idx = cdfEmRate.lowerBound(rand(1.0))
-  ## TODO: this is horrible. Returning a physically different function from the same
-  ## proc is extremely confusing! Especially given that we even calculate both at the
-  ## same time!
-  case computeType
-  of "energy":
-    let energy = energies[idx] * 0.001
-    result = energy
-  of "emissionRate":
-    let emissionRate = emissionRates[iRad][idx]
-    result = emissionRate
-  else:
-    doAssert false, "This should never happen! Fix this procedure, returning two distinct" &
-      " things is dangerous!"
+genGetRandomFromSolar(getRandomEnergyFromSolarModel,
+                      energies, seq[keV],
+                      keV):
+  let energy = energies[idx]
+  result = energy
+
+genGetRandomFromSolar(getRandomEmissionRateFromSolarModel,
+                      emissionRates, seq[seq[float]],
+                      float):
+  let emissionRate = emissionRates[iRad][idx]
+  result = emissionRate
 
 ## The following are some functions to determine inetersection of the rays with the
 ## geometry (pipes, magnet, mirrors) of the setup ##
