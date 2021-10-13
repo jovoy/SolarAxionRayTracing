@@ -634,7 +634,7 @@ proc main*(): Tensor[float] =
     g_ae = 2e-15#5e-12 # Redondo 2013: 0.511e-10  #1e-11 #
     gagamma = 2e-12 #the latter for DFSZ  #1e-9 #5e-10 #
     m_a = 0.0853 #eV
-    ganuclei = 1e-9 #1.475e-8 * m_a #KSVZ model #no units  #1e-7
+    ganuclei = 2e-6 #1.475e-8 * m_a #KSVZ model #no units  #1e-7
     m_e_keV = 510.998 #keV
     e_charge = sqrt(4.0 * PI * alpha)#1.0
     kB = 1.380649e-23
@@ -841,13 +841,10 @@ proc main*(): Tensor[float] =
           ## necessary here. Temp is constant for all Z
           let opacity = opElements[ElementKind(Z)][temperature].densityTab[n_eInt].interp.eval(table)
 
-          #opacitySum += opacity
-          #var opacity_cm = opacity  # correct conversion
           # opacities in atomic unit for lenth squared: 0.528 x10-8cm * 0.528 x10-8cm = a0² # 1 m = 1/1.239841336215e-9 1/keV and a0 = 0.528 x10-10m
           if Z > 2:
             sum +=  n_Z[R][Z] * opacity
 
-        #opacitySum *= 0.528e-10 * 0.528e-10 * 197.327053e-10 # in 1/keV^2
         absCoef = sum * 1.97327e-8 * 0.528e-8 * 0.528e-8 * (1.0 - exp(-energy_keV / temp_keV)) # is in keV
 
         absCoefs[R, iEindex] = absCoef
@@ -869,9 +866,6 @@ proc main*(): Tensor[float] =
         longPlas = longPlasmon(energy_keV, n_e_keV, m_e_keV, alpha, bfieldR, temp_keV, (absCoefs[R, iEindex]), gagamma) #is correct with the absorbtion coefficient #https://arxiv.org/pdf/2006.10415.pdf make similar log pictures
         transPlas = transPlasmon(energy_keV, n_e_keV, m_e_keV, alpha, bfieldR, temp_keV, (absCoefs[R, iEindex]), gagamma) #is correct with the absorbtion coefficient
         iron57 = iron(ganuclei, temp_keV, energy_keV, rho_keV)
-      #if energy_keV == 4.0: echo energy_keV, " ", primakoff
-      #if energy_keV == 5.0: echo energy_keV, " ", primakoff
-
       term1s[R, iEindex] = term1
       comptons[R, iEindex] = compton
       term3s[R, iEindex] = term3
@@ -972,7 +966,7 @@ proc main*(): Tensor[float] =
     ylab("Flux [keV⁻¹ y⁻¹ m⁻²]") +
     #ylim(0, 2.5e24) +
     #xlim(0.0, 1000.0) +
-    xlim(0.0, 15000.0) +
+    xlim(14000.0, 15000.0) +
     #scale_y_log10() + #
     scale_y_continuous() +
     #scale_x_log10() +
