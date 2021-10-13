@@ -99,9 +99,9 @@ type
     pixvalsX: float
     pixvalsY: float
     radii: float
-    energiesAx: float
-    energiesAxAll: float
-    energiesAxWindow: float
+    energiesAx: keV
+    energiesAxAll: keV
+    energiesAxWindow: keV
     kinds: MaterialKind
     kindsWindow: MaterialKind
     transProbWindow: float
@@ -110,7 +110,7 @@ type
     transProbMagnet: float
     deviationDet: float
     shellNumber: int
-    energiesPre: float
+    energiesPre: keV
 
   ConfigFlags = enum
     cfIgnoreDetWindow,   ## use to ignore the detector window absorbtion
@@ -597,7 +597,7 @@ proc plotHeatmap(diagramtitle: string,
   let
     width = 720.0
     height = 586.0
-  
+
   echo df
   #echo df.filter(f{`z` > 0.0})
   ggplot(df, aes("x-position [mm]", "y-position [mm]", fill = "photon flux")) +
@@ -815,7 +815,7 @@ proc traceAxion(res: var Axion,
                 emRates: seq[seq[float]],
                 emRatesRadiusCumSum: seq[float],
                 emRateCDFs: seq[seq[float]],
-                energies: seq[float],
+                energies: seq[keV],
                 dfTab: Table[string, DataFrame],
                 flags: set[ConfigFlags]
                ) =
@@ -829,11 +829,11 @@ proc traceAxion(res: var Axion,
 
   ## Get a random energy for the axion biased by the emission rate ##
   let energyAx = getRandomEnergyFromSolarModel(
-    pointInSun, centerVecs.centerSun, radiusSun, energies, emRates, emRateCDFs, "energy"
+    pointInSun, centerVecs.centerSun, radiusSun, energies, emRateCDFs
   )
 
-  let emissionRateAx = getRandomEnergyFromSolarModel(
-    pointInSun, centerVecs.centerSun, radiusSun, energies, emRates, emRateCDFs, "emissionRate"
+  let emissionRateAx = getRandomEmissionRateFromSolarModel(
+    pointInSun, centerVecs.centerSun, radiusSun, emRates, emRateCDFs
   )
   ## Throw away all the axions, that don't make it through the piping system and therefore exit the system at some point ##
 
@@ -1158,11 +1158,11 @@ proc traceAxion(res: var Axion,
     if cfIgnoreGoldReflect notin flags:
       let
         energyAxReflection1 = dfTab[fmt"goldfile{alpha1:4.2f}"]["PhotonEnergy(eV)"].toTensor(
-                float).lowerBound(energyAx * 1000.0)
+                float).lowerBound(energyAx.to(eV).float)
         energyAxReflection2 = dfTab[fmt"goldfile{alpha2:4.2f}"]["PhotonEnergy(eV)"].toTensor(
-                float).lowerBound(energyAx * 1000.0)
-        reflectionProb1 = dfTab[fmt"goldfile{alpha1:4.2f}"]["Reflectivity"].toTensor(float)[energyAxReflection1]
-        reflectionProb2 = dfTab[fmt"goldfile{alpha2:4.2f}"]["Reflectivity"].toTensor(float)[energyAxReflection2]
+                float).lowerBound(energyAx.to(eV).float)
+        reflectionProb1 = dfTab[fmt"goldfile{alpha1:4.2f}"]["Reflectivity", float][energyAxReflection1]
+        reflectionProb2 = dfTab[fmt"goldfile{alpha2:4.2f}"]["Reflectivity", float][energyAxReflection2]
       weight = reflectionProb1 * reflectionProb2 * transmissionMagnet#also yaw and pitch dependend
     else:
       # without gold reflection just use perfect reflectivity
@@ -1206,10 +1206,10 @@ proc traceAxion(res: var Axion,
   for i in 0..(detectorSetup.numberOfStrips/2).round.int - 1:
     if abs(y).mm > (1.0 * i.float + 0.5) * stripDistWindow + i.float * stripWidthWindow and
       abs(y).mm < (1.0 * i.float + 0.5) * stripDistWindow + (i.float + 1.0) * stripWidthWindow:
-      energyAxTransWindow = dfTab["siFile"]["PhotonEnergy(eV)"].toTensor(
-          float).lowerBound(energyAx * 1000.0)
-      transWindow = dfTab["siFile"]["Transmission"].toTensor(float)[energyAxTransWindow] *
-                    dfTab["alFile"]["Transmission"].toTensor(float)[energyAxTransWindow]
+      let energyIdx = dfTab["siFile"]["PhotonEnergy(eV)", float]
+        .lowerBound(energyAx.to(eV).float)
+      let transWindow = dfTab["siFile"]["Transmission", float][energyIdx] *
+                        dfTab["alFile"]["Transmission", float][energyIdx]
       if cfIgnoreDetWindow notin flags:
         weight *= transWindow
       res.transProbWindow = transWindow
@@ -1245,9 +1245,9 @@ proc traceAxion(res: var Axion,
       res.kindsWindow = mkSi3N4
 
   ## Get the total probability that the Xray will be absorbed by the detector and therefore detected:
-  let energyAxTransDet = dfTab["detectorFile"]["PhotonEnergy(eV)"].toTensor(
-      float).lowerBound(energyAx * 1000.0)
-  let transDet = dfTab["detectorFile"]["Transmission"].toTensor(float)[energyAxTransDet]
+  let energyIdx = dfTab["detectorFile"]["PhotonEnergy(eV)", float]
+    .lowerBound(energyAx.to(eV).float)
+  let transDet = dfTab["detectorFile"]["Transmission", float][energyIdx]
 
   if cfIgnoreGasAbs notin flags:
     weight *= 1.0 - transDet
@@ -1308,7 +1308,7 @@ proc traceAxionWrapper(axBuf: ptr UncheckedArray[Axion],
                        emRates: seq[seq[float]],
                        emRatesRadiusCumSum: seq[float],
                        emRateCDFs: seq[seq[float]],
-                       energies: seq[float],
+                       energies: seq[keV],
                        dfTab: Table[string, DataFrame],
                        flags: set[ConfigFlags]
                        ) =
@@ -1369,10 +1369,10 @@ proc generateResultPlots(axions: seq[Axion],
   ################################################################################
   ################################################################################
 
-  let dfTransProb = seqsToDf({ "Axion energy [keV]": energiesAxAll,
+  let dfTransProb = seqsToDf({ "Axion energy [keV]": energiesAxAll.mapIt(it.float),
                                "Transmission Probability": transProbDetector,
                                "type": kinds.mapIt($it),
-                               "Axion energy window[keV]":energiesAxWindow,
+                               "Axion energy window[keV]":energiesAxWindow.mapIt(it.float),
                                "Transmission Probability window": transprobWindow,
                                "type window":kindsWindow.mapIt($it),
                                "Flux after experiment": weightsAll })
@@ -1386,19 +1386,19 @@ proc generateResultPlots(axions: seq[Axion],
     ggtitle("The transmission probability for different detector parts") +
     ggsave(&"out/TransProb_{windowYear}.pdf")
 
-  let dfTransProbAr = seqsToDf({"Axion energy [keV]": energiesAx,
-                              "Transmission Probability": transProbArgon})
+  let dfTransProbAr = seqsToDf({ "Axion energy [keV]": energiesAx.mapIt(it.float),
+                                 "Transmission Probability": transProbArgon })
   ggplot(dfTransProbAr.arrange("Axion energy [keV]"),
          aes("Axion energy [keV]", "Transmission Probability")) +
     geom_line() +
     ggtitle("The transmission probability for the detector gas") +
     ggsave(&"out/TransProbAr_{windowYear}.pdf")
 
-  let dfDet = seqsToDf({"Deviation [mm]": deviationDet,
-                         "Energies": energiesAx,
-                         "Shell": shellNumber})
+  let dfDet = seqsToDf({ "Deviation [mm]": deviationDet,
+                         "Energies": energiesAx.mapIt(it.float),
+                         "Shell": shellNumber })
     .filter(f{Value: isNull(df["Shell"][idx]).toBool == false})
-  
+
   ggplot(dfDet, aes("Deviation [mm]")) +
     geom_histogram(binWidth = 0.001) +
     ggtitle("Deviation of X-rays detector entrance to readout") +
@@ -1433,9 +1433,8 @@ proc generateResultPlots(axions: seq[Axion],
     ggtitle("Radial distribution of the axions") +
     ggsave(&"out/radialDistribution_{windowYear}.pdf")
 
-  let dfFluxE = seqsToDf({"Axion energy [keV]": energiesAx,
-                          "Transmission probability": weights})
-
+  let dfFluxE = seqsToDf({ "Axion energy [keV]": energiesAx.mapIt(it.float),
+                           "Transmission probability": weights })
   ggplot(dfFluxE, aes("Axion energy [keV]", weight = "Transmission probability")) +
     geom_histogram(binWidth = 0.00001, lineWidth= some(1.2)) +
     #backgroundColor(parseHex("8cc7d4")) +
@@ -1626,7 +1625,7 @@ proc generateResultPlots(axions: seq[Axion],
   #  ggtitle("The telescope energy efficiency") +
   #  ggsave(&"out/EnergyEff_{windowYear}.pdf")
 
-  let dfFluxE2 = seqsToDf({ "Axion energy [keV]": energiesAx,
+  let dfFluxE2 = seqsToDf({ "Axion energy [keV]": energiesAx.mapIt(it.float),
                             "Flux after experiment": weights })
   dfFluxE2.write_csv(&"axion_gae_1e13_gagamma_{g_aγ.float}_flux_after_exp_N_{numberOfPointsSun}.csv")
   ggplot(dfFluxE2, aes("Axion energy [keV]", weight = "Flux after experiment")) +
@@ -1634,7 +1633,7 @@ proc generateResultPlots(axions: seq[Axion],
     ylab("The flux after the experiment") +
     ggsave(&"out/FluxEafter_{windowYear}.pdf")
 
-  let dfFluxE3 = seqsToDf({"Axion energy [keV]": energiesPre})
+  let dfFluxE3 = seqsToDf({"Axion energy [keV]": energiesPre.mapIt(it.float)})
 
   ggplot(dfFluxE3, aes("Axion energy [keV]")) +
     geom_histogram(binWidth = 0.0001, lineWidth= some(1.2)) +
@@ -1680,7 +1679,7 @@ proc calculateFluxFractions(setup: ExperimentSetupKind,
                             flags: set[ConfigFlags]) =
 
   let expSetup = newExperimentSetup(setup, stage)
-  let energies = linspace(1.0, 15000.0, 15000)
+  let energies = linspace(0.001, 15.0, 15000).mapIt(it.keV)
 
   var
     integralNormalisation = 0.0
@@ -1709,8 +1708,9 @@ proc calculateFluxFractions(setup: ExperimentSetupKind,
   ## Compute all normalized CDFs of the emission rates for each radius
   var emRateCDFs = newSeq[seq[float]]()
   for iRad, f in emRates:
-    var cdf = toSeq(0 ..< energies.len).mapIt(f[it] * energies[it] * energies[it] / (2 * Pi * Pi))
-      .cumSum()
+    var cdf = toSeq(0 ..< energies.len).mapIt(
+      f[it] * (energies[it].to(eV).float * energies[it].to(eV).float) / (2 * Pi * Pi)
+    ).cumSum()
     cdf.applyIt(it / cdf[^1])
     emRateCDFs.add cdf
 
@@ -1733,7 +1733,7 @@ proc calculateFluxFractions(setup: ExperimentSetupKind,
       )
       ts.add arccos(pos[2] / r)
       ps.add arctan(pos[1] / pos[0])
-      es.add energyAx
+      es.add energyAx.float
       ems.add em
       rs.add r
 
