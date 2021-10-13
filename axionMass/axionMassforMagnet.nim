@@ -1,4 +1,5 @@
-import sequtils, seqmath, ggplotnim, strformat, algorithm, nlopt, options, strutils
+import std / [sequtils, strformat, algorithm, options, strutils]
+import seqmath, ggplotnim, nlopt, unchained
 
 proc density(p: float, temp:float ): float =
   ## returns the density of the gas for the given pressure.
@@ -59,19 +60,19 @@ proc effPhotonMass2*(p : float, length : float, radBore : float, temp : float): 
   #echo "Num electrons per m^3 ", numPerMol
   result = effPhotonMass(numPerMol)
 
-proc momentumTransfer(m_gamma, m_a: float, E_a = 4.2): float =
+proc momentumTransfer(m_gamma, m_a: float, E_a = 4.2.keV): float =
   ## calculates the momentum transfer for a given effective photon
   ## mass `m_gamma` and axion mass `m_a` at an axion energy of
   ## 4.2 keV `E_a` (by default).
   #const c = 299792458
-  result = abs((m_gamma * m_gamma - m_a * m_a) / (2 * E_a * 1000.0))
+  result = abs((m_gamma * m_gamma - m_a * m_a) / (2 * E_a.to(eV).float))
 
-proc logMassAttenuation(e: float): float =
+proc logMassAttenuation(e: keV): float =
   ## calculates the logarithm of the mass attenuation coefficient for a given
   ## energy `e` in `keV` and the result in `cm^2/g`
-  result = -1.5832 + 5.9195 * exp(-0.353808 * e) + 4.03598 * exp(-0.970557 * e)
+  result = -1.5832 + 5.9195 * exp(-0.353808 * e.float) + 4.03598 * exp(-0.970557 * e.float)
 
-proc axionConversionProb2*(m_a : float, energyAx : float, pressure : float, temp : float, length : float, radBore : float, g_agamma : float, B : float): float =
+proc axionConversionProb2*(m_a: float, energyAx: keV, pressure: float, temp: float, length: float, radBore: float, g_agamma: float, B: float): float =
   ## given an axion mass and an inverse absorption length
   ## calculates the conversion probabilty
   # both `g_agamma` and `B` only scale the absolute value `P`, does not matter
@@ -98,7 +99,7 @@ proc axionConversionProb2*(m_a : float, energyAx : float, pressure : float, temp
   let term3 = 1.0 + exp(-gamma * L) - 2 * exp(-gamma * L / 2) * cos(q * L)
   result = term1 * term2 * term3
 
-proc intensitySuppression2*(energy : float, distanceMagnet : float, distancePipe : float, pressure: float, tempMagnet : float, tempPipe : float64): float =
+proc intensitySuppression2*(energy: keV, distanceMagnet: float, distancePipe: float, pressure: float, tempMagnet: float, tempPipe: float64): float =
   ## calculates the suppression factor of the intensity of X-rays
   ## with `energy` (in keV) after `distance` (in `m`) at a helium `pressure`
   ## (in `mbar`) and temperature of the gas of `temp` (in `K`).
