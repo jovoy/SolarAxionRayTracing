@@ -1131,28 +1131,11 @@ proc traceAxion(res: var Axion,
 
   case expSetup.kind
   of esCAST:
-    if energyAx < 2.0:
-      #total eff area of telescope = 1438.338mm² = 14.38338cm² #the last thing are the mirror seperators
-      transmissionTelescopeEnergy = (-0.013086145 * pow(energyAx, 4) +
-                                    0.250552655 * pow(energyAx, 3) -
-                                    1.541426299 * energyAx * energyAx +
-                                    2.064933639 * energyAx +
-                                    7.625254445) / (14.38338 - (4.3 * 0.2))
-    elif energyAx >= 2.0 and energyAx < 8.0:
-      transmissionTelescopeEnergy = (0.0084904 * pow(energyAx, 6) -
-                                    0.199553 * pow(energyAx, 5) +
-                                    1.75302 * pow(energyAx, 4) -
-                                    7.05939 * pow(energyAx, 3) +
-                                    12.6706 * energyAx * energyAx -
-                                    9.23947 * energyAx +
-                                    9.96953) / (14.38338 - (4.3 * 0.2))
-    else:
-      transmissionTelescopeEnergy = 0.0
-    if transmissionTelescopeEnergy < 0.0:
-      transmissionTelescopeEnergy = 0.0
-    weight = (transmissionTelescopeEnergy *
-      transmissionTelescopePitch * transmissionTelescopeYaw *
-      transmissionMagnet) #transmission probabilities times axion emission rate times the flux fraction
+    let transmissionTelIdx = dfTab["LLNL_transEff"]["Energy[keV]", float].lowerBound(energyAx.float)
+    let transmissionTel = dfTab["LLNL_transEff"]["Transmission", float][transmissionTelIdx]
+    weight = (transmissionTel *
+              transmissionTelescopePitch * transmissionTelescopeYaw *
+              transmissionMagnet) #transmission probabilities times axion emission rate times the flux fraction
   of esBabyIAXO:
     if cfIgnoreGoldReflect notin flags:
       let
@@ -1738,11 +1721,24 @@ proc calculateFluxFractions(setup: ExperimentSetupKind,
   let detectorFile = "./resources/transmission-argon-30mm-1050mbar-295K.tsv"  #250
   let alFile = &"./resources/AlDensity=2.7Thickness={detectorSetup.alThickness.float:.2f}microns.tsv" #
   echo siNfile, " ", alFile
+  let llnlTransFile = &"./resources/llnl_xray_telescope_cast_effective_area_parallel_light_DTU_thesis.csv"
+
   var dfTab = initTable[string, DataFrame]()
   dfTab["siFile"] = readCsv(siFile, sep = ' ')
   dfTab["siNfile"] = readCsv(siNfile, sep = ' ')
   dfTab["detectorFile"] = readCsv(detectorFile, sep = ' ')
   dfTab["alFile"] = readCsv(alFile, sep = ' ')
+
+  # TODO: this could be generalized to other telescopes until the multi layer stuff is implemented
+  dfTab["LLNL_transEff"] = readCsv(llnlTransFile)
+    .mutate(f{"Transmission" ~ idx("EffectiveArea[cm²]") /
+      # total eff area of telescope = 1438.338mm² = 14.38338cm²
+      (14.38338 - (4.3 * 0.2))}) # the last thing are the mirror seperators
+  # TODO: take this out once happy
+  when true:
+    ggplot(dfTab["LLNL_transEff"], aes("Energy[keV]", "Transmission")) +
+      geom_line() + ggsave("/tmp/transmission_llnl.pdf")
+
   if cfIgnoreGoldReflect notin flags:
     var
       goldfile: string
