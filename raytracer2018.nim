@@ -131,7 +131,7 @@ let
 
   roomTemp = 293.15.K
   mAxion = 0.0853#0.26978249412621896 #eV, corresponds to set p and T gas valus #0.4 #eV for example
-  g_aγ = 1e-10.GeV⁻¹
+  g_aγ = 2e-12.GeV⁻¹
 
 ## Chipregions#####
 
@@ -799,12 +799,12 @@ proc newDetectorSetup*(setup: DetectorSetupKind): DetectorSetup =
     result.depthDet = 30.0.mm
   of dkInGridIAXO:
     result.windowYear = wyIAXO
-    result.depthDet = 30.0.mm # probably not
+    result.depthDet = 30.0.mm 
     result.radiusWindow = 4.0.mm
     result.numberOfStrips = 20 #maybe baby
     result.openApertureRatio = 0.95
     result.windowThickness = 0.1.μm #microns #options are: 0.3, 0.15 and 0.1
-    result.alThickness = 0.015.μm
+    result.alThickness = 0.01.μm
   result.detectorWindowAperture = 14.0.mm
   let (width, dist) = calcWindowVals(result.radiusWindow,
                                      result.numberOfStrips,
@@ -1274,7 +1274,7 @@ proc traceAxion(res: var Axion,
   of esCAST:
     weight *= 3.585e3 * 3600.0 * 1.5 * 90.0 #for CAST at 10 mio, three months
   of esBabyIAXO:
-    weight *= 9.5e5 * 3600.0 * 12.0 * 90.0#9.5e5 * 3600.0 * 12.0 * 90.0 for three months at 1 mio axions at BabyIAXO 
+    weight *= 9.5e6 * 3600.0 * 12.0 * 90.0#9.5e6 * 3600.0 * 12.0 * 90.0 for three months at 1 mio axions at BabyIAXO 
   ## assign final axion position & weight
   res.pointdataX = pointDetectorWindow[0]
   res.pointdataY = pointDetectorWindow[1]
@@ -1452,6 +1452,18 @@ proc generateResultPlots(axions: seq[Axion],
     #xlim(0.0, 1.0) +
     ggtitle("Simulated photon flux depending on the energy of the axion") +
     ggsave(&"out/fluxAfter_{windowYear}.pdf") 
+
+  ggplot(dfFluxE, aes("Axion energy [keV]", weight = "Transmission probability")) +
+    geom_histogram(binWidth = 0.00001, lineWidth= some(1.2)) +
+    #backgroundColor(parseHex("8cc7d4")) +
+    #gridLineColor(parseHex("8cc7d4")) +
+    #canvasColor(parseHex("8cc7d4")) +
+    #theme_transparent() +
+    ylab("photon flux") + 
+    #ylim(0.0, 0.0001) +
+    xlim(0.0, 1.0) +
+    ggtitle("Simulated photon flux depending on the energy of the axion") +
+    ggsave(&"out/fluxAfterZoomed_{windowYear}.pdf") 
 
   ggplot(dfFluxE, aes("Axion energy [keV]", weight = "Transmission probability")) +
     geom_histogram(binWidth = 0.0001, lineWidth= some(1.2)) +
@@ -1684,7 +1696,7 @@ proc calculateFluxFractions(setup: ExperimentSetupKind,
     integralGold = 0.0
 
   ## TODO: make the code use tensor for the emission rates!
-  var emRatesDf = readCsv("solar_model_tensor15.csv")
+  var emRatesDf = readCsv("solar_model_tensor15KSVZhighIron.csv")
     .rename(f{"Radius" <- "dimension_1"}, f{"Energy" <- "dimension_2"}, f{"Flux" <- "value"})
   
   let emRatesTensor = emRatesDf["Flux"].toTensor(float)
@@ -1742,11 +1754,11 @@ proc calculateFluxFractions(setup: ExperimentSetupKind,
   ################################################################################
   let detectorSetup = newDetectorSetup(detectorSetup)
 
-  let siNfile = &"./resources/Si3N4Density=3.44Thickness={detectorSetup.windowThickness.float}microns.tsv"
+  let siNfile = &"./resources/Si3N4Density=3.44Thickness={detectorSetup.windowThickness.float:.1f}microns.tsv" #
   let siFile = "./resources/SiDensity=2.33Thickness=200.microns.tsv"
-  let detectorFile = "./resources/transmission-argon-30mm-1050mbar-295K.tsv"
-  let alFile = &"./resources/AlDensity=2.7Thickness={detectorSetup.alThickness.float}microns.tsv"
-
+  let detectorFile = "./resources/transmission-argon-30mm-1050mbar-295K.tsv"  #250
+  let alFile = &"./resources/AlDensity=2.7Thickness={detectorSetup.alThickness.float:.2f}microns.tsv" #
+  echo siNfile, " ", alFile
   var dfTab = initTable[string, DataFrame]()
   dfTab["siFile"] = readCsv(siFile, sep = ' ')
   dfTab["siNfile"] = readCsv(siNfile, sep = ' ')
@@ -1760,7 +1772,7 @@ proc calculateFluxFractions(setup: ExperimentSetupKind,
       alpha = (i.float * 0.01).round(2)
       goldfile = fmt"./resources/reflectivity/{alpha:4.2f}degGold0.25microns"
       dfTab[fmt"goldfile{alpha:4.2f}"] = readCsv(goldfile, sep = ' ')
-  echo dfTab
+
   let centerVecs = expSetup.initCenterVectors()
 
   ## In the following we will go over a number of points in the sun, whose location and
@@ -1801,7 +1813,7 @@ proc main(ignoreDetWindow = false, ignoreGasAbs = false,
   echo "Flags: ", flags
 
   calculateFluxFractions(esBabyIAXO,
-                         dkInGrid2017,
+                         dkInGridIAXO,
                          skVacuum,
                          flags) # radiationCharacteristic = "axionRadiation::characteristic::sar"
 
