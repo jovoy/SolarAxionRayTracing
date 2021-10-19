@@ -60,6 +60,7 @@ type
     B*: T
     pGasRoom*: bar
     tGas*: K
+    telescopeTransmission*: InterpolatorType[float] # should be `keV`, but cannot do that atm
 
   DetectorSetupKind = enum
     dkInGrid2017, # the setup as used in 2017
@@ -78,6 +79,9 @@ type
     windowThickness: μm
     alThickness: μm
     depthDet: mm # depth (height) of the detector volume
+    strongbackTransmission: InterpolatorType[float] # 1D interpolation for strongback transmission
+    windowTransmission: InterpolatorType[float]     # 1D interpolation for window transmission
+    gasAbsorption: InterpolatorType[float]          # 1D interpolation for gas absorption
 
   MaterialKind = enum
     mkSi3N4 = "Si3N4"
@@ -659,7 +663,8 @@ proc plotSolarModel(df: DataFrame) =
 ############done with the functions, let's use them############
 
 proc newExperimentSetup*(setup: ExperimentSetupKind,
-                         stage: StageKind): ExperimentSetup =
+                         stage: StageKind,
+                         dfTab: Table[string, DataFrame]): ExperimentSetup =
   # TODO: clean up, possibly make this into a toml file where one can
   # input different settings!
   case setup
@@ -734,6 +739,11 @@ proc newExperimentSetup*(setup: ExperimentSetupKind,
       tGas: 100.0.K #293.15, # only Gas in BabyIAXO
     )
 
+  ## TODO: this needs to be moved out of this procedure
+  result.telescopeTransmission = newLinear1D(dfTab["LLNL_transEff"]["Energy[keV]", float].toRawSeq,
+                                             dfTab["LLNL_transEff"]["Transmission", float].toRawSeq)
+
+
 defUnit(MilliMeter²)
 proc sqrt(x: MilliMeter²): MilliMeter =
   ## We don't have sqrt as operator in unchained yet that does this automatically
@@ -806,7 +816,43 @@ proc newDetectorSetup*(setup: DetectorSetupKind): DetectorSetup =
                                      result.openApertureRatio)
   result.stripWidthWindow = width
   result.stripDistWindow = dist
+
+
+  ## TODO: clean this up! config.toml file!
+  let siNfile = &"./resources/Si3N4Density=3.44Thickness={result.windowThickness.float:.1f}microns.tsv" #
+  let siFile = "./resources/SiDensity=2.33Thickness=200.microns.tsv"
+  let detectorFile = "./resources/transmission-argon-30mm-1050mbar-295K.tsv"  #250
+  let alFile = &"./resources/AlDensity=2.7Thickness={result.alThickness.float:.2f}microns.tsv" #
+  let dfSi  = readCsv(siFile, sep = ' ')
+  let dfSiN = readCsv(siNfile, sep = ' ')
+  var dfDet = readCsv(detectorFile, sep = ' ')
+  let dfAl  = readCsv(alFile, sep = ' ')
+
+
+  ## TODO: this needs to be moved out of this procedure
+  var dfSB = dfSi
+    .rename(f{"siFile" <- "Transmission"})
+  dfSB["alFile"] = dfAl["Transmission", float]
+  dfSB = dfSB.mutate(f{"Transmission" ~ `siFile` * `alFile`},
+                     f{"Energy[keV]" ~ idx("PhotonEnergy(eV)") / 1000.0})
+  var dfWd = dfSiN
+    .rename(f{"siNFile" <- "Transmission"})
+  dfWd["alFile"] = dfAl["Transmission", float]
+  dfWd = dfWd.mutate(f{"Transmission" ~ `siNFile` * `alFile`},
+                     f{"Energy[keV]" ~ idx("PhotonEnergy(eV)") / 1000.0})
+  dfDet = dfDet
+    .mutate(f{"Energy[keV]" ~ idx("PhotonEnergy(eV)") / 1000.0},
+            f{"Absorption" ~ 1.0 - `Transmission`})
+  result.strongbackTransmission = newLinear1D(dfSB["Energy[keV]", float].toRawSeq,
+                                              dfSB["Transmission", float].toRawSeq)
+  result.windowTransmission = newLinear1D(dfWd["Energy[keV]", float].toRawSeq,
+                                          dfWd["Transmission", float].toRawSeq)
+  result.gasAbsorption = newLinear1D(dfDet["Energy[keV]", float].toRawSeq,
+                                     dfDet["Absorption", float].toRawSeq)
   result.theta = toRad(result.windowYear) # theta angle between window strips and horizontal x axis
+
+template eval(interp: InterpolatorType[float], energy: keV): untyped =
+  interp.eval(energy.float)
 
 proc traceAxion(res: var Axion,
                 centerVecs: CenterVectors,
@@ -1131,13 +1177,13 @@ proc traceAxion(res: var Axion,
 
   case expSetup.kind
   of esCAST:
-    let transmissionTelIdx = dfTab["LLNL_transEff"]["Energy[keV]", float].lowerBound(energyAx.float)
-    let transmissionTel = dfTab["LLNL_transEff"]["Transmission", float][transmissionTelIdx]
+    let transmissionTel = expSetup.telescopeTransmission.eval(energyAx)
     weight = (transmissionTel *
               transmissionTelescopePitch * transmissionTelescopeYaw *
               transmissionMagnet) #transmission probabilities times axion emission rate times the flux fraction
   of esBabyIAXO:
     if cfIgnoreGoldReflect notin flags:
+      ## TODO: This needs to be replaced by a 2D interpolation!
       let
         energyAxReflection1 = dfTab[fmt"goldfile{alpha1:4.2f}"]["PhotonEnergy(eV)"].toTensor(
                 float).lowerBound(energyAx.to(eV).float)
@@ -1182,10 +1228,7 @@ proc traceAxion(res: var Axion,
   for i in 0..(detectorSetup.numberOfStrips/2).round.int - 1:
     if abs(y).mm > (1.0 * i.float + 0.5) * stripDistWindow + i.float * stripWidthWindow and
       abs(y).mm < (1.0 * i.float + 0.5) * stripDistWindow + (i.float + 1.0) * stripWidthWindow:
-      let energyIdx = dfTab["siFile"]["PhotonEnergy(eV)", float]
-        .lowerBound(energyAx.to(eV).float)
-      let transWindow = dfTab["siFile"]["Transmission", float][energyIdx] *
-                        dfTab["alFile"]["Transmission", float][energyIdx]
+      let transWindow = detectorSetup.strongbackTransmission.eval(energyAx)
       if cfIgnoreDetWindow notin flags:
         weight *= transWindow
       res.transProbWindow = transWindow
@@ -1195,14 +1238,9 @@ proc traceAxion(res: var Axion,
       res.kinds = mkSi
       res.kindsWindow = mkSi
     else:
-      ## IMPORTANT: it is *required* that all the `*File` DFs contain the ``exact same``
-      ## energy values. This is a given for the files in `resources` from henkel.gov!
-      let energyIdx = dfTab["siNfile"]["PhotonEnergy(eV)"].toTensor(
-          float).lowerBound(energyAx.to(eV).float)
-      let transWindow = dfTab["siNfile"]["Transmission", float][energyIdx]
-      let transCath   = dfTab["alFile"]["Transmission", float][energyIdx]
+      let transWindow = detectorSetup.windowTransmission.eval(energyAx)
       if cfIgnoreDetWindow notin flags:
-        weight *= (transWindow * transCath)
+        weight *= transWindow
       res.transprobWindow = transWindow
       res.transProbDetector = transWindow
       res.energiesAxAll = energyAx
@@ -1211,14 +1249,11 @@ proc traceAxion(res: var Axion,
       res.kindsWindow = mkSi3N4
 
   ## Get the total probability that the Xray will be absorbed by the detector and therefore detected:
-  let energyIdx = dfTab["detectorFile"]["PhotonEnergy(eV)", float]
-    .lowerBound(energyAx.to(eV).float)
-  let transDet = dfTab["detectorFile"]["Transmission", float][energyIdx]
-
+  let absGasDet = detectorSetup.gasAbsorption.eval(energyAx)
   if cfIgnoreGasAbs notin flags:
-    weight *= 1.0 - transDet
-  res.transProbArgon = transDet
-  res.transProbDetector = transDet
+    weight *= absGasDet
+  res.transProbArgon = absGasDet
+  res.transProbDetector = absGasDet
 
   res.energiesAxAll = energyAx
   res.kinds = mkAr
@@ -1644,8 +1679,31 @@ proc calculateFluxFractions(setup: ExperimentSetupKind,
                             detectorSetup: DetectorSetupKind,
                             stage: StageKind,
                             flags: set[ConfigFlags]) =
+  ## TODO: these should be moved to a .toml config file
+  let llnlTransFile = &"./resources/llnl_xray_telescope_cast_effective_area_parallel_light_DTU_thesis.csv"
 
-  let expSetup = newExperimentSetup(setup, stage)
+  var dfTab = initTable[string, DataFrame]()
+
+  # TODO: this could be generalized to other telescopes until the multi layer stuff is implemented
+  dfTab["LLNL_transEff"] = readCsv(llnlTransFile)
+    .mutate(f{"Transmission" ~ idx("EffectiveArea[cm²]") /
+      # total eff area of telescope = 1438.338mm² = 14.38338cm²
+      (14.38338 - (4.3 * 0.2))}) # the last thing are the mirror seperators
+  # TODO: take this out once happy
+  when true:
+    ggplot(dfTab["LLNL_transEff"], aes("Energy[keV]", "Transmission")) +
+      geom_line() + ggsave("/tmp/transmission_llnl.pdf")
+
+  if cfIgnoreGoldReflect notin flags:
+    var
+      goldfile: string
+      alpha: float
+    for i in 13..83:
+      alpha = (i.float * 0.01).round(2)
+      goldfile = fmt"./resources/reflectivity/{alpha:4.2f}degGold0.25microns"
+      dfTab[fmt"goldfile{alpha:4.2f}"] = readCsv(goldfile, sep = ' ')
+
+  let expSetup = newExperimentSetup(setup, stage, dfTab)
   let energies = linspace(0.001, 15.0, 15000).mapIt(it.keV)
 
   var
@@ -1715,39 +1773,6 @@ proc calculateFluxFractions(setup: ExperimentSetupKind,
   #############################Detector Window####################################
   ################################################################################
   let detectorSetup = newDetectorSetup(detectorSetup)
-
-  let siNfile = &"./resources/Si3N4Density=3.44Thickness={detectorSetup.windowThickness.float:.1f}microns.tsv" #
-  let siFile = "./resources/SiDensity=2.33Thickness=200.microns.tsv"
-  let detectorFile = "./resources/transmission-argon-30mm-1050mbar-295K.tsv"  #250
-  let alFile = &"./resources/AlDensity=2.7Thickness={detectorSetup.alThickness.float:.2f}microns.tsv" #
-  echo siNfile, " ", alFile
-  let llnlTransFile = &"./resources/llnl_xray_telescope_cast_effective_area_parallel_light_DTU_thesis.csv"
-
-  var dfTab = initTable[string, DataFrame]()
-  dfTab["siFile"] = readCsv(siFile, sep = ' ')
-  dfTab["siNfile"] = readCsv(siNfile, sep = ' ')
-  dfTab["detectorFile"] = readCsv(detectorFile, sep = ' ')
-  dfTab["alFile"] = readCsv(alFile, sep = ' ')
-
-  # TODO: this could be generalized to other telescopes until the multi layer stuff is implemented
-  dfTab["LLNL_transEff"] = readCsv(llnlTransFile)
-    .mutate(f{"Transmission" ~ idx("EffectiveArea[cm²]") /
-      # total eff area of telescope = 1438.338mm² = 14.38338cm²
-      (14.38338 - (4.3 * 0.2))}) # the last thing are the mirror seperators
-  # TODO: take this out once happy
-  when true:
-    ggplot(dfTab["LLNL_transEff"], aes("Energy[keV]", "Transmission")) +
-      geom_line() + ggsave("/tmp/transmission_llnl.pdf")
-
-  if cfIgnoreGoldReflect notin flags:
-    var
-      goldfile: string
-      alpha: float
-    for i in 13..83:
-      alpha = (i.float * 0.01).round(2)
-      goldfile = fmt"./resources/reflectivity/{alpha:4.2f}degGold0.25microns"
-      dfTab[fmt"goldfile{alpha:4.2f}"] = readCsv(goldfile, sep = ' ')
-
   let centerVecs = expSetup.initCenterVectors()
 
   ## In the following we will go over a number of points in the sun, whose location and
