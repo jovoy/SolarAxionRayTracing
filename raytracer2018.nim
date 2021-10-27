@@ -745,8 +745,6 @@ proc newExperimentSetup*(setup: ExperimentSetupKind,
   ## TODO: this needs to be moved out of this procedure
   result.telescopeTransmission = newLinear1D(dfTab["LLNL_transEff"]["Energy[keV]", float].toRawSeq,
                                              dfTab["LLNL_transEff"]["Transmission", float].toRawSeq)
-
-
 defUnit(MilliMeter²)
 proc sqrt(x: MilliMeter²): MilliMeter =
   ## We don't have sqrt as operator in unchained yet that does this automatically
@@ -819,7 +817,6 @@ proc newDetectorSetup*(setup: DetectorSetupKind): DetectorSetup =
                                      result.openApertureRatio)
   result.stripWidthWindow = width
   result.stripDistWindow = dist
-
   ## TODO: clean this up! config.toml file!
   let siNfile = &"./resources/Si3N4Density=3.44Thickness={result.windowThickness.float:.1f}microns.tsv" #
   let siFile = "./resources/SiDensity=2.33Thickness=200.microns.tsv"
@@ -1725,6 +1722,29 @@ proc calculateFluxFractions(setup: ExperimentSetupKind,
       goldfile = fmt"./resources/reflectivity/{alpha:4.2f}degGold0.25microns"
       dfTab[fmt"goldfile{alpha:4.2f}"] = readCsv(goldfile, sep = ' ')
 
+  ## TODO: these should be moved to a .toml config file
+  let llnlTransFile = &"./resources/llnl_xray_telescope_cast_effective_area_parallel_light_DTU_thesis.csv"
+
+  var dfTab = initTable[string, DataFrame]()
+
+  # TODO: this could be generalized to other telescopes until the multi layer stuff is implemented
+  dfTab["LLNL_transEff"] = readCsv(llnlTransFile)
+    .mutate(f{"Transmission" ~ idx("EffectiveArea[cm²]") /
+      # total eff area of telescope = 1438.338mm² = 14.38338cm²
+      (14.38338 - (4.3 * 0.2))}) # the last thing are the mirror seperators
+  # TODO: take this out once happy
+  when true:
+    ggplot(dfTab["LLNL_transEff"], aes("Energy[keV]", "Transmission")) +
+      geom_line() + ggsave("/tmp/transmission_llnl.pdf")
+
+  if cfIgnoreGoldReflect notin flags:
+    var
+      goldfile: string
+      alpha: float
+    for i in 13..83:
+      alpha = (i.float * 0.01).round(2)
+      goldfile = fmt"./resources/reflectivity/{alpha:4.2f}degGold0.25microns"
+      dfTab[fmt"goldfile{alpha:4.2f}"] = readCsv(goldfile, sep = ' ')
   let expSetup = newExperimentSetup(setup, stage, dfTab)
   let energies = linspace(0.001, 15.0, 15000).mapIt(it.keV)
 
