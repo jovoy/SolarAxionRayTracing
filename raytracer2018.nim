@@ -111,6 +111,8 @@ type
     deviationDet: float
     shellNumber: int
     energiesPre: keV
+    emratesPre: float
+    reflect:float
 
   ConfigFlags = enum
     cfIgnoreDetWindow,   ## use to ignore the detector window absorbtion
@@ -265,6 +267,7 @@ proc getRandomPointOnDisk(center: Vec3, radius: MilliMeter): Vec3 =
   x = cos(degToRad(angle)) * r
   y = sin(degToRad(angle)) * r
   result = vec3(x.float, y.float, 0.0) + center
+
 
 proc getRandomPointFromSolarModel(center: Vec3, radius: MilliMeter,
                                   emRateCumSum: seq[float]): Vec3 =
@@ -823,24 +826,26 @@ proc traceAxion(res: var Axion,
   ## Get a random point in the sun, biased by the emission rate, which is higher
   ## at smalller radii, so this will give more points in the center of the sun ##
   let pointInSun = getRandomPointFromSolarModel(centerVecs.centerSun, radiusSun, emRatesRadiusCumSum)
-
+  var weight: float
   ## Get a random point at the end of the coldbore of the magnet to take all axions into account that make it to this point no matter where they enter the magnet ##
   let pointExitCBMagneticField = getRandomPointOnDisk(
       centerVecs.centerExitCBMagneticField, expSetup.radiusCB)
 
   ## Get a random energy for the axion biased by the emission rate ##
   let energyAx = getRandomEnergyFromSolarModel(
-    pointInSun, centerVecs.centerSun, radiusSun, energies, emRateCDFs
-  )
+    pointInSun, centerVecs.centerSun, radiusSun, energies, emRateCDFs)
 
-  let emissionRateAx = getRandomEmissionRateFromSolarModel(
-    pointInSun, centerVecs.centerSun, radiusSun, emRates, emRateCDFs
-  )
+  #let emissionRateAx = getRandomEmissionRateFromSolarModel(
+  #  pointInSun, centerVecs.centerSun, radiusSun, emRates, emRateCDFs
+  #)
   ## Throw away all the axions, that don't make it through the piping system and therefore exit the system at some point ##
 
   let intersectsEntranceCB = lineIntersectsCircle(pointInSun,
       pointExitCBMagneticField, centerVecs.centerEntranceCB, expSetup.radiusCB)
   var intersectsCB = false
+  var pointInSunInSun = pointInSun - centerVecs.centerSun #
+  #echo energyAx.float, " ", sqrt(pointInSunInSun[0].float * pointInSunInSun[0].float + pointInSunInSun[1].float * pointInSunInSun[1].float + pointInSunInSun[2].float * pointInSunInSun[2].float) / 6.9e11, " ", energyAx.float  * energyAx.float * (pointInSunInSun[0].float * pointInSunInSun[0].float + pointInSunInSun[1].float * pointInSunInSun[1].float + pointInSunInSun[2].float * pointInSunInSun[2].float) / 6.9e11 / 6.9e11
+  res.emratesPre = 1.0 #* energyAx.float * energyAx.float * (pointInSunInSun[0].float * pointInSunInSun[0].float + pointInSunInSun[1].float * pointInSunInSun[1].float + pointInSunInSun[2].float * pointInSunInSun[2].float) / 6.9e11 / 6.9e11
   res.energiesPre = energyAx
   if (not intersectsEntranceCB):
     intersectsCB = lineIntersectsCylinderOnce(pointInSun,
@@ -919,8 +924,7 @@ proc traceAxion(res: var Axion,
   ## BabyIAXO return if X-ray its the spider structure
   case expSetup.kind
   of esCAST:
-    if pointEntranceXRT[1] <= 1.0 and pointEntranceXRT[1] >=
-        -1.0: return
+    if pointEntranceXRT[1] <= 1.0 and pointEntranceXRT[1] >= -1.0: return
   of esBabyIAXO:
     ## here we have a spider structure for the XMM telescope:
     if vectorEntranceXRTCircular[0] <= 64.7: #doesnt really matter because there are no mirrors in the middle and these axions dont reach the window anyways
@@ -1081,7 +1085,6 @@ proc traceAxion(res: var Axion,
   ## this is the transformation probability of an axion into a photon, if an axion
   ## flying straight through the magnet had one of 100%, angular dependency of the primakoff effect
   var
-    weight:float
     transmissionMagnet: float
 
   case expSetup.stage
@@ -1131,7 +1134,6 @@ proc traceAxion(res: var Axion,
     alpha2 = angle2[1].round(2)
 
   var reflect = 0.0
-
   case expSetup.kind
   of esCAST:
     let transmissionTelIdx = dfTab["LLNL_transEff"]["Energy[keV]", float].lowerBound(energyAx.float)
@@ -1148,8 +1150,7 @@ proc traceAxion(res: var Axion,
                 float).lowerBound(energyAx.to(eV).float)
         reflectionProb1 = dfTab[fmt"goldfile{alpha1:4.2f}"]["Reflectivity", float][energyAxReflection1]
         reflectionProb2 = dfTab[fmt"goldfile{alpha2:4.2f}"]["Reflectivity", float][energyAxReflection2]
-      echo energyAx, " ", energyAxReflection1
-      reflect = reflectionProb1 * reflectionProb2
+      res.reflect = reflectionProb1 * reflectionProb2
       weight = reflectionProb1 * reflectionProb2 * transmissionMagnet#also yaw and pitch dependend
     else:
       # without gold reflection just use perfect reflectivity
@@ -1188,47 +1189,31 @@ proc traceAxion(res: var Axion,
   for i in 0..(detectorSetup.numberOfStrips/2).round.int - 1:
     if abs(y).mm > (1.0 * i.float + 0.5) * stripDistWindow + i.float * stripWidthWindow and
       abs(y).mm < (1.0 * i.float + 0.5) * stripDistWindow + (i.float + 1.0) * stripWidthWindow:
-      let energyIdx = dfTab["siFile"]["PhotonEnergy(eV)", float]
-        .lowerBound(energyAx.to(eV).float)    
-      if cfIgnoreDetWindow notin flags:
-        transWindow = dfTab["siFile"]["Transmission", float][energyIdx] *
-                        dfTab["alFile"]["Transmission", float][energyIdx]
+      transWindow = detectorSetup.strongbackTransmission.eval(energyAx)
       res.transProbWindow = transWindow
       res.transProbDetector = transWindow
       res.energiesAxAll = energyAx
       res.energiesAxWindow = energyAx
       res.kinds = mkSi
       res.kindsWindow = mkSi
-      break      
+      break
     else:
-      ## IMPORTANT: it is *required* that all the `*File` DFs contain the ``exact same``
-      ## energy values. This is a given for the files in `resources` from henkel.gov!
-      let energyIdx = dfTab["siNfile"]["PhotonEnergy(eV)"].toTensor(
-          float).lowerBound(energyAx.to(eV).float)
-      let transWindow2 = dfTab["siNfile"]["Transmission", float][energyIdx]
-      let transCath   = dfTab["alFile"]["Transmission", float][energyIdx]
-      
-      if cfIgnoreDetWindow notin flags:
-        transWindow = (transWindow2 * transCath)
+      transWindow = detectorSetup.windowTransmission.eval(energyAx)
       res.transprobWindow = transWindow
       res.transProbDetector = transWindow
       res.energiesAxAll = energyAx
       res.energiesAxWindow = energyAx
       res.kinds = mkSi3N4
       res.kindsWindow = mkSi3N4
-  weight *= transWindow
-  
-  ## Get the total probability that the Xray will be absorbed by the detector and therefore detected:
-  let energyIdx = dfTab["detectorFile"]["PhotonEnergy(eV)", float]
-    .lowerBound(energyAx.to(eV).float)
-  let transDet = dfTab["detectorFile"]["Transmission", float][energyIdx]
+  if cfIgnoreDetWindow notin flags:
+    weight *= transWindow
 
+  ## Get the total probability that the Xray will be absorbed by the detector and therefore detected:
+  let absGasDet = detectorSetup.gasAbsorption.eval(energyAx)
   if cfIgnoreGasAbs notin flags:
-    weight *= (1.0 - transDet)
-  res.transProbArgon = transDet
-  res.transProbDetector = transDet
-  #if energyAx < 0.3.keV:
-    #echo energyAx, " ", (transWindow), " tel: ", reflect, " det: ", 1.0 - transDet
+    weight *= absGasDet
+  res.transProbArgon = absGasDet
+  res.transProbDetector = absGasDet
   res.energiesAxAll = energyAx
   res.kinds = mkAr
   res.energiesAx = energyAx
@@ -1244,7 +1229,7 @@ proc traceAxion(res: var Axion,
   of esCAST:
     weight *= 3.585e3 * 3600.0 * 1.5 * 90.0 #for CAST at 10 mio, three months
   of esBabyIAXO:
-    weight *= 9.5e6 * 3600.0 * 12.0 * 90.0#9.5e6 * 3600.0 * 12.0 * 90.0 for three months at 1 mio axions at BabyIAXO
+    weight *= 9.5e6 * 3600.0 * 12.0 * 90.0 #9.5e6 * 3600.0 * 12.0 * 90.0 for three months at 1 mio axions at BabyIAXO]#
   ## assign final axion position & weight
   res.pointdataX = pointDetectorWindow[0]
   res.pointdataY = pointDetectorWindow[1]
@@ -1269,7 +1254,8 @@ proc traceAxion(res: var Axion,
         pointDetectorWindow[0] <= CHIPREGIONS_CHIP_X_MAX.float) and (
         pointDetectorWindow[1] >= CHIPREGIONS_CHIP_Y_MIN.float) and (
         pointDetectorWindow[1] <= CHIPREGIONS_CHIP_Y_MAX.float))
-
+  #if (energyAx < 0.3.keV) or (energyAx > 1.9.keV and energyAx < 2.1.keV):
+    #echo energyAx, " ", weight #(transWindow), " tel: ", reflect, " det: ", 1.0 - transDet
   ## finally set the `passed` field to indicate this axion went all the way
   if weight != 0:
     res.passed = true
@@ -1338,16 +1324,28 @@ proc generateResultPlots(axions: seq[Axion],
   extractAll(energiesAxAll)
   extractAll(energiesAxWindow)
   extractAll(energiesPre)
+  extractAll(emratesPre)
   extractAll(transProbDetector)
   extractAll(transprobWindow)
   extractAll(kinds)
   extractAll(kindsWindow)
+  extractAll(reflect)
   echo "Extracted all data!"
   ################################################################################
   ################################################################################
   ################################################################################
 
-  let dfTransProb = seqsToDf({ "Axion energy [keV]": energiesAxAll.mapIt(it.float),
+  #[let dfFluxTel = seqsToDf({"Axion energy [keV]": energiesAxAll.mapIt(it.float),
+                            "Prob": reflect})
+  echo dfFluxTel
+  ggplot(dfFluxTel, aes("Axion energy [keV]", weight = "Prob")) +
+    geom_histogram(binWidth = 0.0000666, lineWidth= some(1.2)) +
+    xlim(0.0, 15.0) +
+    ylim(0.0, 1000.0) +
+    ylab("The flux before the experiment") +
+    ggsave(&"out/TelProb.pdf")]#
+
+  #[let dfTransProb = seqsToDf({ "Axion energy [keV]": energiesAxAll.mapIt(it.float),
                                "Transmission Probability": transProbDetector,
                                "type": kinds.mapIt($it),
                                "Axion energy window[keV]":energiesAxWindow.mapIt(it.float),
@@ -1397,7 +1395,7 @@ proc generateResultPlots(axions: seq[Axion],
     ggridges("Shell", overlap = 1.8) +
     geom_histogram(binWidth = 0.001, position = "identity") +
     ggtitle("Deviation of X-rays - detector entrance to readout") +
-    ggsave(&"out/deviationDet_ridges_{windowYear}.pdf", height = 600)
+    ggsave(&"out/deviationDet_ridges_{windowYear}.pdf", height = 600)]#
 
 
   let dfRad = seqsToDf({"Radial component [mm]": pointdataR,
@@ -1405,7 +1403,7 @@ proc generateResultPlots(axions: seq[Axion],
                         "x": pointDataX,
                        "y": pointDataY})
 
-  echo dfRad.arrange("Radial component [mm]")
+  #echo dfRad.arrange("Radial component [mm]")
   ggplot(dfRad, aes("Radial component [mm]", weight = "Transmission probability")) +
     geom_histogram(binWidth = 0.001) +
     ggtitle("Radial distribution of the axions") +
@@ -1415,7 +1413,7 @@ proc generateResultPlots(axions: seq[Axion],
                            "Transmission probability": weights })
 
   ggplot(dfFluxE, aes("Axion energy [keV]", weight = "Transmission probability")) +
-    geom_histogram(binWidth = 0.00001, lineWidth= some(1.2)) +
+    geom_histogram(binWidth = 0.001, lineWidth= some(1.2)) +
     #backgroundColor(parseHex("8cc7d4")) +
     #gridLineColor(parseHex("8cc7d4")) +
     #canvasColor(parseHex("8cc7d4")) +
@@ -1427,7 +1425,7 @@ proc generateResultPlots(axions: seq[Axion],
     ggsave(&"out/fluxAfter_{windowYear}.pdf")
 
   ggplot(dfFluxE, aes("Axion energy [keV]", weight = "Transmission probability")) +
-    geom_histogram(binWidth = 0.00001, lineWidth= some(1.2)) +
+    geom_histogram(binWidth = 0.001, lineWidth= some(1.2)) +
     #backgroundColor(parseHex("8cc7d4")) +
     #gridLineColor(parseHex("8cc7d4")) +
     #canvasColor(parseHex("8cc7d4")) +
@@ -1612,10 +1610,12 @@ proc generateResultPlots(axions: seq[Axion],
     ylab("The flux after the experiment") +
     ggsave(&"out/FluxEafter_{windowYear}.pdf")
 
-  let dfFluxE3 = seqsToDf({"Axion energy [keV]": energiesPre.mapIt(it.float)})
+  let dfFluxE3 = seqsToDf({"Axion energy [keV]": energiesPre.mapIt(it.float),
+                            "Flux before the experiment": emratesPre})
 
-  ggplot(dfFluxE3, aes("Axion energy [keV]")) +
-    geom_histogram(binWidth = 0.001, lineWidth= some(1.2)) +
+  ggplot(dfFluxE3, aes("Axion energy [keV]", weight = "Flux before the experiment")) +
+    geom_histogram(binWidth = 0.0000666, lineWidth= some(1.2)) +
+    xlim(0.0, 15.0) +
     ylab("The flux before the experiment") +
     ggsave(&"out/FluxE_before_experiment_{windowYear}.pdf")
 
@@ -1675,23 +1675,64 @@ proc calculateFluxFractions(setup: ExperimentSetupKind,
   let emRatesTensor = emRatesDf["Flux", float]
     .reshape([emRatesDf.filter(fn {`Radius` == 0}).len, emRatesDf.filter(
         fn {`Energy` == 0}).len])
+
   let emRates = emRatesTensor
     .toRawSeq
     .reshape2D([emRatesTensor.shape[1], emRatesTensor.shape[0]])
+  var
+    emRatesRadiusCumSum: seq[float] = newSeq[float](emRates.len)
+    emRateCDFs: seq[seq[float]] = newSeq[seq[float]](emRates.len)
+    diffRadiusSum = 0.0
 
-  doAssert emRates[0].len == 15000
-  var emRatesRadiusCumSum = emRates.mapIt(it.sum).cumSum()
-  # normalize to one
-  emRatesRadiusCumSum.applyIt(it / emRatesRadiusCumSum[^1])
+  template toCdf(x: untyped): untyped =
+    let baseline = x[0]
+    let integral = x[^1]
+    x.mapIt( (it - baseline) / (integral - baseline) )
 
-  ## Compute all normalized CDFs of the emission rates for each radius
-  var emRateCDFs = newSeq[seq[float]]()
-  for iRad, f in emRates:
-    var cdf = toSeq(0 ..< energies.len).mapIt(
-      f[it] * (energies[it].to(eV).float * energies[it].to(eV).float) / (2 * Pi * Pi)
-    ).cumSum()
-    cdf.applyIt(it / cdf[^1])
-    emRateCDFs.add cdf
+  for iRad in 0 ..< emRates.len:
+    # emRates is seq of radii of energies
+    var diffFlux = emRates[iRad]
+    var diffSum = 0.0
+    var radiusCumSum = newSeq[float](energies.len)
+    for iEnergy in 0 ..< diffFlux.len:
+      diffFlux[iEnergy] = diffFlux[iEnergy] * pow(energies[iEnergy].float, 2.0) * pow(iRad.float * 0.0005 + 0.0015, 2.0)
+      diffSum += diffFlux[iEnergy]
+      radiusCumSum[iEnergy] = diffSum
+    diffRadiusSum += diffSum
+    emRatesRadiusCumSum[iRad] = diffRadiusSum
+    emRateCDFs[iRad] = radiusCumSum.toCdf()
+  emRatesRadiusCumSum = emRatesRadiusCumSum.toCdf()
+
+  when false:
+    echo emRates[0].len, " ", emRates[0].len
+    doAssert emRates[0].len == 15000
+    var
+      emRatesRadiusCumSum = emRates.mapIt(it.sum).cumSum() #zip(toSeq(0 ..< emRates.len), emRates).mapIt(it[1].sum * pow(it[0].float * 0.0005 + 0.0015, 2.0)).cumSum()
+      emratesRadiusSum = emRates.mapIt(it.sum)
+      emratesEnergySum: seq[float]
+
+    # normalize to one
+    emRatesRadiusCumSum.applyIt(it / emRatesRadiusCumSum[^1])
+    for e in 1..15000:
+      var emratesE = 0.0
+      for r in 0..1967:
+        emratesE += emRates[r][e-1] * (r.float * 0.0005 + 0.0015) * (r.float * 0.0005 + 0.0015)
+        #echo e.float * 0.001, " ", (r.float * 0.0005 + 0.0015), " ", (r.float * 0.0005 + 0.0015) * (r.float * 0.0005 + 0.0015) * e.float * e.float * 0.000001
+      emratesEnergySum.add(emratesE * e.float * e.float * 0.000001)
+    #echo emratesEnergySum
+
+    ggplot(seqsToDf({"Energies" : linspace(0.001, 15.0, 15000), "emrates" : emratesEnergySum}),
+        aes("Energies", "emrates")) +
+    geom_line() +
+    xlim(0.0, 15.0) +
+    ggsave("out/energy_emrates.pdf")
+
+    ## Compute all normalized CDFs of the emission rates for each radius
+    var emRateCDFs = newSeq[seq[float]]()
+    for iRad, f in emRates:
+      var cdf = f.cumSum() #toSeq(0 ..< energies.len).mapIt(f[it] * (energies[it].to(eV).float * energies[it].to(eV).float) / (2 * Pi * Pi)).cumSum()
+      cdf.applyIt(it / cdf[^1])
+      emRateCDFs.add cdf
 
   ## sample from random point and plot
   when false:
@@ -1768,12 +1809,15 @@ proc calculateFluxFractions(setup: ExperimentSetupKind,
   var axions = newSeq[Axion](numberOfPointsSun)
   var axBuf = cast[ptr UncheckedArray[Axion]](axions[0].addr)
   echo "start"
+  #echo emRatesRadiusSum.len
+  echo emRates.len
   init(Weave)
   traceAxionWrapper(axBuf, numberOfPointsSun,
                     centerVecs,
                     expSetup,
                     detectorSetup,
-                    emRates, emRatesRadiusCumSum, emRateCDFs,
+                    emRates, emRatesRadiusCumSum,
+                    emRateCDFs,
                     energies,
                     dfTab,
                     flags)
