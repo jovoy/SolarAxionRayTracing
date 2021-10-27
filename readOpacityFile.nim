@@ -631,10 +631,10 @@ proc main*(): Tensor[float] =
   let noElement = @[3, 4, 5, 9, 15, 17, 19, 21, 22, 23, 27]
   const
     alpha = 1.0 / 137.0
-    g_ae = 2e-15#5e-12 # Redondo 2013: 0.511e-10  #1e-11 #
+    g_ae = 2e-15 # Redondo 2013: 0.511e-10  #1e-11 #
     gagamma = 2e-12 #the latter for DFSZ  #1e-9 #5e-10 #
     m_a = 0.0853 #eV
-    ganuclei = 2e-6 #1.475e-8 * m_a #KSVZ model #no units  #1e-7
+    ganuclei = 1e-9 #1.475e-8 * m_a #KSVZ model #no units  #1e-7
     m_e_keV = 510.998 #keV
     e_charge = sqrt(4.0 * PI * alpha)#1.0
     kB = 1.380649e-23
@@ -762,6 +762,9 @@ proc main*(): Tensor[float] =
     ironOpE: seq[float]
     n_e_keV: float
     temp_keV: float
+    totalRadiiFlux: seq[float]
+    radiiFlux: float
+    radii: seq[float]
     zs = newSeqOfCap[int](100_000)
     rs = newSeqOfCap[float](100_000)
     rs2 = newSeqOfCap[float](100_000)
@@ -774,7 +777,7 @@ proc main*(): Tensor[float] =
   for R in 0 ..< nRadius:
     #echo "Radius ", R
     n_eInt = n_es[R]
-    
+    radiiFlux = 0.0
     temperature = temperatures[R]
     let
       n_esR = n_es[R].float
@@ -875,18 +878,19 @@ proc main*(): Tensor[float] =
       transPlasmons[R, iEindex] = transPlas
       iron57s[R, iEindex] = iron57
       abc[R, iEindex] = compton +  term1 + term3 + ffterm
-      let total_emrate = compton +  term1 + term3 + ffterm + longPlas + transPlas + primakoff #+ iron57
+      let total_emrate = compton +  term1 + term3 + ffterm  + transPlas + primakoff  + longPlas + iron57
       let total_emrate_s = total_emrate / (6.58e-19) # in 1/sec
       emratesS[R, iEindex] = total_emrate
       emratesInS[R, iEindex] = total_emrate_s
       
+      radiiFlux += iron57 * 0.001
       #if w <= 0.0732 :
         #echo transPlas
       # if want to have absorbtion coefficient of a radius and energy: R = (r (in % of sunR) - 0.0015) / 0.0005
 
-      #if iEindex == 110:
-        #echo fNew(w, y), " for r ", (R.float * 0.0005 + 0.0015), " and e ", energy_keV
-      #echo total_emrate
+      
+    totalRadiiFlux.add(radiiFlux)
+    radii.add(radius)
     #echo R, " ", omegaPlasmonSq(alpha, n_e_keV, m_e_keV)
 
   #echo longPlasmons[0]
@@ -909,9 +913,19 @@ proc main*(): Tensor[float] =
   #  geom_point() +
   #  ggtitle("Radius versus opacity for different energies") +
   #  ggsave("out/radius_op_energies.pdf")
+  let dfRadii = seqsToDf({"Radius": radii,
+                        "Flux": totalRadiiFlux})
+  echo dfRadii
+
+  ggplot(dfRadii, aes("Radius", "Flux")) +
+    geom_line() + #size = some(0.5)
+    xlab("Solar radius") +
+    ylab("Flux") +
+    ggtitle(&"Differential solar axion flux for g_ae = {g_ae}, g_aγ = {g_agamma} GeV⁻¹, g_aN = {ganuclei}") +
+    ggsave("out/radFlux.pdf", width = 800, height = 480)
 
   var diffFluxDf = newDataFrame()
-  diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, abc, "Total ABC flux")
+  diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, emratesS, "Total flux")
   diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, term1s, "FB BB Flux")
   diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, comptons, "Compton Flux")
   diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, term3s, "EE Flux")
@@ -966,7 +980,7 @@ proc main*(): Tensor[float] =
     ylab("Flux [keV⁻¹ y⁻¹ m⁻²]") +
     #ylim(0, 2.5e24) +
     #xlim(0.0, 1000.0) +
-    xlim(14000.0, 15000.0) +
+    xlim(0.0, 15000.0) +
     #scale_y_log10() + #
     scale_y_continuous() +
     #scale_x_log10() +
