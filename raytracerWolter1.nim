@@ -47,7 +47,7 @@ var
   angles: seq[float]
   reflectivityAlpha: seq[float]
 
-for i in 17..80:
+for i in 13..83:
   alpha = (i.float * 0.01).round(2)
   goldfile = fmt"./resources/reflectivity/{alpha:4.2f}degGold0.25microns"
   dfTable[fmt"goldfile{alpha:4.2f}"] = readCsv(goldfile, sep = ' ')
@@ -55,12 +55,15 @@ echo dfTable
 
 for l in 0..<999:
   reflectionProbE = 0.0
-  for j in 17..80:    
+  for j in 29..66: #17..80:    
     alpha1 = (j.float * 0.01).round(2)
     
     reflectionProb = dfTable[fmt"goldfile{alpha1:4.2f}"]["Reflectivity"].toTensor(float)[l]
     reflectionEnergy = dfTable[fmt"goldfile{alpha1:4.2f}"]["PhotonEnergy(eV)"].toTensor(float)[l]
-    reflectionProbE += reflectionProb * 0.01
+    #if j<29: reflectionProb *= 1.0 / sqrt(((j - 29) * (j - 29)).float)
+    #if j>66: reflectionProb *= 1.0 * sqrt(((j - 66) * (j - 66)).float)
+    reflectionProbE += reflectionProb * reflectionProb * 0.01 #
+    
   reflectivity.add(reflectionProbE)
   energies.add(reflectionEnergy)
 
