@@ -1872,6 +1872,11 @@ proc calculateFluxFractions(setup: ExperimentSetupKind,
 
 proc main(ignoreDetWindow = false, ignoreGasAbs = false,
           ignoreConvProb = false, ignoreGoldReflect = false) =
+  # check if the `config.toml` file exists, otherwise recreate from the default
+  if not fileExists("config.toml"):
+    let cdata = readFile("config_defaul.toml")
+    writeFile("config.toml", cdata)
+
   var coldboreBlockedLength: float64
   coldboreBlockedLength = 0.0
 
