@@ -14,10 +14,12 @@ import numericalnim, glm, ggplotnim, weave, cligen, unchained, parsetoml
 
 type
   ExperimentSetupKind = enum
-    esCAST, esBabyIAXO
+    esCAST = "CAST"
+    esBabyIAXO = "BabyIAXO"
 
   StageKind = enum
-    skVacuum, skGas
+    skVacuum = "vacuum"
+    skGas = "gas"
 
   WindowYearKind = enum
     wy2017 = "2017"
@@ -58,9 +60,9 @@ type
     telescopeTransmission*: InterpolatorType[float] # should be `keV`, but cannot do that atm
 
   DetectorSetupKind = enum
-    dkInGrid2017, # the setup as used in 2017
-    dkInGrid2018, # the setup as used in 2018
-    dkInGridIAXO  # hypothetical setup for BabyIAXO (impoved window...)
+    dkInGrid2017 = "InGrid2017" # the setup as used in 2017
+    dkInGrid2018 = "InGrid2018" # the setup as used in 2018
+    dkInGridIAXO = "InGridIAXO"  # hypothetical setup for BabyIAXO (impoved window...)
 
   DetectorSetup = ref object # ref object for smaller size for parallel task buffer
     windowYear: WindowYearKind
@@ -659,10 +661,29 @@ proc plotSolarModel(df: DataFrame) =
     ggsave("/tmp/flux_radius_sum.pdf")
 
 ############done with the functions, let's use them############
+## NOTE: In principle it's a bit inefficient to re-parse the same config.toml file multiple times, but
+## in the context of the whole ray tracing it doesn't matter. Makes the code a bit simpler.
+const sourceDir = currentSourcePath().parentDir
+proc parseLlnlTelescopeFilename(): string =
+  ## parses the config.toml file containing the path to the LLNL telescope efficiency file
+  let config = parseToml.parseFile(sourceDir / "config.toml")
+  result = config["Resources"]["llnlEfficiency"].getStr
+
+proc parseGoldFilePrefix(): string =
+  ## parses the config.toml file containing the path to the gold reflectivity files
+  let config = parseToml.parseFile(sourceDir / "config.toml")
+  result = config["Resources"]["goldFilePrefix"].getStr
+
+proc parseSetup(): (ExperimentSetupKind, DetectorSetupKind, StageKind) =
+  ## parses the config.toml file containing the setup to compute the raytracing for
+  let config = parseToml.parseFile(sourceDir / "config.toml")
+  result[0] = config["Setup"]["experimentSetup"].getStr.parseEnum[:ExperimentSetupKind]()
+  result[1] = config["Setup"]["detectorSetup"].getStr.parseEnum[:DetectorSetupKind]()
+  result[2] = config["Setup"]["stageSetup"].getStr.parseEnum[:StageKind]()
 
 proc newExperimentSetup*(setup: ExperimentSetupKind,
                          stage: StageKind,
-                         dfTab: Table[string, DataFrame]): ExperimentSetup =
+                         flags: set[ConfigFlags]): ExperimentSetup =
   # TODO: clean up, possibly make this into a toml file where one can
   # input different settings!
   case setup
@@ -738,9 +759,19 @@ proc newExperimentSetup*(setup: ExperimentSetupKind,
     )
 
   ## TODO: this needs to be moved out of this procedure
-  result.telescopeTransmission = newLinear1D(dfTab["LLNL_transEff"]["Energy[keV]", float].toRawSeq,
-                                             dfTab["LLNL_transEff"]["Transmission", float].toRawSeq)
 
+  # TODO: this could be generalized to other telescopes until the multi layer stuff is implemented
+  let dfLlnl = readCsv(parseLlnlTelescopeFilename())
+    .mutate(f{"Transmission" ~ idx("EffectiveArea[cm²]") /
+      # total eff area of telescope = 1438.338mm² = 14.38338cm²
+      (14.38338 - (4.3 * 0.2))}) # the last thing are the mirror seperators
+  # TODO: take this out once happy
+  when false:
+    ggplot(dfTab["LLNL_transEff"], aes("Energy[keV]", "Transmission")) +
+      geom_line() + ggsave("/tmp/transmission_llnl.pdf")
+
+  result.telescopeTransmission = newLinear1D(dfLlnl["Energy[keV]", float].toRawSeq,
+                                             dfLlnl["Transmission", float].toRawSeq)
 defUnit(MilliMeter²)
 proc sqrt(x: MilliMeter²): MilliMeter =
   ## We don't have sqrt as operator in unchained yet that does this automatically
@@ -857,7 +888,6 @@ proc traceAxion(res: var Axion,
                 emRatesRadiusCumSum: seq[float],
                 emRateCDFs: seq[seq[float]],
                 energies: seq[keV],
-                dfTab: Table[string, DataFrame],
                 flags: set[ConfigFlags]
                ) =
   ## Get a random point in the sun, biased by the emission rate, which is higher
@@ -1310,7 +1340,6 @@ proc traceAxionWrapper(axBuf: ptr UncheckedArray[Axion],
                        emRatesRadiusCumSum: seq[float],
                        emRateCDFs: seq[seq[float]],
                        energies: seq[keV],
-                       dfTab: Table[string, DataFrame],
                        flags: set[ConfigFlags]
                        ) =
   echo "Starting weave!"
@@ -1318,14 +1347,12 @@ proc traceAxionWrapper(axBuf: ptr UncheckedArray[Axion],
     captures: { axBuf, centerVecs, expSetup, emRates, emRatesRadiusCumSum, emRateCDFs,
                 detectorSetup,
                 energies,
-                dfTab,
                 flags }
     axBuf[iSun].traceAxion(centerVecs,
                            expSetup,
                            detectorSetup,
                            emRates, emRatesRadiusCumSum, emRateCDFs,
                            energies,
-                           dfTab,
                            flags)
 
 proc generateResultPlots(axions: seq[Axion],
@@ -1694,21 +1721,6 @@ proc calculateFluxFractions(setup: ExperimentSetupKind,
                             stage: StageKind,
                             flags: set[ConfigFlags]) =
 
-  ## TODO: these should be moved to a .toml config file
-  let llnlTransFile = &"./resources/llnl_xray_telescope_cast_effective_area_parallel_light_DTU_thesis.csv"
-
-  var dfTab = initTable[string, DataFrame]()
-
-  # TODO: this could be generalized to other telescopes until the multi layer stuff is implemented
-  dfTab["LLNL_transEff"] = readCsv(llnlTransFile)
-    .mutate(f{"Transmission" ~ idx("EffectiveArea[cm²]") /
-      # total eff area of telescope = 1438.338mm² = 14.38338cm²
-      (14.38338 - (4.3 * 0.2))}) # the last thing are the mirror seperators
-  # TODO: take this out once happy
-  when true:
-    ggplot(dfTab["LLNL_transEff"], aes("Energy[keV]", "Transmission")) +
-      geom_line() + ggsave("/tmp/transmission_llnl.pdf")
-
   if cfIgnoreGoldReflect notin flags:
     var
       goldfile: string
@@ -1717,8 +1729,7 @@ proc calculateFluxFractions(setup: ExperimentSetupKind,
       alpha = (i.float * 0.01).round(2)
       goldfile = fmt"./resources/reflectivity/{alpha:4.2f}degGold0.25microns"
       dfTab[fmt"goldfile{alpha:4.2f}"] = readCsv(goldfile, sep = ' ')
-
-  let expSetup = newExperimentSetup(setup, stage, dfTab)
+  let expSetup = newExperimentSetup(setup, stage, flags)
   let energies = linspace(0.001, 15.0, 15000).mapIt(it.keV)
 
   var
@@ -1848,7 +1859,6 @@ proc calculateFluxFractions(setup: ExperimentSetupKind,
                     emRates, emRatesRadiusCumSum,
                     emRateCDFs,
                     energies,
-                    dfTab,
                     flags)
   exit(Weave)
 
@@ -1872,9 +1882,11 @@ proc main(ignoreDetWindow = false, ignoreGasAbs = false,
   if ignoreGoldReflect: flags.incl cfIgnoreGoldReflect
   echo "Flags: ", flags
 
-  calculateFluxFractions(esBabyIAXO,
-                         dkInGridIAXO,
-                         skVacuum,
+  let (esKind, dkKind, skKind) = parseSetup()
+
+  calculateFluxFractions(esKind,
+                         dkKind,
+                         skKind,
                          flags) # radiationCharacteristic = "axionRadiation::characteristic::sar"
 
 
