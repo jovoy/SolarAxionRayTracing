@@ -1,17 +1,12 @@
 # stdlib
-import math, strutils, algorithm, random, sequtils, os, strformat, tables
+import std / [math, strutils, algorithm, random, sequtils, os, strformat, tables, sugar, strscans]
 
 import axionMass/axionMassforMagnet
 
 # nimble
 import seqmath except linspace
 import arraymancer except readCsv, linspace
-import numericalnim
-import glm
-import ggplotnim
-import weave
-import cligen
-import unchained
+import numericalnim, glm, ggplotnim, weave, cligen, unchained, parsetoml
 
 ##################rayTracer###############################
 
