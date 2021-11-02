@@ -58,6 +58,7 @@ type
     pGasRoom*: bar
     tGas*: K
     telescopeTransmission*: InterpolatorType[float] # should be `keV`, but cannot do that atm
+    goldReflectivity*: Interpolator2DType[float]    # (angle / °, keV)
 
   DetectorSetupKind = enum
     dkInGrid2017 = "InGrid2017" # the setup as used in 2017
@@ -770,8 +771,30 @@ proc newExperimentSetup*(setup: ExperimentSetupKind,
     ggplot(dfTab["LLNL_transEff"], aes("Energy[keV]", "Transmission")) +
       geom_line() + ggsave("/tmp/transmission_llnl.pdf")
 
+  var goldInterp: Interpolator2DType[float]
+  if cfIgnoreGoldReflect notin flags:
+    let prefix = parseGoldFilePrefix()
+    let goldFiles = collect(newSeq):
+      for f in walkFiles(prefix & "*degGold0.25microns"):
+        let (success, angle) = scanTuple(f.dup(removePrefix(prefix)), "$fdeg")
+        if not success: raise newException(IOError, "Could not parse input gold file: " & $f)
+        (f, angle)
+    var goldReflect: Tensor[float]
+    for i, (f, angle) in goldFiles:
+      let df = readCsv(f, sep = ' ')
+      if goldReflect.size == 0: # means first iteration, don't know # elements in gold files
+        goldReflect = newTensor[float]([goldFiles.len, df.len])
+      goldReflect[i, _] = df["Reflectivity", float]
+    let minAngle = goldFiles.mapIt(it[1]).min
+    let maxAngle = goldFiles.mapIt(it[1]).max
+    goldInterp = newBilinearSpline(goldReflect,
+                                   (minAngle, maxAngle),
+                                   (0.0, 15.0)) # 0 to 15 keV energy
+
   result.telescopeTransmission = newLinear1D(dfLlnl["Energy[keV]", float].toRawSeq,
                                              dfLlnl["Transmission", float].toRawSeq)
+  result.goldReflectivity = goldInterp
+
 defUnit(MilliMeter²)
 proc sqrt(x: MilliMeter²): MilliMeter =
   ## We don't have sqrt as operator in unchained yet that does this automatically
@@ -1210,15 +1233,12 @@ proc traceAxion(res: var Axion,
   of esBabyIAXO:
     if cfIgnoreGoldReflect notin flags:
       ## TODO: This needs to be replaced by a 2D interpolation!
-      let
-        energyAxReflection1 = dfTab[fmt"goldfile{alpha1:4.2f}"]["PhotonEnergy(eV)"].toTensor(
-                float).lowerBound(energyAx.to(eV).float)
-        energyAxReflection2 = dfTab[fmt"goldfile{alpha2:4.2f}"]["PhotonEnergy(eV)"].toTensor(
-                float).lowerBound(energyAx.to(eV).float)
-        reflectionProb1 = dfTab[fmt"goldfile{alpha1:4.2f}"]["Reflectivity", float][energyAxReflection1]
-        reflectionProb2 = dfTab[fmt"goldfile{alpha2:4.2f}"]["Reflectivity", float][energyAxReflection2]
-      res.reflect = reflectionProb1 * reflectionProb2
-      weight = reflectionProb1 * reflectionProb2 * transmissionMagnet#also yaw and pitch dependend
+      {.gcsafe.}:
+        let
+          reflectionProb1 = expSetup.goldReflectivity.eval(alpha1, energyAx.float)
+          reflectionProb2 = expSetup.goldReflectivity.eval(alpha2, energyAx.float)
+        res.reflect = reflectionProb1 * reflectionProb2
+        weight = reflectionProb1 * reflectionProb2 * transmissionMagnet#also yaw and pitch dependend
     else:
       # without gold reflection just use perfect reflectivity
       weight = transmissionMagnet#also yaw and pitch dependend
@@ -1720,15 +1740,6 @@ proc calculateFluxFractions(setup: ExperimentSetupKind,
                             detectorSetup: DetectorSetupKind,
                             stage: StageKind,
                             flags: set[ConfigFlags]) =
-
-  if cfIgnoreGoldReflect notin flags:
-    var
-      goldfile: string
-      alpha: float
-    for i in 13..83:
-      alpha = (i.float * 0.01).round(2)
-      goldfile = fmt"./resources/reflectivity/{alpha:4.2f}degGold0.25microns"
-      dfTab[fmt"goldfile{alpha:4.2f}"] = readCsv(goldfile, sep = ' ')
   let expSetup = newExperimentSetup(setup, stage, flags)
   let energies = linspace(0.001, 15.0, 15000).mapIt(it.keV)
 
