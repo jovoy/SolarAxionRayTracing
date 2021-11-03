@@ -19,3 +19,5 @@ emrates.txt
 
 # ignore results
 results/*
+out/*
+resources/reflectivity/*
