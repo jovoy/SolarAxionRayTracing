@@ -779,12 +779,12 @@ proc newExperimentSetup*(setup: ExperimentSetupKind,
         let (success, angle) = scanTuple(f.dup(removePrefix(prefix)), "$fdeg")
         if not success: raise newException(IOError, "Could not parse input gold file: " & $f)
         (f, angle)
-    var goldReflect: Tensor[float]
+    var goldReflect = newTensor[float](0)
     for i, (f, angle) in goldFiles:
       let df = readCsv(f, sep = ' ')
       if goldReflect.size == 0: # means first iteration, don't know # elements in gold files
         goldReflect = newTensor[float]([goldFiles.len, df.len])
-      goldReflect[i, _] = df["Reflectivity", float]
+      goldReflect[i, _] = df["Reflectivity", float].unsqueeze(0)
     let minAngle = goldFiles.mapIt(it[1]).min
     let maxAngle = goldFiles.mapIt(it[1]).max
     goldInterp = newBilinearSpline(goldReflect,
