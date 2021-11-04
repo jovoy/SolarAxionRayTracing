@@ -1,10 +1,10 @@
 import std / [httpclient, strutils, os, parseutils, strformat]
 
-const henkelUrl = "https://henke.lbl.gov/"
+const henkeUrl = "https://henke.lbl.gov/"
 const materialInterface = "cgi-bin/laymir.pl"
 
 # Constants for the output of the downloaded files
-const outpath = "../resources/henkel_download/"
+const outpath = "../resources/henke_download/"
 const fileTmpl = "$#degGold$#microns.csv"
 
 type
@@ -27,7 +27,7 @@ type
     polP = -1
     polUnpolarized = 0
     polS = 1
-  HenkelReq = object
+  HenkeReq = object
     layer: string                     # chemical formula of layer
     layerDensity: float               # layer density in g/cm³ (if -1: tabulated value density)
     layerThickness: float             # thickness of layer in nm
@@ -51,7 +51,7 @@ proc toStr(f: float): string =
   else:
     result = $f
 
-proc `$`(h: HenkelReq): string =
+proc `$`(h: HenkeReq): string =
   result.add "Layer=" & $h.layer & "&"
   result.add "Ldensity=" & h.layerDensity.toStr & "&"
   result.add "Thick=" & h.layerThickness.toStr & "&"
@@ -69,7 +69,7 @@ proc `$`(h: HenkelReq): string =
   result.add "Plot=" & $h.plotKind & "&"
   result.add "Output=" & $h.outputKind
 
-proc initHenkelReq(layer = "Au",
+proc initHenkeReq(layer = "Au",
                    layerDensity = -1.0,
                    layerThickness = 250.0,
                    surfaceRoughness = 0.0,
@@ -84,8 +84,8 @@ proc initHenkelReq(layer = "Au",
                    fixedQuantity = fkAngle,
                    fixedValue = 1.0,
                    plotKind = pkLinear,
-                   outputKind = okPlot): HenkelReq =
-  result = HenkelReq(layer: layer,
+                   outputKind = okPlot): HenkeReq =
+  result = HenkeReq(layer: layer,
                      layerDensity: layerDensity,
                      layerThickness: layerThickness,
                      surfaceRoughness: surfaceRoughness,
@@ -102,23 +102,23 @@ proc initHenkelReq(layer = "Au",
                      plotKind: plotKind,
                      outputKind: outputKind)
 
-proc testHenkelStr() =
+proc testHenkeStr() =
   let testExp = "Layer=Au&Ldensity=-1&Thick=250.0&Sigma1=0.0&Substrate=SiO2&Sdensity=-1&Sigma2=0.0&Pol=0&Scan=Energy&Min=7495.0&Max=15000.0&Npts=499&temp=Angle+%28deg%29&Fixed=0.95&Plot=LinLog&Output=Plot"
-  let req = initHenkelReq(fixedValue = 0.95,
+  let req = initHenkeReq(fixedValue = 0.95,
                           scanMin = 7495.0,
                           scanMax = 15000.0,
                           plotKind = pkLinLog)
   doAssert testExp == $req
-testHenkelStr()
+testHenkeStr()
 
-proc postHenkel(client: HttpClient, h: HenkelReq): string =
+proc postHenke(client: HttpClient, h: HenkeReq): string =
   let header = newHttpHeaders({"Content-Type" : "application/x-www-form-urlencoded"})
-  let postPath = henkelUrl & materialInterface
+  let postPath = henkeUrl & materialInterface
   let resp = client.request(postPath, httpMethod = HttpPost, body = $h)
   if resp.status == Http200:
     result = resp.body
   else:
-    raise newException(HttpRequestError, "Request to henkel with " & $h & " failed!")
+    raise newException(HttpRequestError, "Request to henke with " & $h & " failed!")
 
 proc extractDataPath(resp: string): string =
   ## Extrats the path from the response body that contains the requested data file
@@ -130,8 +130,8 @@ proc extractDataPath(resp: string): string =
       break
 
 proc downloadDatafile(client: HttpClient, file: string): string =
-  ## Downloads the data file from the Henkel server
-  result = client.getContent(henkelUrl & file)
+  ## Downloads the data file from the Henke server
+  result = client.getContent(henkeUrl & file)
   var res = result.splitLines
   var idx = 0
   for i, l in mpairs(res):
@@ -143,7 +143,7 @@ proc downloadDatafile(client: HttpClient, file: string): string =
   res[1] = l0
   result = res.join("\n")
 
-proc storeDatafile(data: string, h: HenkelReq): string =
+proc storeDatafile(data: string, h: HenkeReq): string =
   let angle = &"{h.fixedValue.float:.2f}"
   let thickness = &"{h.layerThickness / 1000.0:.2f}"
   let outfile = outpath / fileTmpl % [angle, thickness]
@@ -151,14 +151,14 @@ proc storeDatafile(data: string, h: HenkelReq): string =
   writeFile(outfile, data.strip & "\n")
 
 let client = newHttpClient()
-let req = initHenkelReq()
+let req = initHenkeReq()
 
 echo client.downloadDatafile(extractDataPath(extr)).storeDatafile(req)
 
 when false:
   import datamancer
   block TestParse:
-    let df = readCsv("/home/oy/Documents/GitHub/AxionElectronLimit/resources/henkel_download/1.00degGold0.25microns.csv", sep = ' ', header = "#")
+    let df = readCsv("/home/oy/Documents/GitHub/AxionElectronLimit/resources/henke_download/1.00degGold0.25microns.csv", sep = ' ', header = "#")
     echo df
     doAssert df.len == 500
     doAssert df.getKeys().len == 3
