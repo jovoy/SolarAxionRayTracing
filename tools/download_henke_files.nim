@@ -113,6 +113,8 @@ proc testHenkeStr() =
 testHenkeStr()
 
 proc postHenke(client: HttpClient, h: HenkeReq): string =
+  if h.numberOfPoints > 500:
+    raise newException(ValueError, "Number of points to download may not exceed 500!")
   let header = newHttpHeaders({"Content-Type" : "application/x-www-form-urlencoded"})
   let postPath = henkeUrl & materialInterface
   let resp = client.request(postPath, httpMethod = HttpPost, body = $h)
