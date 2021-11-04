@@ -166,6 +166,7 @@ proc download(client: HttpClient, h: HenkeReq) =
     hl.numberOfPoints = min(pointsLeft, maxPoints) # remaining points or max points
     hl.scanMin = scanVals[chunk * maxPoints]       # get min and max from values
     hl.scanMax = scanVals[min((chunk + 1) * maxPoints, h.numberOfPoints) - 1]
+    echo "INFO: Downloading chunk ", chunk, " in range ", hl.scanMin, " ↦ ", hl.scanMax, " for ", hl.fixedValue
     let dataPath = client.postHenke(hl).extractDataPath()
     let chkData = client.downloadDatafile(dataPath)
     if data.len == 0: # simply add all data including header
@@ -176,10 +177,24 @@ proc download(client: HttpClient, h: HenkeReq) =
       dec pointsLeft, maxPoints
   storeDatafile(data, h)
 
-let client = newHttpClient()
-let req = initHenkeReq(numberOfPoints = 511)
+proc downloadAllAngles(client: HttpClient,
+                       energyMin = 30.0,
+                       energyMax = 15000.0,
+                       angleMin = 0.05,
+                       angleMax = 1.0,
+                       numAngles = 100) =
+  let angles = linspace(angleMin, angleMax, numAngles)
+  for angle in angles:
+    let req = initHenkeReq(fixedValue = angle,
+                           numberOfPoints = 1000,
+                           scanMin = energyMin,
+                           scanMax = energyMax)
+    echo "INFO: Downloading angle: ", angle
+    client.download(req)
 
-client.download(req)
+let client = newHttpClient()
+
+client.downloadAllAngles()
 
 when false:
   import datamancer
