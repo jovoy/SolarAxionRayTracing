@@ -129,7 +129,7 @@ defUnit(GeV⁻¹)
 let
   RAYTRACER_DISTANCE_SUN_EARTH = 1.5e14.mm # #ok
   radiusSun = 6.9e11.mm                    # #ok
-  numberOfPointsSun = 1_000_000            #100000 for statistics   #37734 for CAST if BabyIaxo 10 mio  #26500960 corresponding to 100_000 axions at CAST, doesnt work
+  numberOfPointsSun = 10_000_000            #100000 for statistics   #37734 for CAST if BabyIaxo 10 mio  #26500960 corresponding to 100_000 axions at CAST, doesnt work
   # 1000000 axions that reach the coldbore then are reached after an operating time of 2.789 \times 10^{-5}\,\si{\second} for CAST
 
 
@@ -1413,21 +1413,37 @@ proc generateResultPlots(axions: seq[Axion],
   extractAll(transprobWindow)
   extractAll(kinds)
   extractAll(kindsWindow)
-  extractAll(reflect)
+  extractPass(reflect)
   echo "Extracted all data!"
   ################################################################################
   ################################################################################
   ################################################################################
 
-  #[let dfFluxTel = seqsToDf({"Axion energy [keV]": energiesAxAll.mapIt(it.float),
+  let dfFluxTel = seqsToDf({"Axion energy [keV]": energiesAx.mapIt(it.float),
                             "Prob": reflect})
+
+  let data = energiesAx.mapIt(it.float) # assume this is your data to be binned
+  #let weights = reflect # assume these are our weights
+  let binWidth = 0.0000666 # some width
+  let nBins = 15000 #(data.max - data.min) / binWidth
+  let (counts, bins) = histogram(data, bins = nBins) # unweighted
+  let (countsW, _) = histogram(data, weights = reflect, bins = nBins)
+  echo data
+  echo counts
+  let df = seqsToDf({"bins" : bins[0 ..< bins.high], "counts": counts, "countsW" : countsW})
+    .mutate(f{"countsNorm" ~ `countsW` / `counts`})
+  echo df
+  ggplot(df, aes("bins", "countsNorm")) +
+    geom_histogram(stat = "identity") + # as we have already binned data!
+    ggsave(&"out/custom_histo.pdf")
+
   echo dfFluxTel
   ggplot(dfFluxTel, aes("Axion energy [keV]", weight = "Prob")) +
     geom_histogram(binWidth = 0.0000666, lineWidth= some(1.2)) +
     xlim(0.0, 15.0) +
     ylim(0.0, 1000.0) +
     ylab("The flux before the experiment") +
-    ggsave(&"out/TelProb.pdf")]#
+    ggsave(&"out/TelProb.pdf")
 
   #[let dfTransProb = seqsToDf({ "Axion energy [keV]": energiesAxAll.mapIt(it.float),
                                "Transmission Probability": transProbDetector,
