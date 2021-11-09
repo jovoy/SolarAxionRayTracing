@@ -775,13 +775,13 @@ proc newExperimentSetup*(setup: ExperimentSetupKind,
   if cfIgnoreGoldReflect notin flags:
     let prefix = parseGoldFilePrefix()
     let goldFiles = collect(newSeq):
-      for f in walkFiles(prefix & "*degGold0.25microns"):
+      for f in walkFiles(prefix & "*degGold0.25microns.csv"):
         let (success, angle) = scanTuple(f.dup(removePrefix(prefix)), "$fdeg")
         if not success: raise newException(IOError, "Could not parse input gold file: " & $f)
         (f, angle)
     var goldReflect = newTensor[float](0)
     for i, (f, angle) in goldFiles:
-      let df = readCsv(f, sep = ' ')
+      let df = readCsv(f, sep = ' ', header = "#")
       if goldReflect.size == 0: # means first iteration, don't know # elements in gold files
         goldReflect = newTensor[float]([goldFiles.len, df.len])
       goldReflect[i, _] = df["Reflectivity", float].unsqueeze(0)
