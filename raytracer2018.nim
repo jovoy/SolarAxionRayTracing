@@ -32,6 +32,9 @@ type
     centerExitPipeCBVT3: Vec3[float]
     centerExitPipeVT3XRT: Vec3[float]
     centerExitCBMagneticField: Vec3[float]
+    centerEnterCBMagneticField: Vec3[float]
+    centerXraySource: Vec3[float]
+    centerCollimator: Vec3[float]
     centerSun: Vec3[float]
 
   ExperimentSetup* = ref object
@@ -40,6 +43,11 @@ type
     radiusCB*: mm
     RAYTRACER_LENGTH_COLDBORE*: mm
     RAYTRACER_LENGTH_COLDBORE_9T*: mm
+    distXraySource*: mm
+    radiusXraySource*: mm
+    offAxXraySource*: mm
+    lengthCol*: mm
+    enXraySource*: keV
     RAYTRACER_LENGTH_PIPE_CB_VT3*: mm
     radiusPipeCBVT3*: mm
     RAYTRACER_LENGTH_PIPE_VT3_XRT*: mm
@@ -48,6 +56,7 @@ type
     distanceCBAxisXRTAxis*: mm
     RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW*: mm
     pipes_turned*: Degree
+    telescope_turned*: Degree
     allThickness*: seq[MilliMeter]
     allR1*: seq[MilliMeter]
     allXsep*: seq[MilliMeter]
@@ -57,6 +66,8 @@ type
     B*: T
     pGasRoom*: bar
     tGas*: K
+    holeInOptics*: mm
+    lateralDetector*: mm
     telescopeTransmission*: InterpolatorType[float] # should be `keV`, but cannot do that atm
     goldReflectivity*: Interpolator2DType[float]    # (angle / °, keV)
 
@@ -120,7 +131,8 @@ type
     cfIgnoreDetWindow,   ## use to ignore the detector window absorbtion
     cfIgnoreGasAbs,      ## use to ignore the gas transmission
     cfIgnoreGoldReflect, ## use to ignore gold reflectivity (use 1.0)
-    cfIgnoreConvProb     ## use to ignore axion conversion probability
+    cfIgnoreConvProb,    ## use to ignore axion conversion probability
+    cfXrayTest
 
 ################################
 # VARIABLES from rayTracer.h
@@ -162,7 +174,7 @@ proc initCenterVectors(expSetup: ExperimentSetup): CenterVectors =
   var centerSun = vec3(0.0)
   centerSun[0] = 0
   centerSun[1] = 0
-  centerSun[2] = RAYTRACER_DISTANCE_SUN_EARTH.float
+  centerSun[2] = - RAYTRACER_DISTANCE_SUN_EARTH.float
 
   var centerEntranceCB = vec3(0.0)
   centerEntranceCB[0] = 0
@@ -173,6 +185,16 @@ proc initCenterVectors(expSetup: ExperimentSetup): CenterVectors =
   centerExitCBMagneticField[0] = 0
   centerExitCBMagneticField[1] = 0
   centerExitCBMagneticField[2] = expSetup.RAYTRACER_LENGTH_COLDBORE_9T.float
+
+  var centerEnterCBMagneticField = vec3(0.0)
+
+  var centerXraySource = vec3(0.0)
+  centerXraySource[1] = expSetup.offAxXraySource.float #250.0
+  centerXraySource[2] = - expSetup.distXraySource.float
+
+  var centerCollimator = vec3(0.0)
+  centerCollimator[1] = expSetup.offAxXraySource.float #250.0
+  centerCollimator[2] = - expSetup.distXraySource.float + expSetup.lengthCol.float
 
   var centerExitCB = vec3(0.0)
   centerExitCB[0] = 0
@@ -196,6 +218,9 @@ proc initCenterVectors(expSetup: ExperimentSetup): CenterVectors =
                          centerExitPipeCBVT3: centerExitPipeCBVT3,
                          centerExitPipeVT3XRT: centerExitPipeVT3XRT,
                          centerExitCBMagneticField: centerExitCBMagneticField,
+                         centerEnterCBMagneticField: centerEnterCBMagneticField,
+                         centerXraySource: centerXraySource,
+                         centerCollimator: centerCollimator,
                          centerSun: centerSun)
 
 proc toRad(wyKind: WindowYearKind): float =
@@ -335,7 +360,7 @@ proc lineIntersectsCircle(point_1, point_2, center: Vec3,
   vector = point_2 - point_1
   var lambda1 = (center[2] - point_1[2]) / vector[2]
   var intersect = vec3(0.0)
-  intersect = point_1 + lambda1 * vector
+  intersect = (point_1 + lambda1 * vector) - center
   let r_xy_intersect = sqrt(intersect[0] * intersect[0] + intersect[1] *
       intersect[1])
   result = r_xy_intersect < radius.float
@@ -608,10 +633,10 @@ proc plotHeatmap(diagramtitle: string,
   ggplot(df, aes("x-position [mm]", "y-position [mm]", fill = "photon flux")) +
     geom_raster() +
     scale_x_continuous() + scale_y_continuous() + scale_fill_continuous("photon flux") +
-    geompoint(aes("xr", "yr"), color = some(parseHex("eab90c")), size = some(0.5)) +
+    #[geompoint(aes("xr", "yr"), color = some(parseHex("eab90c")), size = some(0.5)) +
     geompoint(aes("xrneg", "yr"), color = some(parseHex("eab90c")), size = some(0.5)) +
     geompoint(aes("xr2", "yr2"), color = some(parseHex("07529a")), size = some(0.5)) +
-    geompoint(aes("xrneg2", "yr2"), color = some(parseHex("07529a")), size = some(0.5)) +
+    geompoint(aes("xrneg2", "yr2"), color = some(parseHex("07529a")), size = some(0.5)) +]#
     # geom_line(aes = aes(xMin = minX(), xMax = maxX(), y = minY())) +
     # geom_line(aes = aes(xMin = minX(), xMax = maxX(), y = maxY())) +
     # geom_line(aes = aes(yMin = minY(), yMax = maxY(), x = minX())) +
@@ -626,10 +651,10 @@ proc plotHeatmap(diagramtitle: string,
   ggplot(df, aes("x-position [mm]", "y-position [mm]", fill = "photon flux")) +
     geom_raster() +
     scale_x_continuous() + scale_y_continuous() + scale_fill_continuous("photon flux") +
-    geompoint(aes("xr", "yr"), color = some(parseHex("eab90c")), size = some(0.5)) +
+    #[geompoint(aes("xr", "yr"), color = some(parseHex("eab90c")), size = some(0.5)) +
     geompoint(aes("xrneg", "yr"), color = some(parseHex("eab90c")), size = some(0.5)) +
     geompoint(aes("xr2", "yr2"), color = some(parseHex("07529a")), size = some(0.5)) +
-    geompoint(aes("xrneg2", "yr2"), color = some(parseHex("07529a")), size = some(0.5)) +
+    geompoint(aes("xrneg2", "yr2"), color = some(parseHex("07529a")), size = some(0.5)) +]#
     # geom_line(aes = aes(xMin = minX(), xMax = maxX(), y = minY())) +
     # geom_line(aes = aes(xMin = minX(), xMax = maxX(), y = maxY())) +
     # geom_line(aes = aes(yMin = minY(), yMax = maxY(), x = minX())) +
@@ -695,6 +720,11 @@ proc newExperimentSetup*(setup: ExperimentSetupKind,
       radiusCB: 21.5.mm,
       RAYTRACER_LENGTH_COLDBORE: 9756.0.mm, # half B field to end of CB #ok
       RAYTRACER_LENGTH_COLDBORE_9T: 9260.0.mm, # half B field to half B field #ok
+      distXraySource: 100.0.mm, #distance between the entrance of the magnet an a test Xray source
+      radiusXraySource: 10.0.mm,
+      offAxXraySource: 200.0.mm,
+      lengthCol: 50.0.mm,
+      enXraySource: 1.0.keV,
       RAYTRACER_LENGTH_PIPE_CB_VT3: 2571.5.mm, # should stay the same #from beam pipe drawings #ok
       radiusPipeCBVT3: 39.64.mm, #30.0 # smallest aperture between end of CB and VT3
       RAYTRACER_LENGTH_PIPE_VT3_XRT: 150.0.mm, # from drawings #198.2 #mm from XRT drawing #ok
@@ -703,6 +733,7 @@ proc newExperimentSetup*(setup: ExperimentSetupKind,
       distanceCBAxisXRTAxis: 0.0.mm, #62.1#58.44 # from XRT drawing #there is no difference in the axis even though the picture gets transfered 62,1mm down, but in the detector center
       RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW: 0.0.mm, # #no change, because don't know
       pipes_turned: 3.0.°, #degree # this is the angle by which the pipes before the detector were turned in comparison to the telescope
+      telescope_turned: 0.0.°, #the angle by which the telescope is turned in respect to the magnet
                              # Measurements of the Telescope mirrors in the following, R1 are the radii of the mirror shells at the entrance of the mirror
       allThickness: @[0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2,
           0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2].mapIt(it.mm), ## the radii of the shells
@@ -717,7 +748,9 @@ proc newExperimentSetup*(setup: ExperimentSetupKind,
       d: 83.0.mm, # ## distance between center of colbore at XRT and center of XRT (where the focal point is on the minus x axis)
       B: 9.0.T, # magnetic field of magnet
       pGasRoom: 1.0.bar, # pressure of the gas
-      tGas: 1.7.K #
+      tGas: 1.7.K, #
+      holeInOptics: 0.0.mm, #max 20.9.mm
+      lateralDetector: 0.0.mm #lateral ofset of the detector in repect to the beamline
     )
   of esBabyIAXO:
     result = ExperimentSetup(
@@ -727,6 +760,11 @@ proc newExperimentSetup*(setup: ExperimentSetupKind,
                              # Change:
       RAYTRACER_LENGTH_COLDBORE: 11000.0.mm, # not sure if this is true but this is how its written on page 61 of the 2021 BabyIAXO paper
       RAYTRACER_LENGTH_COLDBORE_9T: 10000.0.mm, # I know it's not 9T here should be the actual length of pipe with a stable magnetic field; can't be same length
+      distXraySource: 100.0.mm, #distance between the entrance of the magnet an a test Xray source
+      radiusXraySource: 0.5.mm,
+      offAxXraySource: 0.0.mm,
+      lengthCol: 100.0.mm,
+      enXraySource: 1.0.keV,
       RAYTRACER_LENGTH_PIPE_CB_VT3: 300.0.mm, # not determined
       radiusPipeCBVT3: 370.0.mm, #mm smallest aperture between end of CB and VT4 # no Idea, I just made it wider than the coldbore
       RAYTRACER_LENGTH_PIPE_VT3_XRT: 300.0.mm, # not determined
@@ -734,7 +772,8 @@ proc newExperimentSetup*(setup: ExperimentSetupKind,
       RAYTRACER_FOCAL_LENGTH_XRT: 7500.0.mm, # # one possibility, the other is 5050 mm
       distanceCBAxisXRTAxis: 0.0.mm,
       RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW: 0.0.mm, # #no change, because don't know #good idea
-      pipes_turned: 0.0.°,
+      pipes_turned: 0.0.°, # this is the angle by which the pipes before the detector were turned in comparison to the telescope
+      telescope_turned: 0.01.°, #the angle by which the telescope is turned in respect to the magnet
                              # Measurements of the Telescope mirrors in the following, R1 are the radii of the mirror shells at the entrance of the mirror
       #allR3: @[151.61, 153.88, 156.17, 158.48, 160.82, 163.18, 165.57, 167.98, 170.42, 172.88, 175.37, 177.88, 180.42, 183.14, 185.89, 188.67, 191.48,
           #194.32, 197.19, 200.09, 203.02, 206.03, 209.07, 212.14, 215.24, 218.37, 221.54, 224.74, 227.97, 231.24, 234.54, 237.87, 241.24, 244.85,
@@ -756,7 +795,9 @@ proc newExperimentSetup*(setup: ExperimentSetupKind,
       d: 0.0.mm, # distance between center of colbore at XRT and center of XRT (where the focal point is on the minus x axis)
       B: 2.0.T, # magnetic field of magnet # Rather 2-3 T, not entirely homogeneous
       pGasRoom: 1.0.bar, #, pressure of the gas #for example P = 14.3345 mbar (corresponds to 1 bar at room temperature).
-      tGas: 100.0.K #293.15, # only Gas in BabyIAXO
+      tGas: 100.0.K, #293.15, # only Gas in BabyIAXO
+      holeInOptics: 1.0.mm, #max 20.9.mm
+      lateralDetector: 0.0.mm #lateral ofset of the detector in repect to the beamline
     )
 
   ## TODO: this needs to be moved out of this procedure
@@ -915,21 +956,36 @@ proc traceAxion(res: var Axion,
                ) =
   ## Get a random point in the sun, biased by the emission rate, which is higher
   ## at smalller radii, so this will give more points in the center of the sun ##
-  let pointInSun = getRandomPointFromSolarModel(centerVecs.centerSun, radiusSun, emRatesRadiusCumSum)
-  var weight: float
+  var pointInSun = getRandomPointFromSolarModel(centerVecs.centerSun, radiusSun, emRatesRadiusCumSum)
+  var weight = 1.0
   ## Get a random point at the end of the coldbore of the magnet to take all axions into account that make it to this point no matter where they enter the magnet ##
-  let pointExitCBMagneticField = getRandomPointOnDisk(
+  var pointExitCBMagneticField = getRandomPointOnDisk(
       centerVecs.centerExitCBMagneticField, expSetup.radiusCB)
-
+  let pointXraySource = getRandomPointOnDisk(
+      centerVecs.centerXraySource, expSetup.radiusXraySource)
+  let energyXraySource = expSetup.enXraySource
+  
   ## Get a random energy for the axion biased by the emission rate ##
-  let energyAx = getRandomEnergyFromSolarModel(
+  var energyAx = getRandomEnergyFromSolarModel(
     pointInSun, centerVecs.centerSun, radiusSun, energies, emRateCDFs)
-
+  if cfXrayTest in flags:
+    pointInSun = pointXraySource
+    energyAx = energyXraySource
+    if not lineIntersectsCircle(pointInSun,
+      pointExitCBMagneticField, centerVecs.centerCollimator, expSetup.radiusXraySource): 
+      return
+    var centerSpot = vec3(0.0)
+    centerSpot[1] = expSetup.offAxXraySource.float
+    centerSpot[2] = expSetup.RAYTRACER_LENGTH_COLDBORE_9T.float
+    #pointExitCBMagneticField = getRandomPointOnDisk(
+    #centerSpot, 0.1.mm)
   #let emissionRateAx = getRandomEmissionRateFromSolarModel(
   #  pointInSun, centerVecs.centerSun, radiusSun, emRates, emRateCDFs
   #)
   ## Throw away all the axions, that don't make it through the piping system and therefore exit the system at some point ##
-
+  
+  
+  
   let intersectsEntranceCB = lineIntersectsCircle(pointInSun,
       pointExitCBMagneticField, centerVecs.centerEntranceCB, expSetup.radiusCB)
   var intersectsCB = false
@@ -986,14 +1042,25 @@ proc traceAxion(res: var Axion,
       pointExitPipeCBVT3 - pointExitCB)
 
   var vectorBeforeXRT = pointExitPipeVT3XRT - pointExitCB
-
+  
   ###################from the CB (coldbore(pipe in Magnet)) to the XRT (XrayTelescope)#######################
+  var vectorXRT = vectorBeforeXRT
+  vectorXRT[2] = vectorXRT[2] #- centerVecs.centerExitPipeVT3XRT[2]
+  vectorXRT[0] = vectorXRT[0] * cos(expSetup.telescope_turned.to(Radian)) + vectorXRT[2] * sin(expSetup.telescope_turned.to(Radian))
+  vectorXRT[1] = vectorXRT[1]
+  vectorXRT[2] = vectorXRT[2] * cos(expSetup.telescope_turned.to(Radian)) - vectorXRT[0] * sin(expSetup.telescope_turned.to(Radian))
 
-  var pointEntranceXRT = vec3(0.0)
-  pointEntranceXRT[0] = pointExitPipeVT3XRT[0] #- distanceCBAxisXRTAxis
-  pointEntranceXRT[1] = pointExitPipeVT3XRT[1]
-  pointEntranceXRT[2] = pointExitPipeVT3XRT[2]
-
+  #var pointExitCBXRT = vec3(0.0)
+  pointExitCB[2] = pointExitCB[2] - centerVecs.centerExitPipeVT3XRT[2]
+  pointExitCB[0] = pointExitCB[0] * cos(expSetup.telescope_turned.to(Radian)) + pointExitCB[2] * sin(expSetup.telescope_turned.to(Radian))
+  pointExitCB[1] = pointExitCB[1]
+  pointExitCB[2] = pointExitCB[2] * cos(expSetup.telescope_turned.to(Radian)) - pointExitCB[0] * sin(expSetup.telescope_turned.to(Radian))
+  var factor = (0.0 - pointExitCB[2]) / vectorXRT[2]
+  
+  #echo "before ", pointExitCB, " ", vectorBeforeXRT, " after ", pointExitCBXRT, " ", vectorXRT
+  
+  var pointEntranceXRT = pointExitCB + factor * vectorXRT 
+  vectorBeforeXRT = vectorXRT
   ## Coordinate transform from cartesian to polar at the XRT entrance
   var
     vectorEntranceXRTCircular = vec3(0.0)
@@ -1017,16 +1084,17 @@ proc traceAxion(res: var Axion,
     if pointEntranceXRT[1] <= 1.0 and pointEntranceXRT[1] >= -1.0: return
   of esBabyIAXO:
     ## here we have a spider structure for the XMM telescope:
-    if vectorEntranceXRTCircular[0] <= 64.7: #doesnt really matter because there are no mirrors in the middle and these axions dont reach the window anyways
+    if vectorEntranceXRTCircular[0] <= 64.7 and vectorEntranceXRTCircular[0] > expSetup.holeInOptics.float: #doesnt really matter because there are no mirrors in the middle and these axions dont reach the window anyways
       return
-    elif vectorEntranceXRTCircular[0] < 151.6 and vectorEntranceXRTCircular[0] > (151.6 - 20.9): #doesnt really matter because there are no mirrors in the middle and these axions dont reach the window anyways
+    elif vectorEntranceXRTCircular[0] < 151.6 and vectorEntranceXRTCircular[0] > (151.6 - 20.9): #hole max 20.9 mm doesnt really matter because there are no mirrors in the middle and these axions dont reach the window anyways
       return
-    for i in 0..16:
-      if (phi_flat >= (-1.25 + 22.5 * i.float) and phi_flat <= (1.25 + 22.5 * i.float)): #spider strips (actually wider for innermost but doesnn't matter because it doesnt reach the window anyways)
-        return
+    else:
+      for i in 0..16:
+        if (phi_flat + 3.0 >= (-1.25 + 22.5 * i.float) and phi_flat + 3.0 <= (1.25 + 22.5 * i.float)): #spider strips (actually wider for innermost but doesnn't matter because it doesnt reach the window anyways)
+          return
     #TODO: inner spider structure that doesnt matter
 
-
+  
   ## Calculate the way of the axion through the telescope by manually reflecting the ray on the two mirror layers and then ending up before the detector ##
 
   var
@@ -1039,6 +1107,11 @@ proc traceAxion(res: var Axion,
     beta = 0.0.Radian ## in degree
     xSep = 0.0.mm
     h: int
+    testXray = false
+    lengthTelescope = (expSetup.lMirror + 0.5 * xSep) * cos(expSetup.allAngles[0].to(Radian)) + (expSetup.lMirror + 0.5 * xSep) * cos(3.0 * expSetup.allAngles[0].to(Radian))
+    centerEndXRT = vec3(0.0)
+  centerEndXRT[0] = lengthTelescope.float * tan(expSetup.telescope_turned.to(Radian))
+  centerEndXRT[2] = lengthTelescope.float
 
   if vectorEntranceXRTCircular[0].mm > expSetup.allR1[expSetup.allR1.len - 1]: return
   for j in 0..<expSetup.allR1.len:
@@ -1048,28 +1121,34 @@ proc traceAxion(res: var Axion,
       return
     if expSetup.allR1[j] - vectorEntranceXRTCircular[0].mm > 0.0.mm:
       dist.add(expSetup.allR1[j] - vectorEntranceXRTCircular[0].mm)
-  for k in 0..<expSetup.allR1.len:
+  for k in 0..<expSetup.allR1.len: 
     if min(dist) == expSetup.allR1[k] - vectorEntranceXRTCircular[0].mm:
-      r1 = expSetup.allR1[k]
-      beta = expSetup.allAngles[k].to(Radian)
-      xSep = expSetup.allXsep[k]
+      h = k
+      if min(dist) > 100.0.mm:
+        testXray = true
+        h = 50 
+        if not lineIntersectsCircle(pointExitCB, pointEntranceXRT, centerEndXRT, expSetup.holeInOptics): 
+          return
+          
+      r1 = expSetup.allR1[h]
+      beta = expSetup.allAngles[h].to(Radian)
+      xSep = expSetup.allXsep[h]
       r2 = r1 - expSetup.lMirror * sin(beta)
       r3 = r2 - 0.5 * xSep * tan(beta)
       r4 = r3 - 0.5 * xSep * tan(3.0 * beta)
-      r5 = r4 - expSetup.lMirror * sin(3.0 * beta)
-      h = k
-  if r1 == expSetup.allR1[0]: return
+      r5 = r4 - expSetup.lMirror * sin(3.0 * beta)    
 
+  if testXray == false and r1 == expSetup.allR1[0]: return
+  
   var pointEntranceXRTZylKart = vec3(0.0)
   pointEntranceXRTZylKart[0] = pointEntranceXRT[0] + expSetup.d.float
   pointEntranceXRTZylKart[1] = pointEntranceXRT[1]
-  pointEntranceXRTZylKart[2] = pointEntranceXRT[2] -
-      centerVecs.centerExitPipeVT3XRT[2]
+  pointEntranceXRTZylKart[2] = pointEntranceXRT[2] #- centerVecs.centerExitPipeVT3XRT[2]
 
   var pointExitCBZylKart = vec3(0.0)
   pointExitCBZylKart[0] = pointExitCB[0] + expSetup.d.float
   pointExitCBZylKart[1] = pointExitCB[1]
-  pointExitCBZylKart[2] = pointExitCB[2] - centerVecs.centerExitPipeVT3XRT[2]
+  pointExitCBZylKart[2] = pointExitCB[2] #- centerVecs.centerExitPipeVT3XRT[2]
 
   let
     beta3 = 3.0 * beta
@@ -1082,15 +1161,22 @@ proc traceAxion(res: var Axion,
     vectorAfterMirror1 = getVectoraAfterMirror(pointEntranceXRTZylKart,
         pointExitCBZylKart, pointMirror1, beta, "vectorAfter")
     pointAfterMirror1 = pointMirror1 + 200.0 * vectorAfterMirror1
+    pointLowerMirror = findPosXRT(pointAfterMirror1, pointMirror1, expSetup.allR1[h-1] + expSetup.allThickness[h-1], 
+                              expSetup.allR1[h-1] - expSetup.lMirror * sin(expSetup.allAngles[h-1].to(Radian)) + expSetup.allThickness[h-1], 
+                              expSetup.allAngles[h-1].to(Radian),
+                              expSetup.lMirror, 0.0.mm, 0.01.mm, 0.0.mm, 2.5.mm)
     pointMirror2 = findPosXRT(pointAfterMirror1, pointMirror1, r4, r5, beta3,
                               expSetup.lMirror, distanceMirrors, 0.01.mm, 0.0.mm, 2.5.mm)
+  #echo r1, " ", expSetup.allR1[h-1], " ", r2, " ", expSetup.allR1[h-1] - expSetup.lMirror * sin(expSetup.allAngles[h-1].to(Radian))
+  if (pointMirror1[2] +  0.001 >  pointMirror2[2] and pointMirror1[2] -  0.001 <  pointMirror2[2]): return
+
   if pointMirror2[0] == 0.0 and pointMirror2[1] == 0.0 and pointMirror2[2] ==
       0.0: return ## with more uncertainty, 10% of the 0.1% we loose here can be recovered, but it gets more uncertain
   let
     vectorAfterMirrors = getVectoraAfterMirror(pointAfterMirror1, pointMirror1,
         pointMirror2, beta3, "vectorAfter")
     pointAfterMirror2 = pointMirror2 + 200.0 * vectorAfterMirrors
-
+  
   ############################################# Mirrors end #################################################
   ## now get the points in the focal / detector plane
 
@@ -1120,7 +1206,7 @@ proc traceAxion(res: var Axion,
   of esBabyIAXO:
     distDet = distanceMirrors - 0.5 * expSetup.allXsep[8] * cos(beta) +
         expSetup.RAYTRACER_FOCAL_LENGTH_XRT -
-        expSetup.RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW
+        expSetup.RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW #distanc of the detector from the entrance of the optics
     n = (distDet - pointMirror2[2].mm) / vectorAfterMirrors[2].mm
     n3 = ((distDet + detectorSetup.depthDet) - pointMirror2[2].mm) / vectorAfterMirrors[2].mm
     pointDetectorWindow = pointMirror2 + n.float * vectorAfterMirrors
@@ -1222,7 +1308,11 @@ proc traceAxion(res: var Axion,
         pointMirror2, beta3, "angle")
     alpha1 = angle1[1].round(2)
     alpha2 = angle2[1].round(2)
-
+  #echo (angle1[1].degToRad) , " ", (r1.float - (expSetup.allR1[h-1] + expSetup.allThickness[h-1]).float) / (expSetup.lMirror.float - pointMirror1[2]) #radToDeg(arcsin(r1.float - (expSetup.allR1[h-1] + expSetup.allThickness[h-1]).float) / (expSetup.lMirror.float - pointMirror1[2]))
+  if sin(angle1[1].degToRad) > (r1.float - (expSetup.allR1[h-1] + expSetup.allThickness[h-1]).float) / (expSetup.lMirror.float - pointMirror1[2]):
+    #if not (pointMirror1[2] +  0.0001 >  pointLowerMirror[2] and pointMirror1[2] -  0.0001 <  pointLowerMirror[2]): 
+    return
+    #echo pointLowerMirror, " ", pointMirror1, " ", pointMirror2, " ", angle1[1], " ", angle2[1], " ", h
   var reflect = 0.0
   case expSetup.kind
   of esCAST:
@@ -1242,16 +1332,28 @@ proc traceAxion(res: var Axion,
     else:
       # without gold reflection just use perfect reflectivity
       weight = transmissionMagnet#also yaw and pitch dependend
-
+  
+  if testXray != false:
+    if cfXrayTest notin flags:
+      weight = transmissionMagnet
+    n = (distDet - pointExitCB[2].mm) / (pointEntranceXRT - pointExitCB)[2].mm
+    pointDetectorWindow = pointExitCB + n.float * (pointEntranceXRT - pointExitCB)
+    echo n, " ", pointDetectorWindow
+  pointDetectorWindow[0] -= expSetup.lateralDetector.float
   if weight != 0:
     res.passedTillWindow = true
-
+  #echo h, " ", pointEntranceXRT, " ", pointDetectorWindow
   ##Detector window:##
-  if sqrt(
-    pointDetectorWindow[0].mm * pointDetectorWindow[0].mm +
-    pointDetectorWindow[1].mm * pointDetectorWindow[1].mm
-  ) > detectorSetup.radiusWindow:
-    return
+  if cfIgnoreDetWindow notin flags and sqrt(
+      pointDetectorWindow[0].mm * pointDetectorWindow[0].mm +
+      pointDetectorWindow[1].mm * pointDetectorWindow[1].mm
+      ) > detectorSetup.radiusWindow:
+      return
+  
+  else:
+    if abs(pointDetectorWindow[0].mm) > 7.mm or abs(pointDetectorWindow[1].mm) > 7.mm:
+      return
+  
   var pointDetectorWindowTurned = vec3(0.0)
   let theta = detectorSetup.theta
   pointDetectorWindowTurned[0] = pointDetectorWindow[0] * cos(theta) +
@@ -1312,11 +1414,12 @@ proc traceAxion(res: var Axion,
   pointDetectorWindow[0] = - pointDetectorWindow[0] + CHIPREGIONS_CHIP_CENTER_X.float # for the view from the detector to the sun
   pointDetectorWindow[1] = pointDetectorWindow[1] + CHIPREGIONS_CHIP_CENTER_Y.float
 
-  case expSetup.kind
-  of esCAST:
-    weight *= 3.585e3 * 3600.0 * 1.5 * 90.0 #for CAST at 10 mio, three months
-  of esBabyIAXO:
-    weight *= 9.5e6 * 3600.0 * 12.0 * 90.0 #9.5e6 * 3600.0 * 12.0 * 90.0 for three months at 1 mio axions at BabyIAXO]#
+  if cfXrayTest notin flags:
+    case expSetup.kind
+    of esCAST:
+      weight *= 3.585e3 * 3600.0 * 1.5 * 90.0 #for CAST at 10 mio, three months
+    of esBabyIAXO:
+      weight *= 9.5e6 * 3600.0 * 12.0 * 90.0 #9.5e6 * 3600.0 * 12.0 * 90.0 for three months at 1 mio axions at BabyIAXO]#
   ## assign final axion position & weight
   res.pointdataX = pointDetectorWindow[0]
   res.pointdataY = pointDetectorWindow[1]
@@ -1419,7 +1522,7 @@ proc generateResultPlots(axions: seq[Axion],
   ################################################################################
   ################################################################################
 
-  let dfFluxTel = seqsToDf({"Axion energy [keV]": energiesAx.mapIt(it.float),
+  #[let dfFluxTel = seqsToDf({"Axion energy [keV]": energiesAx.mapIt(it.float),
                             "Prob": reflect})
 
   let data = energiesAx.mapIt(it.float) # assume this is your data to be binned
@@ -1428,11 +1531,11 @@ proc generateResultPlots(axions: seq[Axion],
   let nBins = 15000 #(data.max - data.min) / binWidth
   let (counts, bins) = histogram(data, bins = nBins) # unweighted
   let (countsW, _) = histogram(data, weights = reflect, bins = nBins)
-  echo data
-  echo counts
+  #echo data
+  #echo counts
   let df = seqsToDf({"bins" : bins[0 ..< bins.high], "counts": counts, "countsW" : countsW})
     .mutate(f{"countsNorm" ~ `countsW` / `counts`})
-  echo df
+  #echo df
   ggplot(df, aes("bins", "countsNorm")) +
     geom_histogram(stat = "identity") + # as we have already binned data!
     ggsave(&"out/custom_histo.pdf")
@@ -1443,7 +1546,7 @@ proc generateResultPlots(axions: seq[Axion],
     xlim(0.0, 15.0) +
     ylim(0.0, 1000.0) +
     ylab("The flux before the experiment") +
-    ggsave(&"out/TelProb.pdf")
+    ggsave(&"out/TelProb.pdf")]#
 
   #[let dfTransProb = seqsToDf({ "Axion energy [keV]": energiesAxAll.mapIt(it.float),
                                "Transmission Probability": transProbDetector,
@@ -1498,6 +1601,9 @@ proc generateResultPlots(axions: seq[Axion],
     ggsave(&"out/deviationDet_ridges_{windowYear}.pdf", height = 600)]#
 
 
+
+
+
   let dfRad = seqsToDf({"Radial component [mm]": pointdataR,
                         "Transmission probability": weights,
                         "x": pointDataX,
@@ -1512,7 +1618,7 @@ proc generateResultPlots(axions: seq[Axion],
   let dfFluxE = seqsToDf({ "Axion energy [keV]": energiesAx.mapIt(it.float),
                            "Transmission probability": weights })
 
-  ggplot(dfFluxE, aes("Axion energy [keV]", weight = "Transmission probability")) +
+  #[ggplot(dfFluxE, aes("Axion energy [keV]", weight = "Transmission probability")) +
     geom_histogram(binWidth = 0.001, lineWidth= some(1.2)) +
     #backgroundColor(parseHex("8cc7d4")) +
     #gridLineColor(parseHex("8cc7d4")) +
@@ -1540,7 +1646,7 @@ proc generateResultPlots(axions: seq[Axion],
     geom_histogram(binWidth = 0.00001, lineWidth= some(1.2)) +
     theme_transparent() +
     ggtitle("Simulated photon flux depending on the energy of the axion") +
-    ggsave(&"out/fluxAfter_{windowYear}.png")
+    ggsave(&"out/fluxAfter_{windowYear}.png")]#
   #[
 
   let dfXY = seqsToDf({"x": pointDataX,
@@ -1702,7 +1808,13 @@ proc generateResultPlots(axions: seq[Axion],
   #  ggtitle("The telescope energy efficiency") +
   #  ggsave(&"out/EnergyEff_{windowYear}.pdf")
 
-  let dfFluxE2 = seqsToDf({ "Axion energy [keV]": energiesAx.mapIt(it.float),
+
+
+
+
+
+
+  #[let dfFluxE2 = seqsToDf({ "Axion energy [keV]": energiesAx.mapIt(it.float),
                             "Flux after experiment": weights })
   dfFluxE2.write_csv(&"axion_gae_1e13_gagamma_{g_aγ.float}_flux_after_exp_N_{numberOfPointsSun}.csv")
   ggplot(dfFluxE2, aes("Axion energy [keV]", weight = "Flux after experiment")) +
@@ -1717,7 +1829,12 @@ proc generateResultPlots(axions: seq[Axion],
     geom_histogram(binWidth = 0.0000666, lineWidth= some(1.2)) +
     xlim(0.0, 15.0) +
     ylab("The flux before the experiment") +
-    ggsave(&"out/FluxE_before_experiment_{windowYear}.pdf")
+    ggsave(&"out/FluxE_before_experiment_{windowYear}.pdf")]#
+
+
+
+
+
 
 
   echo "all plots done, now to heatmap!"
@@ -1898,7 +2015,7 @@ proc calculateFluxFractions(setup: ExperimentSetupKind,
   generateResultPlots(axions, detectorSetup.windowYear)
 
 proc main(ignoreDetWindow = false, ignoreGasAbs = false,
-          ignoreConvProb = false, ignoreGoldReflect = false) =
+          ignoreConvProb = false, ignoreGoldReflect = false, xrayTest = false) =
   # check if the `config.toml` file exists, otherwise recreate from the default
   if not fileExists("config.toml"):
     let cdata = readFile("config_default.toml")
@@ -1912,6 +2029,7 @@ proc main(ignoreDetWindow = false, ignoreGasAbs = false,
   if ignoreGasAbs:      flags.incl cfIgnoreGasAbs
   if ignoreConvProb:    flags.incl cfIgnoreConvProb
   if ignoreGoldReflect: flags.incl cfIgnoreGoldReflect
+  if xrayTest: flags.incl cfXrayTest
   echo "Flags: ", flags
 
   let (esKind, dkKind, skKind) = parseSetup()
