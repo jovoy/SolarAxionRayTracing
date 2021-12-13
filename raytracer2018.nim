@@ -57,7 +57,8 @@ type
     distanceCBAxisXRTAxis*: mm
     RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW*: mm
     pipes_turned*: Degree
-    telescope_turned*: Degree
+    telescope_turned_x*: Degree
+    telescope_turned_y*: Degree
     allThickness*: seq[MilliMeter]
     allR1*: seq[MilliMeter]
     allXsep*: seq[MilliMeter]
@@ -739,7 +740,8 @@ proc newExperimentSetup*(setup: ExperimentSetupKind,
       distanceCBAxisXRTAxis: 0.0.mm, #62.1#58.44 # from XRT drawing #there is no difference in the axis even though the picture gets transfered 62,1mm down, but in the detector center
       RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW: 0.0.mm, # #no change, because don't know
       pipes_turned: 3.0.°, #degree # this is the angle by which the pipes before the detector were turned in comparison to the telescope
-      telescope_turned: 0.0.°, #the angle by which the telescope is turned in respect to the magnet
+      telescope_turned_x: 0.0.°, #the angle by which the telescope is turned in respect to the magnet
+      telescope_turned_y: 0.0.°, #the angle by which the telescope is turned in respect to the magnet
                              # Measurements of the Telescope mirrors in the following, R1 are the radii of the mirror shells at the entrance of the mirror
       allThickness: @[0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2,
           0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2].mapIt(it.mm), ## the radii of the shells
@@ -769,7 +771,7 @@ proc newExperimentSetup*(setup: ExperimentSetupKind,
       RAYTRACER_LENGTH_COLDBORE_9T: 10000.0.mm, # I know it's not 9T here should be the actual length of pipe with a stable magnetic field; can't be same length
       distXraySource: 1000.0.mm, #distance between the entrance of the magnet an a test Xray source
       radiusXraySource: 0.5.mm,
-      offAxXraySource: -5.0.mm,
+      offAxXraySource: -1.0.mm,
       lengthCol: 0.0.mm,
       enXraySource: 1.0.keV,
       activityXraySource: 1.0.GBq, 
@@ -781,7 +783,8 @@ proc newExperimentSetup*(setup: ExperimentSetupKind,
       distanceCBAxisXRTAxis: 0.0.mm,
       RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW: 0.0.mm, # #no change, because don't know #good idea
       pipes_turned: 0.0.°, # this is the angle by which the pipes before the detector were turned in comparison to the telescope
-      telescope_turned: 0.0.°, #the angle by which the telescope is turned in respect to the magnet
+      telescope_turned_x: 0.0.°, #the angle by which the telescope is turned in respect to the magnet
+      telescope_turned_y: 0.01.°, #the angle by which the telescope is turned in respect to the magnet
                              # Measurements of the Telescope mirrors in the following, R1 are the radii of the mirror shells at the entrance of the mirror
       #allR3: @[151.61, 153.88, 156.17, 158.48, 160.82, 163.18, 165.57, 167.98, 170.42, 172.88, 175.37, 177.88, 180.42, 183.14, 185.89, 188.67, 191.48,
           #194.32, 197.19, 200.09, 203.02, 206.03, 209.07, 212.14, 215.24, 218.37, 221.54, 224.74, 227.97, 231.24, 234.54, 237.87, 241.24, 244.85,
@@ -1061,16 +1064,21 @@ proc traceAxion(res: var Axion,
   
   ###################from the CB (coldbore(pipe in Magnet)) to the XRT (XrayTelescope)#######################
   var vectorXRT = vectorBeforeXRT
-  vectorXRT[2] = vectorXRT[2] #- centerVecs.centerExitPipeVT3XRT[2]
-  vectorXRT[0] = vectorXRT[0] * cos(expSetup.telescope_turned.to(Radian)) + vectorXRT[2] * sin(expSetup.telescope_turned.to(Radian))
+  vectorXRT[0] = vectorXRT[0] * cos(expSetup.telescope_turned_x.to(Radian)) + vectorXRT[2] * sin(expSetup.telescope_turned_x.to(Radian))
   vectorXRT[1] = vectorXRT[1]
-  vectorXRT[2] = vectorXRT[2] * cos(expSetup.telescope_turned.to(Radian)) - vectorXRT[0] * sin(expSetup.telescope_turned.to(Radian))
+  vectorXRT[2] = vectorXRT[2] * cos(expSetup.telescope_turned_x.to(Radian)) - vectorXRT[0] * sin(expSetup.telescope_turned_x.to(Radian))
 
-  #var pointExitCBXRT = vec3(0.0)
+  vectorXRT[1] = vectorXRT[1] * cos(expSetup.telescope_turned_y.to(Radian)) - vectorXRT[2] * sin(expSetup.telescope_turned_y.to(Radian))
+  vectorXRT[2] = vectorXRT[2] * cos(expSetup.telescope_turned_y.to(Radian)) + vectorXRT[1] * sin(expSetup.telescope_turned_y.to(Radian))
+
   pointExitCB[2] = pointExitCB[2] - centerVecs.centerExitPipeVT3XRT[2]
-  pointExitCB[0] = pointExitCB[0] * cos(expSetup.telescope_turned.to(Radian)) + pointExitCB[2] * sin(expSetup.telescope_turned.to(Radian))
+  pointExitCB[0] = pointExitCB[0] * cos(expSetup.telescope_turned_x.to(Radian)) + pointExitCB[2] * sin(expSetup.telescope_turned_x.to(Radian))
   pointExitCB[1] = pointExitCB[1]
-  pointExitCB[2] = pointExitCB[2] * cos(expSetup.telescope_turned.to(Radian)) - pointExitCB[0] * sin(expSetup.telescope_turned.to(Radian))
+  pointExitCB[2] = pointExitCB[2] * cos(expSetup.telescope_turned_x.to(Radian)) - pointExitCB[0] * sin(expSetup.telescope_turned_x.to(Radian))
+
+  pointExitCB[1] = pointExitCB[1] * cos(expSetup.telescope_turned_y.to(Radian)) - pointExitCB[2] * sin(expSetup.telescope_turned_y.to(Radian))
+  pointExitCB[2] = pointExitCB[2] * cos(expSetup.telescope_turned_y.to(Radian)) + pointExitCB[1] * sin(expSetup.telescope_turned_y.to(Radian))
+
   var factor = (0.0 - pointExitCB[2]) / vectorXRT[2]
   
   #echo "before ", pointExitCB, " ", vectorBeforeXRT, " after ", pointExitCBXRT, " ", vectorXRT
