@@ -70,6 +70,7 @@ type
     tGas*: K
     holeInOptics*: mm
     numberOfHoles: int
+    holetype: string
     lateralDetector*: mm
     telescopeTransmission*: InterpolatorType[float] # should be `keV`, but cannot do that atm
     goldReflectivity*: Interpolator2DType[float]    # (angle / °, keV)
@@ -370,6 +371,33 @@ proc lineIntersectsCircle(point_1, point_2, center: Vec3,
   let r_xy_intersect = sqrt(intersect[0] * intersect[0] + intersect[1] *
       intersect[1])
   result = r_xy_intersect < radius.float
+
+proc lineIntersectsObject(object_kind: string, point_1, point_2, center: Vec3,
+                          radius: MilliMeter): bool =
+  ## Now a function to see if the lines from the sun will actually intersect
+  ## the circle area from the magnet entrance (called coldbore) etc. ##
+  var 
+    vector = point_2 - point_1
+    lambda1 = (center[2] - point_1[2]) / vector[2]
+    intersect = (point_1 + lambda1 * vector) - center
+    r_xy_intersect = sqrt(intersect[0] * intersect[0] + intersect[1] *
+      intersect[1])
+    intersect_turned = vec3(0.0)
+  case object_kind
+  of "circle":
+    result = r_xy_intersect < radius.float
+  of "cross":
+    if (abs(intersect[0]) < radius.float and abs(intersect[1]) < radius.float * 3.0) or (abs(intersect[1]) < radius.float and abs(intersect[0]) < radius.float * 3.0):
+      result = true
+  of "square":
+    if abs(intersect[0]) < radius.float and abs(intersect[1]) < radius.float :
+      result = true
+  of "diamond":
+    intersect_turned[0] = intersect[0] / sqrt(2.0) - intersect[1] / sqrt(2.0)
+    intersect_turned[1] = intersect[0] / sqrt(2.0) + intersect[1] / sqrt(2.0)
+    if abs(intersect_turned[0]) < radius.float and abs(intersect_turned[1]) < radius.float :
+      result = true
+
 
 proc getIntersectlineIntersectsCircle(point_1, point_2, center: Vec3): Vec3 =
   ## Now a function to get the intersection with one of the entrance cross sections
@@ -759,6 +787,7 @@ proc newExperimentSetup*(setup: ExperimentSetupKind,
       tGas: 1.7.K, #
       holeInOptics: 0.0.mm, #max 20.9.mm
       numberOfHoles: 5,
+      holetype: "cross", #the type or shape of the hole in the middle of the optics
       lateralDetector: 0.0.mm #lateral ofset of the detector in repect to the beamline
     )
   of esBabyIAXO:
@@ -771,7 +800,7 @@ proc newExperimentSetup*(setup: ExperimentSetupKind,
       RAYTRACER_LENGTH_COLDBORE_9T: 10000.0.mm, # I know it's not 9T here should be the actual length of pipe with a stable magnetic field; can't be same length
       distXraySource: 1000.0.mm, #distance between the entrance of the magnet an a test Xray source
       radiusXraySource: 0.5.mm,
-      offAxXraySource: -1.0.mm,
+      offAxXraySource: -0.0.mm,
       lengthCol: 0.0.mm,
       enXraySource: 1.0.keV,
       activityXraySource: 1.0.GBq, 
@@ -784,7 +813,7 @@ proc newExperimentSetup*(setup: ExperimentSetupKind,
       RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW: 0.0.mm, # #no change, because don't know #good idea
       pipes_turned: 0.0.°, # this is the angle by which the pipes before the detector were turned in comparison to the telescope
       telescope_turned_x: 0.0.°, #the angle by which the telescope is turned in respect to the magnet
-      telescope_turned_y: 0.01.°, #the angle by which the telescope is turned in respect to the magnet
+      telescope_turned_y: 0.0.°, #the angle by which the telescope is turned in respect to the magnet
                              # Measurements of the Telescope mirrors in the following, R1 are the radii of the mirror shells at the entrance of the mirror
       #allR3: @[151.61, 153.88, 156.17, 158.48, 160.82, 163.18, 165.57, 167.98, 170.42, 172.88, 175.37, 177.88, 180.42, 183.14, 185.89, 188.67, 191.48,
           #194.32, 197.19, 200.09, 203.02, 206.03, 209.07, 212.14, 215.24, 218.37, 221.54, 224.74, 227.97, 231.24, 234.54, 237.87, 241.24, 244.85,
@@ -808,7 +837,8 @@ proc newExperimentSetup*(setup: ExperimentSetupKind,
       pGasRoom: 1.0.bar, #, pressure of the gas #for example P = 14.3345 mbar (corresponds to 1 bar at room temperature).
       tGas: 100.0.K, #293.15, # only Gas in BabyIAXO
       holeInOptics: 0.5.mm, #max 20.9.mm
-      numberOfHoles: 1,
+      numberOfHoles: 9,
+      holetype: "square", #the type or shape of the hole in the middle of the optics
       lateralDetector: (sin(0.0.degToRad) * 7500.0).mm #lateral ofset of the detector in repect to the beamline #0.0.mm #
     )
 
@@ -991,8 +1021,8 @@ proc traceAxion(res: var Axion,
       centerSpot[1] = expSetup.offAxXraySource.float
     centerSpot[2] = expSetup.RAYTRACER_LENGTH_COLDBORE_9T.float
     #var radiusProjection = expSetup.radiusXraySource * 2.0 * (- centerVecs.centerXraySource[2] - expSetup.lengthCol.float).mm / expSetup.lengthCol + expSetup.radiusXraySource
-    var radiusSpot = expSetup.holeInOptics * expSetup.numberOfHoles.float #50.0 #
-    pointExitCBMagneticField = getRandomPointOnDisk(centerSpot, (radiusSpot)) #expSetup.numberOfHoles.float))
+    var radiusSpot = expSetup.holeInOptics * (expSetup.numberOfHoles.float + 3.0) #50.0 #
+    pointExitCBMagneticField = getRandomPointOnDisk(centerSpot, (radiusSpot)) 
     var xraysThroughHole = PI * radiusSpot * radiusSpot / 
       (4.0 * PI * (- centerVecs.centerXraySource[2] + centerVecs.centerExitPipeVT3XRT[2]).mm * 
       (- centerVecs.centerXraySource[2] + centerVecs.centerExitPipeVT3XRT[2]).mm) * expSetup.activityXraySource
@@ -1108,13 +1138,19 @@ proc traceAxion(res: var Axion,
     if pointEntranceXRT[1] <= 1.0 and pointEntranceXRT[1] >= -1.0: return
   of esBabyIAXO:
     ## here we have a spider structure for the XMM telescope:
-    if vectorEntranceXRTCircular[0] <= 64.7 and vectorEntranceXRTCircular[0] > expSetup.holeInOptics.float * expSetup.numberOfHoles.float: #doesnt really matter because there are no mirrors in the middle and these axions dont reach the window anyways
-      if not lineIntersectsCircle(pointExitCB, pointEntranceXRT, vec3(0.0, expSetup.holeInOptics.float * (expSetup.numberOfHoles.float - 1.0), 0.0), expSetup.holeInOptics) and not
-        lineIntersectsCircle(pointExitCB, pointEntranceXRT, vec3(0.0, - expSetup.holeInOptics.float * (expSetup.numberOfHoles.float - 1.0), 0.0), expSetup.holeInOptics) and not
-        lineIntersectsCircle(pointExitCB, pointEntranceXRT, vec3(- expSetup.holeInOptics.float * (expSetup.numberOfHoles.float - 1.0), 0.0, 0.0), expSetup.holeInOptics) and not
-        lineIntersectsCircle(pointExitCB, pointEntranceXRT, vec3(0.0, 0.0, 0.0), expSetup.holeInOptics) and not
-        lineIntersectsCircle(pointExitCB, pointEntranceXRT, vec3( expSetup.holeInOptics.float * (expSetup.numberOfHoles.float - 1.0), 0.0, 0.0), expSetup.holeInOptics):
-        return
+    if vectorEntranceXRTCircular[0] <= 64.7: #and vectorEntranceXRTCircular[0] > expSetup.holeInOptics.float * expSetup.numberOfHoles.float: #doesnt really matter because there are no mirrors in the middle and these axions dont reach the window anyways
+      for l in -(expSetup.numberOfHoles - ceil(expSetup.numberOfHoles.float / 2.0).int)..(expSetup.numberOfHoles - ceil(expSetup.numberOfHoles.float / 2.0).int): 
+        var centerHole = vec3(0.0)
+        if l != 0:
+          if abs(l) %% 2 == 0:
+            centerHole[1] += 2.0 * l.float * expSetup.holeInOptics.float
+          if abs(l) %% 2 != 0: 
+            centerHole[0] += 2.0 * (l + (l / abs(l))).float * expSetup.holeInOptics.float
+        echo l, " ", centerHole
+        if lineIntersectsObject(expSetup.holetype, pointExitCB, pointEntranceXRT, centerHole, expSetup.holeInOptics):
+          weight = 1.0
+          break
+        else: weight = 0.0
     elif vectorEntranceXRTCircular[0] < 151.6 and vectorEntranceXRTCircular[0] > (151.6 - 20.9): #hole max 20.9 mm doesnt really matter because there are no mirrors in the middle and these axions dont reach the window anyways
       return
     elif vectorEntranceXRTCircular[0] > 64.7:
@@ -1122,7 +1158,7 @@ proc traceAxion(res: var Axion,
         if (phi_flat + 3.0 >= (-1.25 + 22.5 * i.float) and phi_flat + 3.0 <= (1.25 + 22.5 * i.float)): #spider strips (actually wider for innermost but doesnn't matter because it doesnt reach the window anyways)
           return
     #TODO: inner spider structure that doesnt matter
-
+  if weight == 0.0: return
   
   ## Calculate the way of the axion through the telescope by manually reflecting the ray on the two mirror layers and then ending up before the detector ##
 
@@ -1155,13 +1191,18 @@ proc traceAxion(res: var Axion,
   if min(dist) > 100.0.mm:
     testXray = true
     h = 50 
-    if not lineIntersectsCircle(pointExitCB, pointEntranceXRT, centerEndXRT, expSetup.holeInOptics) and not
-      lineIntersectsCircle(pointExitCB, pointEntranceXRT, vec3(0.0, expSetup.holeInOptics.float * (expSetup.numberOfHoles.float - 1.0), lengthTelescope.float), expSetup.holeInOptics) and not
-      lineIntersectsCircle(pointExitCB, pointEntranceXRT, vec3(0.0, - expSetup.holeInOptics.float * (expSetup.numberOfHoles.float - 1.0), lengthTelescope.float), expSetup.holeInOptics) and not
-      lineIntersectsCircle(pointExitCB, pointEntranceXRT, vec3(- expSetup.holeInOptics.float * (expSetup.numberOfHoles.float - 1.0), 0.0, lengthTelescope.float), expSetup.holeInOptics) and not
-      lineIntersectsCircle(pointExitCB, pointEntranceXRT, vec3( expSetup.holeInOptics.float * (expSetup.numberOfHoles.float - 1.0), 0.0, lengthTelescope.float), expSetup.holeInOptics):
-      return
-  
+    for l in -(expSetup.numberOfHoles - ceil(expSetup.numberOfHoles.float / 2.0).int)..(expSetup.numberOfHoles - ceil(expSetup.numberOfHoles.float / 2.0).int):      
+      var centerHole = centerEndXRT
+      if l != 0:
+        if abs(l) %% 2 == 0:
+          centerHole[1] += 2.0 * l.float * expSetup.holeInOptics.float
+        if abs(l) %% 2 != 0: 
+          centerHole[0] += 2.0 * (l + (l / abs(l))).float * expSetup.holeInOptics.float
+      if lineIntersectsObject(expSetup.holetype, pointExitCB, pointEntranceXRT, centerHole, expSetup.holeInOptics):
+        weight = 1.0     
+        break
+      else: weight = 0.0
+  if weight == 0.0: return
   if testXray == false:
     for k in 0..<expSetup.allR1.len: 
       if min(dist) == expSetup.allR1[k] - vectorEntranceXRTCircular[0].mm:
