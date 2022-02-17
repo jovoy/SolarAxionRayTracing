@@ -1,7 +1,7 @@
 # stdlib
 import std / [math, strutils, algorithm, random, sequtils, os, strformat, tables, sugar, strscans]
 
-import axionMass/axionMassforMagnet
+import ../axionMass/axionMassforMagnet
 
 # nimble
 import seqmath except linspace
@@ -691,7 +691,7 @@ proc plotHeatmap(diagramtitle: string,
     #theme_transparent() + 
     margin(top = 2) +
     ggtitle(&"Simulated X-ray signal distribution on the detector chip with a total flux of {flux:.2e} events after 3 months") +
-    ggsave(&"out/axion_image_{year}.pdf", width = width, height = height)
+    ggsave(&"../out/axion_image_{year}.pdf", width = width, height = height)
 
   ggplot(df, aes("x-position [mm]", "y-position [mm]", fill = "photon flux")) +
     geom_raster() +
@@ -710,26 +710,26 @@ proc plotHeatmap(diagramtitle: string,
     #canvasColor(parseHex("62bed3b0")) +
     theme_transparent() +
     ggtitle("Simulated X-ray signal distribution on the detector chip") +
-    ggsave(&"out/axion_image_{year}.png")
+    ggsave(&"../out/axion_image_{year}.png")
 
 proc plotSolarModel(df: DataFrame) =
   ## A few plots for the solar model that are mainly for debugging.
   let df = df.mutate(f{"Energy" ~ (`Energy` * 9 + 1.0) * 0.001})
   ggplot(df, aes("Radius", "Flux")) +
     geom_point() +
-    ggsave("/tmp/rad_flux.pdf")
+    ggsave("../tmp/rad_flux.pdf")
   ggplot(df, aes("Energy", "Flux")) +
     geom_point() +
-    ggsave("/tmp/energy_flux.pdf")
+    ggsave("../tmp/energy_flux.pdf")
   ggplot(df, aes("Energy", "Flux", color = factor("Radius"))) +
     geom_line() +
     xlim(0, 0.1) +
-    ggsave("/tmp/energy_rad_flux.pdf")
+    ggsave("../tmp/energy_rad_flux.pdf")
   let dfRad = df.group_by("Radius").summarize(f{float: "SumFlux" << sum(`Flux`)})
   echo dfRad
   ggplot(dfRad, aes("Radius", "SumFlux")) +
     geom_line() +
-    ggsave("/tmp/flux_radius_sum.pdf")
+    ggsave("../tmp/flux_radius_sum.pdf")
 
 ############done with the functions, let's use them############
 ## NOTE: In principle it's a bit inefficient to re-parse the same config.toml file multiple times, but
@@ -968,10 +968,10 @@ proc newDetectorSetup*(setup: DetectorSetupKind): DetectorSetup =
   result.stripWidthWindow = width
   result.stripDistWindow = dist
   ## TODO: clean this up! config.toml file!
-  let siNfile = &"./resources/Si3N4Density=3.44Thickness={result.windowThickness.float:.1f}microns.tsv" #
-  let siFile = "./resources/SiDensity=2.33Thickness=200.microns.tsv"
-  let detectorFile = "./resources/transmission-argon-30mm-1050mbar-295K.tsv"  #250
-  let alFile = &"./resources/AlDensity=2.7Thickness={result.alThickness.float:.2f}microns.tsv" #
+  let siNfile = &"../resources/Si3N4Density=3.44Thickness={result.windowThickness.float:.1f}microns.tsv" #
+  let siFile = "../resources/SiDensity=2.33Thickness=200.microns.tsv"
+  let detectorFile = "../resources/transmission-argon-30mm-1050mbar-295K.tsv"  #250
+  let alFile = &"../resources/AlDensity=2.7Thickness={result.alThickness.float:.2f}microns.tsv" #
   let dfSi  = readCsv(siFile, sep = ' ')
   let dfSiN = readCsv(siNfile, sep = ' ')
   var dfDet = readCsv(detectorFile, sep = ' ')
@@ -1655,7 +1655,7 @@ proc generateResultPlots(axions: seq[Axion],
   #echo df
   ggplot(df, aes("bins", "countsNorm")) +
     geom_histogram(stat = "identity") + # as we have already binned data!
-    ggsave(&"out/custom_histo.pdf")
+    ggsave(&"../out/custom_histo.pdf")
 
   echo dfFluxTel
   ggplot(dfFluxTel, aes("Axion energy [keV]", weight = "Prob")) +
@@ -1663,7 +1663,7 @@ proc generateResultPlots(axions: seq[Axion],
     xlim(0.0, 15.0) +
     ylim(0.0, 1000.0) +
     ylab("The flux before the experiment") +
-    ggsave(&"out/TelProb.pdf")]#
+    ggsave(&"../out/TelProb.pdf")]#
 
   #[let dfTransProb = seqsToDf({ "Axion energy [keV]": energiesAxAll.mapIt(it.float),
                                "Transmission Probability": transProbDetector,
@@ -1680,7 +1680,7 @@ proc generateResultPlots(axions: seq[Axion],
              color = "type window")) +
     geom_histogram(aes("Axion energy [keV]", weight = "Flux after experiment"), binWidth = 0.01) +
     ggtitle("The transmission probability for different detector parts") +
-    ggsave(&"out/TransProb_{windowYear}.pdf")
+    ggsave(&"../out/TransProb_{windowYear}.pdf")
 
   let dfTransProbAr = seqsToDf({ "Axion energy [keV]": energiesAx.mapIt(it.float),
                                  "Transmission Probability": transProbArgon })
@@ -1688,7 +1688,7 @@ proc generateResultPlots(axions: seq[Axion],
          aes("Axion energy [keV]", "Transmission Probability")) +
     geom_line() +
     ggtitle("The transmission probability for the detector gas") +
-    ggsave(&"out/TransProbAr_{windowYear}.pdf")
+    ggsave(&"../out/TransProbAr_{windowYear}.pdf")
 
   let dfDet = seqsToDf({ "Deviation [mm]": deviationDet,
                          "Energies": energiesAx.mapIt(it.float),
@@ -1698,24 +1698,24 @@ proc generateResultPlots(axions: seq[Axion],
   ggplot(dfDet, aes("Deviation [mm]")) +
     geom_histogram(binWidth = 0.001) +
     ggtitle("Deviation of X-rays detector entrance to readout") +
-    ggsave(&"out/deviationDet_{windowYear}.pdf")
+    ggsave(&"../out/deviationDet_{windowYear}.pdf")
 
   ggplot(dfDet, aes("Deviation [mm]", fill = factor("Shell"))) +
     geom_histogram(binWidth = 0.001) +
     ggtitle("Deviation of X-rays - detector entrance to readout") +
-    ggsave(&"out/deviationDet_stacked_{windowYear}.pdf")
+    ggsave(&"../out/deviationDet_stacked_{windowYear}.pdf")
 
   ggplot(dfDet, aes("Energies", fill = factor("Shell"))) +
     ggridges("Shell", overlap = 1.8) +
     geom_histogram(binWidth = 0.1, position = "identity") +
     ggtitle("X-ray energy distributions at detector") +
-    ggsave(&"out/energies_by_shell_{windowYear}.pdf", height = 600)
+    ggsave(&"../out/energies_by_shell_{windowYear}.pdf", height = 600)
 
   ggplot(dfDet, aes("Deviation [mm]", fill = factor("Shell"))) +
     ggridges("Shell", overlap = 1.8) +
     geom_histogram(binWidth = 0.001, position = "identity") +
     ggtitle("Deviation of X-rays - detector entrance to readout") +
-    ggsave(&"out/deviationDet_ridges_{windowYear}.pdf", height = 600)]#
+    ggsave(&"../out/deviationDet_ridges_{windowYear}.pdf", height = 600)]#
 
 
 
@@ -1730,7 +1730,7 @@ proc generateResultPlots(axions: seq[Axion],
   ggplot(dfRad, aes("Radial component [mm]", weight = "Transmission probability")) +
     geom_histogram(binWidth = 0.001) +
     ggtitle("Radial distribution of the axions") +
-    ggsave(&"out/radialDistribution_{windowYear}.pdf")
+    ggsave(&"../out/radialDistribution_{windowYear}.pdf")
 
   let dfFluxE = seqsToDf({ "Axion energy [keV]": energiesAx.mapIt(it.float),
                            "Transmission probability": weights })
@@ -1745,7 +1745,7 @@ proc generateResultPlots(axions: seq[Axion],
     #ylim(0.0, 0.0001) +
     xlim(0.0, 15.0) +
     ggtitle("Simulated photon flux depending on the energy of the axion") +
-    ggsave(&"out/fluxAfter_{windowYear}.pdf")
+    ggsave(&"../out/fluxAfter_{windowYear}.pdf")
 
   ggplot(dfFluxE, aes("Axion energy [keV]", weight = "Transmission probability")) +
     geom_histogram(binWidth = 0.001, lineWidth= some(1.2)) +
@@ -1757,13 +1757,13 @@ proc generateResultPlots(axions: seq[Axion],
     #ylim(0.0, 0.0001) +
     xlim(0.0, 1.0) +
     ggtitle("Simulated photon flux depending on the energy of the axion") +
-    ggsave(&"out/fluxAfterZoomed_{windowYear}.pdf")
+    ggsave(&"../out/fluxAfterZoomed_{windowYear}.pdf")
 
   ggplot(dfFluxE, aes("Axion energy [keV]", weight = "Transmission probability")) +
     geom_histogram(binWidth = 0.00001, lineWidth= some(1.2)) +
     theme_transparent() +
     ggtitle("Simulated photon flux depending on the energy of the axion") +
-    ggsave(&"out/fluxAfter_{windowYear}.png")]#
+    ggsave(&"../out/fluxAfter_{windowYear}.png")]#
   #[
 
   let dfXY = seqsToDf({"x": pointDataX,
@@ -1775,12 +1775,12 @@ proc generateResultPlots(axions: seq[Axion],
   ggplot(dfXY, aes("x", weight = "Transmission probability")) +
     geom_histogram(binWidth = 0.001) +
     ggtitle("X and Y") +
-    ggsave(&"out/x_{windowYear}.pdf")
+    ggsave(&"../out/x_{windowYear}.pdf")
 
   ggplot(dfXY, aes("R", weight = "Transmission probability")) +
     geom_histogram(binWidth = 0.001) +
     ggtitle("R") +
-    ggsave(&"out/R_{windowYear}.pdf")
+    ggsave(&"../out/R_{windowYear}.pdf")
 
   let dfMag = seqsToDf({"Transmission probability": transmissionMagnets,
                        "Angles between path and magnetic field": yawAngles,
@@ -1791,13 +1791,13 @@ proc generateResultPlots(axions: seq[Axion],
     geom_point(size = some(0.5), alpha = some(0.1)) +
     ylim(3.1e-24, 3.16e-24) +
     ggtitle("The probability of the transformation of axions to X-rays in the magnet") +
-    ggsave(&"out/transMagnet_{windowYear}.pdf")
+    ggsave(&"../out/transMagnet_{windowYear}.pdf")
 
   ggplot(dfMag, aes("Axion energy[keV]", "Transmission probability")) +
     geom_point(size = some(0.5), alpha = some(0.1)) +
     #ylim(3.1e-24, 3.16e-24) +
     ggtitle("The probability of the transformation of axions to X-rays in the magnet") +
-    ggsave(&"out/transMagnetE_{windowYear}.pdf")]#
+    ggsave(&"../out/transMagnetE_{windowYear}.pdf")]#
 
   ############get the 1 and 2 sigma area ###################
   var pointR = pointdataR
@@ -1880,23 +1880,23 @@ proc generateResultPlots(axions: seq[Axion],
   #[ggplot(dfRadSig, aes("Radial component [mm]", fill = factor("Sigma"), weight = "Transmission probability")) +
     geom_histogram(binWidth = 0.001) +
     ggtitle("Radial distribution of the axions with sigma") +
-    ggsave(&"out/radDistSig_{windowYear}.pdf")
+    ggsave(&"../out/radDistSig_{windowYear}.pdf")
 
   ggplot(dfRadSig, aes("Radial component [mm]", fill = factor("Sigma before window"), weight = "Transmission probability")) +
     geom_histogram(binWidth = 0.001) +
     ggtitle("Radial distribution of the axions with sigma from before the window") +
-    ggsave(&"out/radDistSigBeforeWindow_{windowYear}.pdf")
+    ggsave(&"../out/radDistSigBeforeWindow_{windowYear}.pdf")
 
   ggplot(dfRadSig, aes("x", "y", color = factor("Sigma"), weight = "Transmission probability")) +
     geompoint(size = some(0.5), alpha = some(0.1)) +
     ggtitle("X and Y") +
-    ggsave(&"out/xy_{windowYear}.pdf")]#
+    ggsave(&"../out/xy_{windowYear}.pdf")]#
   let dfRadFilter = dfRadSig.filter(f{`x` < 7.05}).filter(f{`x` > 6.95})
   echo dfRadFilter
   ggplot(dfRadFilter, aes("y", fill = factor("Sigma"), weight = "Transmission probability")) +
     geom_histogram(binWidth = 0.001) +
     ggtitle("Y") +
-    ggsave(&"out/y_{windowYear}.pdf")
+    ggsave(&"../out/y_{windowYear}.pdf")
 
 
   #[let dfRadSigW = seqsToDf({"Radial component [mm]": pointdataRSig,
@@ -1908,12 +1908,12 @@ proc generateResultPlots(axions: seq[Axion],
   ggplot(dfRadSigW, aes("Radial component [mm]", fill = factor("Sigma"), weight = "Transmission probability")) +
     geom_histogram(binWidth = 0.001) +
     ggtitle("Radial distribution of the axions with sigma") +
-    ggsave(&"out/radDistSigW_{windowYear}.pdf")
+    ggsave(&"../out/radDistSigW_{windowYear}.pdf")
 
   ggplot(dfRadSigW, aes("x", "y", fill = factor("Sigma"), weight = "Transmission probability")) +
     geompoint(size = some(0.5), alpha = some(0.1)) +
     ggtitle("X and Y") +
-    ggsave(&"out/xyW_{windowYear}.pdf") ]#
+    ggsave(&"../out/xyW_{windowYear}.pdf") ]#
 
   #let fname2 = "extracted_from_aznar2015_llnl_telescope_eff_plot.csv"
   #let dfEnergyEff = toDf(readCsv(fname2, sep = ','))
@@ -1924,7 +1924,7 @@ proc generateResultPlots(axions: seq[Axion],
   #ggplot(dfEnergyEff, aes("Energies [keV]", "Effective Area [cm^2]")) +
   #  geom_line() +
   #  ggtitle("The telescope energy efficiency") +
-  #  ggsave(&"out/EnergyEff_{windowYear}.pdf")
+  #  ggsave(&"../out/EnergyEff_{windowYear}.pdf")
 
 
 
@@ -1938,7 +1938,7 @@ proc generateResultPlots(axions: seq[Axion],
   ggplot(dfFluxE2, aes("Axion energy [keV]", weight = "Flux after experiment")) +
     geom_histogram(binWidth = 0.001, lineWidth= some(1.2)) +
     ylab("The flux after the experiment") +
-    ggsave(&"out/FluxEafter_{windowYear}.pdf")
+    ggsave(&"../out/FluxEafter_{windowYear}.pdf")
 
   let dfFluxE3 = seqsToDf({"Axion energy [keV]": energiesPre.mapIt(it.float),
                             "Flux before the experiment": emratesPre})
@@ -1947,7 +1947,7 @@ proc generateResultPlots(axions: seq[Axion],
     geom_histogram(binWidth = 0.0000666, lineWidth= some(1.2)) +
     xlim(0.0, 15.0) +
     ylab("The flux before the experiment") +
-    ggsave(&"out/FluxE_before_experiment_{windowYear}.pdf")]#
+    ggsave(&"../out/FluxE_before_experiment_{windowYear}.pdf")]#
 
 
 
@@ -2059,7 +2059,7 @@ proc calculateFluxFractions(setup: ExperimentSetupKind,
         aes("Energies", "emrates")) +
     geom_line() +
     xlim(0.0, 15.0) +
-    ggsave("out/energy_emrates.pdf")
+    ggsave("../out/energy_emrates.pdf")
 
     ## Compute all normalized CDFs of the emission rates for each radius
     var emRateCDFs = newSeq[seq[float]]()
