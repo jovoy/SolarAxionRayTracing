@@ -21,3 +21,4 @@ emrates.txt
 results/*
 out/*
 resources/reflectivity/*
+**/config.toml
