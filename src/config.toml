@@ -1,9 +1,0 @@
-[Resources] # contains relevant resources that need to be read
-# the file storing the telescope efficiency of the LLNL telescope
-llnlEfficiency = "../resources/llnl_xray_telescope_cast_effective_area_parallel_light_DTU_thesis.csv"
-goldFilePrefix = "../resources/henke_download/"
-
-[Setup] # settings related to the setup we raytrace through
-experimentSetup = "BabyIAXO"   # [BabyIAXO, CAST]
-detectorSetup   = "InGridIAXO" # [InGrid2017, InGrid2018, InGridIAXO]
-stageSetup      = "vacuum"     # [vacuum, gas]
