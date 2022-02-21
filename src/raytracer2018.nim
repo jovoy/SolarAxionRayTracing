@@ -735,8 +735,13 @@ proc plotSolarModel(df: DataFrame) =
 ## NOTE: In principle it's a bit inefficient to re-parse the same config.toml file multiple times, but
 ## in the context of the whole ray tracing it doesn't matter. Makes the code a bit simpler.
 const sourceDir = currentSourcePath().parentDir
-proc parseLlnlTelescopeFilename(): string =
-  ## parses the config.toml file containing the path to the LLNL telescope efficiency file
+proc parseResourcesPath(): string =
+  ## parses the config.toml file containing the path to `resources` directory
+  let config = parseToml.parseFile(sourceDir / "config.toml")
+  result = config["Resources"]["resourcePath"].getStr
+
+proc parseLlnlTelescopeFile(): string =
+  ## parses the config.toml file containing the LLNL telescope efficiency filename
   let config = parseToml.parseFile(sourceDir / "config.toml")
   result = config["Resources"]["llnlEfficiency"].getStr
 
@@ -744,6 +749,11 @@ proc parseGoldFilePrefix(): string =
   ## parses the config.toml file containing the path to the gold reflectivity files
   let config = parseToml.parseFile(sourceDir / "config.toml")
   result = config["Resources"]["goldFilePrefix"].getStr
+
+proc parseSolarModelFile(): string =
+  ## parses the config.toml file containing the solar model filename
+  let config = parseToml.parseFile(sourceDir / "config.toml")
+  result = config["Resources"]["solarModelFile"].getStr
 
 proc parseSetup(): (ExperimentSetupKind, DetectorSetupKind, StageKind) =
   ## parses the config.toml file containing the setup to compute the raytracing for
@@ -862,7 +872,8 @@ proc newExperimentSetup*(setup: ExperimentSetupKind,
   ## TODO: this needs to be moved out of this procedure
 
   # TODO: this could be generalized to other telescopes until the multi layer stuff is implemented
-  let dfLlnl = readCsv(parseLlnlTelescopeFilename())
+  let resources = parseResourcesPath()
+  let dfLlnl = readCsv(resources / parseLlnlTelescopeFile())
     .mutate(f{"Transmission" ~ idx("EffectiveArea[cm²]") /
       # total eff area of telescope = 1438.338mm² = 14.38338cm²
       (14.38338 - (4.3 * 0.2))}) # the last thing are the mirror seperators
@@ -873,7 +884,7 @@ proc newExperimentSetup*(setup: ExperimentSetupKind,
 
   var goldInterp: Interpolator2DType[float]
   if cfIgnoreGoldReflect notin flags:
-    let prefix = parseGoldFilePrefix()
+    let prefix = resources / parseGoldFilePrefix()
     let goldFiles = collect(newSeq):
       for f in walkFiles(prefix & "*degGold0.25microns.csv"):
         let (success, angle) = scanTuple(f.dup(removePrefix(prefix)), "$fdeg")
@@ -968,10 +979,11 @@ proc newDetectorSetup*(setup: DetectorSetupKind): DetectorSetup =
   result.stripWidthWindow = width
   result.stripDistWindow = dist
   ## TODO: clean this up! config.toml file!
-  let siNfile = &"../resources/Si3N4Density=3.44Thickness={result.windowThickness.float:.1f}microns.tsv" #
-  let siFile = "../resources/SiDensity=2.33Thickness=200.microns.tsv"
-  let detectorFile = "../resources/transmission-argon-30mm-1050mbar-295K.tsv"  #250
-  let alFile = &"../resources/AlDensity=2.7Thickness={result.alThickness.float:.2f}microns.tsv" #
+  let resources = parseResourcesPath()
+  let siNfile = resources / &"Si3N4Density=3.44Thickness={result.windowThickness.float:.1f}microns.tsv" #
+  let siFile = resources / "SiDensity=2.33Thickness=200.microns.tsv"
+  let detectorFile = resources / & "transmission-argon-30mm-1050mbar-295K.tsv"  #250
+  let alFile = resources / &"AlDensity=2.7Thickness={result.alThickness.float:.2f}microns.tsv" #
   let dfSi  = readCsv(siFile, sep = ' ')
   let dfSiN = readCsv(siNfile, sep = ' ')
   var dfDet = readCsv(detectorFile, sep = ' ')
@@ -2002,7 +2014,8 @@ proc calculateFluxFractions(setup: ExperimentSetupKind,
     integralGold = 0.0
 
   ## TODO: make the code use tensor for the emission rates!
-  var emRatesDf = readCsv("solar_model_tensor15KSVZ.csv")
+  let resources = parseResourcesPath()
+  var emRatesDf = readCsv(resources / parseSolarModelFile())
     .rename(f{"Radius" <- "dimension_1"}, f{"Energy" <- "dimension_2"}, f{"Flux" <- "value"})
 
   let emRatesTensor = emRatesDf["Flux", float]
