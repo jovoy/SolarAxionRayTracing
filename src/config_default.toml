@@ -1,7 +1,9 @@
 [Resources] # contains relevant resources that need to be read
 # the file storing the telescope efficiency of the LLNL telescope
-llnlEfficiency = "../resources/llnl_xray_telescope_cast_effective_area_parallel_light_DTU_thesis.csv"
-goldFilePrefix = "../resources/reflectivity/"
+resourcePath = "../resources"
+llnlEfficiency = "llnl_xray_telescope_cast_effective_area_parallel_light_DTU_thesis.csv"
+goldFilePrefix = "henke_download/"
+solarModelFile = "solar_model_tensor15.csv"
 
 [Setup] # settings related to the setup we raytrace through
 experimentSetup = "BabyIAXO"   # [BabyIAXO, CAST]
