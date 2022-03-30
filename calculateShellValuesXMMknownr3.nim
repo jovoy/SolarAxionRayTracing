@@ -7,21 +7,24 @@ import glm
 # Calculate the radii and angles of the XMM Telescope with the Information we have # all units are mm except angle
 
 var
-  t: float
   ts: seq[float] #thickness of the shell from 0.47 mm to 1.07 mm innermost to outermost
-  d: float
-  ds: seq[float] #distance between the shell ranging from 1 mm to 5 mm from innermost to outermost shell
-  r1 = 153.0
+  ds: seq[float] 
+  r1: float
   r1j: float
   r1s: seq[float]
+  r2s: seq[float]
+  r4s: seq[float]
+  r5s: seq[float]
   alpha: float
   alphas: seq[float]
-  x = 0
-  xsep: seq[float]
+  r2 : float
   r3: float
+  r4: float
   r5: float
+  xSep: float
   r1old: float
   focal = 7500.0
+  lMirr = 300.0
 let 
   allR3 = @[151.61, 153.88, 156.17, 158.48, 160.82, 163.18, 165.57, 167.98, 170.42, 172.88, 175.37, 177.88, 180.42, 183.14, 185.89, 188.67, 191.48, 
       194.32, 197.19, 200.09, 203.02, 206.03, 209.07, 212.14, 215.24, 218.37, 221.54, 224.74, 227.97, 231.24, 234.54, 237.87, 241.24, 244.85, 
@@ -32,28 +35,31 @@ let
       0.862, 0.874, 0.887, 0.900, 0.913, 0.927, 0.941, 0.955, 0.968, 0.983, 0.997, 1.011, 1.026, 1.041, 1.055, 1.070] #these are only theoretical values but official ones
   allDistances = @[0.294, 0.284, 0.274, 0.273, 0.263, 0.263, 0.252, 0.250, 0.239, 0.236, 0.223, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
       0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.465, 0.458, 0.450, 0.442, 0.424, 0.415, 0.405, 0.395, 0.385, 0.374, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-      0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] #not useful #distance between the shell ranging from 1 mm to 5 mm from innermost to outermost shell
+  allXsep = newSeq[float](R1.len)
 
 for i in 1..58:  
-  ts = allThickness  
-  ds = allDistances
-  
   
   r3 = allR3[i-1]
+  xSep = allXsep[i-1]
   alpha= radToDeg((arctan(r3/focal))) / 4.0
-  r1 = r3 + 300.0 * sin(degToRad(alpha))
-  r5 = r3 - 300.0 * sin(3.0*degToRad(alpha))
-  echo "r5 ", r5
+  r2 = r3 + 0.5 * xSep * tan(degToRad(alpha))
+  r1 = r2 + lMirr * sin(degToRad(alpha))
+  r4 = r3 - 0.5 * xSep * tan(3.0 * degToRad(alpha))
+  r5 = r4 - lMirr * sin(3.0 * degToRad(alpha))
   alphas.add(round(alpha,3))
-  xsep.add(0.0)
-  if ds[i-1] == 0.0:
-    ds[i-1] = 0.5
-  echo ds[i-1]
   r1s.add(round(r1,3))
-  r1old = r1 + ts[i-1] + ds[i-1]
+  r2s.add(round(r2,3))
+  r4s.add(round(r4,3))
+  r5s.add(round(r5,3))
+
   
 
-echo x
-echo r1s
-echo xsep
-echo alphas
+echo "R1 = ", r1s
+echo "R2 = ", r2s
+echo "R3 = ", allR3
+echo "R4 = ", r4s
+echo "R5 = ", r5s
+echo "Thicknesses = ", allThickness
+echo "f = ", focal
+echo "xSep = ", allXsep
