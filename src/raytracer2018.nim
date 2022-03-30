@@ -160,11 +160,11 @@ let
 
 let
   CHIPREGIONS_CHIP_X_MIN = 0.0.mm
-  CHIPREGIONS_CHIP_X_MAX = 14.0.mm
+  CHIPREGIONS_CHIP_X_MAX = 66.0.mm #14.0.mm
   CHIPREGIONS_CHIP_Y_MIN = 0.0.mm
-  CHIPREGIONS_CHIP_Y_MAX = 14.0.mm
-  CHIPREGIONS_CHIP_CENTER_X = 7.0.mm
-  CHIPREGIONS_CHIP_CENTER_Y = 7.0.mm
+  CHIPREGIONS_CHIP_Y_MAX = 66.0.mm #14.0.mm
+  CHIPREGIONS_CHIP_CENTER_X = CHIPREGIONS_CHIP_X_MAX / 2.0 #7.0.mm
+  CHIPREGIONS_CHIP_CENTER_Y = CHIPREGIONS_CHIP_Y_MAX / 2.0 #7.0.mm
   CHIPREGIONS_GOLD_X_MIN = 4.5.mm
   CHIPREGIONS_GOLD_X_MAX = 9.5.mm
   CHIPREGIONS_GOLD_Y_MIN = 4.5.mm
@@ -180,12 +180,12 @@ proc initCenterVectors(expSetup: ExperimentSetup): CenterVectors =
   ## Initializes all the center vectors
   var centerSun = vec3(0.0)
   centerSun[0] = 0
-  centerSun[1] = 0
+  centerSun[1] = - (0.0 * 1.33e10)   ## first number number of millimeters at bore entrance
   centerSun[2] = - RAYTRACER_DISTANCE_SUN_EARTH.float
 
   var centerEntranceCB = vec3(0.0)
   centerEntranceCB[0] = 0
-  centerEntranceCB[1] = -4.0
+  centerEntranceCB[1] = -0.0
   centerEntranceCB[2] = 0 #coldboreBlockedLength # was 0 anyway
 
   var centerExitCBMagneticField = vec3(0.0)
@@ -207,7 +207,7 @@ proc initCenterVectors(expSetup: ExperimentSetup): CenterVectors =
 
   var centerExitCB = vec3(0.0)
   centerExitCB[0] = 0
-  centerExitCB[1] = -4.0
+  centerExitCB[1] = -0.0
   centerExitCB[2] = expSetup.RAYTRACER_LENGTH_COLDBORE.float
 
   var centerExitPipeCBVT3 = vec3(0.0)
@@ -566,6 +566,13 @@ proc findPosXRT*(pointXRT: Vec3, pointCB: Vec3,
     sMaxHigh = sMax
     pointMirror = vec3(0.0)
   let direc = pointXRT - pointCB
+  var sValue = ((-direc[1] * point[0].mm * lMirror - direc[0] * point[1].mm * lMirror + direc[2].mm * r1.mm * sec(angle) - 
+                direc[2].mm * r2 * sec(angle)).float - sqrt(pow((-direc[2].mm * r1.mm + direc[2].mm * r2 + 
+                direc[1] * point[0].mm * lMirror * cos(angle) + direc[0] * point[1].mm * lMirror * cos(angle)).float, 2.0) - 
+                4.0 * direc[0] * direc[1] * lMirror.float * cos(angle) * (distMirr * r1.mm - point[2].mm * r1.mm - 
+                distMirr * r2 + point[2].mm * r2 + point[0].mm * point[1].mm * lMirror.float * cos(angle) + 
+                lMirror * r1.mm * cos(angle)).float) * sec(angle))/(2.0 * direc[0] * direc[1] * lMirror.float)
+  
   template calcVal(s: MilliMeter): untyped =
     ## Point + scalar * unit vector essentially. Hence no `mm` for direction.
     ## TODO: this should be handled differently...
@@ -586,6 +593,7 @@ proc findPosXRT*(pointXRT: Vec3, pointCB: Vec3,
       sMinHigh = mid
       mid = (sMaxHigh + mid) / 2.0
   pointMirror = point + mid.float * direc
+  #echo sValue, " actual: ", mid.float
   result = pointMirror
 
 proc getVectoraAfterMirror*(pointXRT, pointCB, pointMirror: Vec3,
@@ -712,7 +720,7 @@ proc plotHeatmap(diagramtitle: string,
 
   #d.zmin = 0.0
   #d.zmax = 5e-22
-
+  let offset = CHIPREGIONS_CHIP_CENTER_X.float
   let
     yr = linspace(- rSigma1, rSigma1, xs.len)
     yr2 = linspace(- rSigma2, rSigma2, xs.len)
@@ -723,17 +731,17 @@ proc plotHeatmap(diagramtitle: string,
                       "photon flux" : zs,
                       "yr0": yr,
                       "yr02": yr2})
-    .mutate(f{float: "x-position [mm]" ~ `x` * 14.0 / width.float},
-            f{float: "y-position [mm]" ~ `y` * 14.0 / width.float},
-            f{float: "xr" ~ sqrt(rSigma1 * rSigma1 - `yr0` * `yr0`) + 7.0},
-            f{float: "xrneg" ~ - sqrt(rSigma1 * rSigma1 - `yr0` * `yr0`) + 7.0},
-            f{float: "yr" ~ `yr0` + 7.0},
-            f{float: "xr2" ~ sqrt(rSigma2 * rSigma2 - `yr02` * `yr02`) + 7.0},
-            f{float: "xrneg2" ~ - sqrt(rSigma2 * rSigma2 - `yr02` * `yr02`) + 7.0},
-            f{float: "yr2" ~ `yr02` + 7.0})
+    .mutate(f{float: "x-position [mm]" ~ `x` * CHIPREGIONS_CHIP_X_MAX.float / width.float},
+            f{float: "y-position [mm]" ~ `y` * CHIPREGIONS_CHIP_Y_MAX.float / width.float},
+            f{float: "xr" ~ sqrt(rSigma1 * rSigma1 - `yr0` * `yr0`) + offset},
+            f{float: "xrneg" ~ - sqrt(rSigma1 * rSigma1 - `yr0` * `yr0`) + offset},
+            f{float: "yr" ~ `yr0` + offset},
+            f{float: "xr2" ~ sqrt(rSigma2 * rSigma2 - `yr02` * `yr02`) + offset},
+            f{float: "xrneg2" ~ - sqrt(rSigma2 * rSigma2 - `yr02` * `yr02`) + offset},
+            f{float: "yr2" ~ `yr02` + offset})
   template makeMinMax(knd, ax: untyped): untyped =
     template `knd ax`(): untyped =
-      `CHIPREGIONS_GOLD ax knd` * width.float / 14.0
+      `CHIPREGIONS_GOLD ax knd` * width.float / CHIPREGIONS_CHIP_X_MAX.float
   makeMinMax(min, X)
   makeMinMax(max, X)
   makeMinMax(min, Y)
@@ -895,16 +903,16 @@ proc newExperimentSetup*(setup: ExperimentSetupKind,
     result = ExperimentSetup(
       kind: setup,
       stage: stage,
-      radiusCB: 350.0.mm,
+      radiusCB: 500.0.mm, #350.0.mm,
                              # Change:
       RAYTRACER_LENGTH_COLDBORE: 11300.0.mm, # not sure if this is true but this is how its written on page 61 of the 2021 BabyIAXO paper
       RAYTRACER_LENGTH_COLDBORE_9T: 11000.0.mm, # I know it's not 9T here should be the actual length of pipe with a stable magnetic field; can't be same length
-      distXraySource: 10.0.mm, #distance between the entrance of the magnet an a test Xray source
-      radiusXraySource: 0.5.mm,
+      distXraySource: 2000.0.mm, #88700.0.mm, #distance between the entrance of the magnet an a test Xray source
+      radiusXraySource: 350.0.mm,
       offAxXraySourceUp: 0.0.mm,
       offAxXraySourceLeft: 0.0.mm,#4.5.mm, #
       lengthCol: 0.0.mm,
-      enXraySource: 1.0.keV,
+      enXraySource: 0.021.keV,
       activityXraySource: 0.125.GBq, #proposed source thing by Thomas #1.0.GBq,
       RAYTRACER_LENGTH_PIPE_CB_VT3: 225.0.mm, #300.0.mm, # not determined
       radiusPipeCBVT3: 370.0.mm, #mm smallest aperture between end of CB and VT4 # no Idea, I just made it wider than the coldbore
@@ -914,10 +922,10 @@ proc newExperimentSetup*(setup: ExperimentSetupKind,
       distanceCBAxisXRTAxis: 0.0.mm,
       RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW: 0.0.mm, # #no change, because don't know #good idea
       pipes_turned: 0.0.°, # this is the angle by which the pipes before the detector were turned in comparison to the telescope
-      optics_entrance: @[0.0, 0.0, 0.0].mapIt(it.mm),
-      optics_exit: @[0.0, 0.0, 600.0].mapIt(it.mm),
+      optics_entrance: @[0.0, -0.0, 0.0].mapIt(it.mm),
+      optics_exit: @[0.0, -0.0, 600.0].mapIt(it.mm),
       telescope_turned_x: 0.0.°, #the angle by which the telescope is turned in respect to the magnet
-      telescope_turned_y: -0.0.°, #the angle by which the telescope is turned in respect to the magnet
+      telescope_turned_y: -0.16.°, #the angle by which the telescope is turned in respect to the magnet
                              # Measurements of the Telescope mirrors in the following, R1 are the radii of the mirror shells at the entrance of the mirror
       #allR3: @[151.61, 153.88, 156.17, 158.48, 160.82, 163.18, 165.57, 167.98, 170.42, 172.88, 175.37, 177.88, 180.42, 183.14, 185.89, 188.67, 191.48,
           #194.32, 197.19, 200.09, 203.02, 206.03, 209.07, 212.14, 215.24, 218.37, 221.54, 224.74, 227.97, 231.24, 234.54, 237.87, 241.24, 244.85,
@@ -943,7 +951,7 @@ proc newExperimentSetup*(setup: ExperimentSetupKind,
       numberOfHoles: 1,
       holetype: "none", #the type or shape of the hole in the middle of the optics
       lateralDetector: 0.0.mm, #(sin(0.0.degToRad) * 7500.0).mm, #lateral ofset of the detector in repect to the beamline #0.0.mm #
-      transversalDetector: (sin(0.0.degToRad) * 7500.0).mm #transversal ofset of the detector in repect to the beamline #0.0.mm #
+      transversalDetector: (sin(0.0.degToRad) * 7500.0).mm #-0.0.mm # ##transversal ofset of the detector in repect to the beamline #0.0.mm #
     )
 
   ## TODO: this needs to be moved out of this procedure
@@ -1044,12 +1052,12 @@ proc newDetectorSetup*(setup: DetectorSetupKind): DetectorSetup =
   of dkInGridIAXO:
     result.windowYear = wyIAXO
     result.depthDet = 30.0.mm
-    result.radiusWindow = 4.0.mm
-    result.numberOfStrips = 20 #maybe baby
-    result.openApertureRatio = 0.95 #0.95
-    result.windowThickness = 0.1.μm #microns #options are: 0.3, 0.15 and 0.1
-    result.alThickness = 0.01.μm
-  result.detectorWindowAperture = 14.0.mm
+    result.radiusWindow = 7.0.mm #4.0.mm
+    result.numberOfStrips = 4 #20 #maybe baby
+    result.openApertureRatio = 0.838 #0.95 #
+    result.windowThickness = 0.3.μm #0.1.μm #microns #options are: 0.3, 0.15 and 0.1
+    result.alThickness = 0.02.μm #0.01.μm
+  result.detectorWindowAperture = CHIPREGIONS_CHIP_X_MAX
   let (width, dist) = calcWindowVals(result.radiusWindow,
                                      result.numberOfStrips,
                                      result.openApertureRatio)
@@ -1107,7 +1115,7 @@ proc traceAxion(res: var Axion,
   var weight = 1.0
   ## Get a random point at the end of the coldbore of the magnet to take all axions into account that make it to this point no matter where they enter the magnet ##
   var pointExitCBMagneticField = getRandomPointOnDisk(
-      centerVecs.centerExitCBMagneticField, expSetup.radiusCB)
+      centerVecs.centerExitCBMagneticField, expSetup.radiusCB) #350.0.mm)
   let pointXraySource = getRandomPointOnDisk(
       centerVecs.centerXraySource, expSetup.radiusXraySource)
   let energyXraySource = expSetup.enXraySource
@@ -1132,17 +1140,18 @@ proc traceAxion(res: var Axion,
       radiusSpot = expSetup.radiusXraySource.float / 100.0 #* 3.0 #expSetup.radiusCB.float / 6.0 #
     else:
       radiusSpot *= (expSetup.numberOfHoles.float + 3.0)
-
-    pointExitCBMagneticField = getRandomPointOnDisk(centerSpot, (radiusSpot).mm)
+    pointExitCBMagneticField[0] = pointInSun[0] + rand(0.1) - 0.05 #for parallel light
+    pointExitCBMagneticField[1] = pointInSun[1] + rand(0.1) - 0.05 #for parallel light
+    #pointExitCBMagneticField = getRandomPointOnDisk(centerSpot, (radiusSpot).mm) # for more statistics with hole through optics
     if not lineIntersectsCircle(pointInSun, pointExitCBMagneticField, centerVecs.centerCollimator, expSetup.radiusXraySource):
 
-      #echo pointExitCBMagneticField
+      
       return
     var xraysThroughHole = PI * radiusSpot * radiusSpot /
       (4.0 * PI * (- centerVecs.centerXraySource[2] + centerVecs.centerExitPipeVT3XRT[2]).mm *
       (- centerVecs.centerXraySource[2] + centerVecs.centerExitPipeVT3XRT[2]).mm) * expSetup.activityXraySource
     var testTime = 1_000_000 / (xraysThroughHole * 3600.0.s * 24.0)
-    echo "Days Testing ", testTime, " with a ", expSetup.activityXraySource, " source"
+    #echo "Days Testing ", testTime, " with a ", expSetup.activityXraySource, " source"
   #let emissionRateAx = getRandomEmissionRateFromSolarModel(
   #  pointInSun, centerVecs.centerSun, radiusSun, emRates, emRateCDFs
   #)
@@ -1171,13 +1180,13 @@ proc traceAxion(res: var Axion,
       pointExitCBMagneticField, centerVecs.centerEntranceCB,
       centerVecs.centerExitCB, expSetup.radiusCB
     ) #pointInSun + ((centerVecs.centerEntranceCB[2] - pointInSun[2]) / (pointExitCBMagneticField - pointInSun)[2]) * (pointExitCBMagneticField - pointInSun)
-    echo "doesn't intersect magnet entrance: ", intersect
+    #echo "doesn't intersect magnet entrance: ", intersect
   else:
     intersect = getIntersectlineIntersectsCircle(
       pointInSun,
       pointExitCBMagneticField, centerVecs.centerEntranceCB
     )
-    echo "does intersect magnet entrance: ", intersect
+    #echo "does intersect magnet entrance: ", intersect
 
   ##get the length of the path of the axion in the magnetic field to get the probability of conversion later
   let pathCB = (pointExitCBMagneticField - intersect).length.mm
@@ -1232,11 +1241,12 @@ proc traceAxion(res: var Axion,
   pointExitCB[2] = pointExitCB[2] * cos(expSetup.telescope_turned_y.to(Radian)) + pointExitCB[1] * sin(expSetup.telescope_turned_y.to(Radian))
 
   var factor = (0.0 - pointExitCB[2]) / vectorXRT[2]
-
+  
   #echo "before ", pointExitCB, " ", vectorBeforeXRT, " after ", pointExitCBXRT, " ", vectorXRT
 
 
   var pointEntranceXRT = pointExitCB + factor * vectorXRT
+  
   vectorBeforeXRT = vectorXRT
   ## Coordinate transform from cartesian to polar at the XRT entrance
   var
@@ -1251,7 +1261,16 @@ proc traceAxion(res: var Axion,
   vectorEntranceXRTCircular[0] = radius1.float
   vectorEntranceXRTCircular[1] = phi_radius #in rad
   vectorEntranceXRTCircular[2] = alpha #in rad
-
+  
+  ### 3D spider structure 1st draft ###
+  
+  var factorSpider = (-85.0 - pointExitCB[2]) / vectorXRT[2]
+  var pointEntrancSpider = pointExitCB + factorSpider * vectorXRT
+  let
+    radius1Spider = sqrt((pointEntrancSpider[0].mm) *
+      (pointEntrancSpider[0].mm) + (pointEntrancSpider[1].mm) * (pointEntrancSpider[1].mm))
+    phi_flatSpider = radtoDeg(arccos(pointEntrancSpider[0].mm / radius1Spider))
+  echo phi_flat, " ", phi_flatSpider, " ", pointEntrancSpider
 
   ## there is a 2mm wide graphite block between each glass mirror, to seperate them
   ## in the middle of the X-ray telescope. Return if hit
@@ -1281,7 +1300,8 @@ proc traceAxion(res: var Axion,
       return
     elif vectorEntranceXRTCircular[0] > 64.7:
       for i in 0..16:
-        if (phi_flat + 3.0 >= (-1.25 + 22.5 * i.float) and phi_flat + 3.0 <= (1.25 + 22.5 * i.float)): #spider strips (actually wider for innermost but doesnn't matter because it doesnt reach the window anyways)
+        if ((phi_flat >= (-1.25 + 22.5 * i.float) and phi_flat <= (1.25 + 22.5 * i.float))) or 
+           ((phi_flatSpider >= (-1.25 + 22.5 * i.float) and phi_flatSpider <= (1.25 + 22.5 * i.float))): #spider strips (actually wider for innermost but doesnn't matter because it doesnt reach the window anyways)
           return
     #TODO: inner spider structure that doesnt matter
   if weight == 0.0: return
@@ -1563,7 +1583,7 @@ proc traceAxion(res: var Axion,
       return
 
   else:
-    if abs(pointDetectorWindow[0].mm) > 7.mm or abs(pointDetectorWindow[1].mm) > 7.mm:
+    if abs(pointDetectorWindow[0].mm) > CHIPREGIONS_CHIP_CENTER_X or abs(pointDetectorWindow[1].mm) > CHIPREGIONS_CHIP_CENTER_Y:
       return
 
   var pointDetectorWindowTurned = vec3(0.0)
@@ -1991,7 +2011,7 @@ proc generateResultPlots(axions: seq[Axion],
     geompoint(size = some(0.5), alpha = some(0.1)) +
     ggtitle("X and Y") +
     ggsave(&"../out/xy_{windowYear}.pdf")]#
-  let dfRadFilter = dfRadSig.filter(f{`x` < 7.05}).filter(f{`x` > 6.95})
+  let dfRadFilter = dfRadSig.filter(f{`x` < (CHIPREGIONS_CHIP_CENTER_X.float + 0.05)}).filter(f{`x` > (CHIPREGIONS_CHIP_CENTER_X.float - 0.05)})
   echo dfRadFilter
   ggplot(dfRadFilter, aes("y", fill = factor("Sigma"), weight = "Transmission probability")) +
     geom_histogram(binWidth = 0.001) +
@@ -2032,7 +2052,7 @@ proc generateResultPlots(axions: seq[Axion],
 
 
 
-
+  #[
 
   let dfFluxE2 = seqsToDf({ "Axion energy [keV]": energiesAx.mapIt(it.float),
                             "Flux after experiment": weights })
@@ -2053,8 +2073,8 @@ proc generateResultPlots(axions: seq[Axion],
 
 
 
-
-
+  ]#
+  
 
 
   echo "all plots done, now to heatmap!"
@@ -2062,9 +2082,9 @@ proc generateResultPlots(axions: seq[Axion],
   ## compared to the overall amount and then the data in one pixel compared to the maximal amount of data in any pixel ##
   var
     beginX = 0.0 #- distanceCBAxisXRTAxis * 0.01
-    endX = 14.0  #- distanceCBAxisXRTAxis * 0.01
+    endX = CHIPREGIONS_CHIP_X_MAX.float  #- distanceCBAxisXRTAxis * 0.01
     beginY = 0.0 #- distanceCBAxisXRTAxis * 0.01
-    endY = 14.0  #- distanceCBAxisXRTAxis * 0.01
+    endY = CHIPREGIONS_CHIP_Y_MAX.float  #- distanceCBAxisXRTAxis * 0.01
   var heatmaptable1 = prepareHeatmap(3000, 3000, beginX, endX, beginY, endY,
       pointdataX, pointdataY, weights,
       numberOfPointsSun.float) #colour scale is now the number of points in one pixel divided by the the number of all events
