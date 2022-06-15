@@ -632,7 +632,7 @@ proc getVectoraAfterMirror*(pointXRT, pointCB, pointMirror: Vec3,
     result = vectorAfterMirror
 
 proc getPointDetectorWindow(pointMirror2: Vec3, pointAfterMirror2: Vec3,
-    focalLength, lMirror, xsepMiddle, r3Middle, dCBXray: MilliMeter,
+    distDet, xsepMiddle, dCBXray: MilliMeter,
     pipeAngle: Degree): Vec3 =
 
   ## To calculate the point in the detector window because the pipes are turned by 3 degree (angle here in rad)
@@ -643,20 +643,18 @@ proc getPointDetectorWindow(pointMirror2: Vec3, pointAfterMirror2: Vec3,
                            pointMirror2[2] * sin(pipeRad)) - dCBXray.float
   pointMirror2Turned[1] = pointMirror2[1]
   pointMirror2Turned[2] = (pointMirror2[2] * cos(pipeRad) -
-                           pointMirror2[0] * sin(pipeRad)) -
-                          (lMirror + xsepMiddle / 2.0).float
+                           pointMirror2[0] * sin(pipeRad)) 
   var pointAfterMirror2Turned = vec3(0.0)
   pointAfterMirror2Turned[0] = (pointAfterMirror2[0] * cos(pipeRad) +
                                 pointAfterMirror2[2] * sin(pipeRad)) - dCBXray.float
   pointAfterMirror2Turned[1] = pointAfterMirror2[1]
   pointAfterMirror2Turned[2] = (pointAfterMirror2[2] * cos(pipeRad) -
-                                pointAfterMirror2[0] * sin(pipeRad)) -
-                               (lMirror + xsepMiddle / 2.0).float
+                                pointAfterMirror2[0] * sin(pipeRad)) 
   let vectorAfterMirror2 = pointAfterMirror2Turned - pointMirror2Turned
   ## Then the distance from the middle of the telescope to the detector can be calculated with the focal length
   ## Then n can be calculated as hown many times the vector has to be applied to arrive at the detector
 
-  var distDet = sqrt(r3Middle * r3Middle + (focalLength * focalLength))
+  var distDet =  distDet / cos(pipeRad)
   var n = (distDet - pointMirror2Turned[2].mm) / vectorAfterMirror2[2].mm
 
   result = pointMirror2Turned + n.float * vectorAfterMirror2
@@ -875,7 +873,7 @@ proc newExperimentSetup*(setup: ExperimentSetupKind,
       RAYTRACER_FOCAL_LENGTH_XRT: 1485.0.mm, #1300.0 # is from llnl XRT https://iopscience.iop.org/article/10.1088/1475-7516/2015/12/008/pdf #1600.0 # was the Telescope of 2014 (MPE XRT) also: Aperatur changed #ok
       distanceCBAxisXRTAxis: 0.0.mm, #62.1#58.44 # from XRT drawing #there is no difference in the axis even though the picture gets transfered 62,1mm down, but in the detector center
       RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW: 0.0.mm, # #no change, because don't know
-      pipes_turned: 3.0.°, #degree # this is the angle by which the pipes before the detector were turned in comparison to the telescope
+      pipes_turned: 2.75.°, #degree # this is the angle by which the pipes before the detector were turned in comparison to the telescope
       optics_entrance: @[-83.0, 0.0, 0.0].mapIt(it.mm),
       optics_exit: @[-83.0, 0.0, 454.0].mapIt(it.mm),
       telescope_turned_x: 0.0.°, #the angle by which the telescope is turned in respect to the magnet
@@ -1383,7 +1381,7 @@ proc traceAxion(res: var Axion,
 
   let
     beta3 = 3.0 * beta
-    distanceMirrors = cos(beta3) * (xSep + expSetup.lMirror)
+    distanceMirrors = cos(beta) * (xSep + expSetup.lMirror)
     pointMirror1 = findPosXRT(pointEntranceXRTZylKart, pointExitCBZylKart, r1,
                               r2, beta, expSetup.lMirror, 0.0.mm, 0.001.mm, 1.0.mm, 1.1.mm)
 
@@ -1434,31 +1432,23 @@ proc traceAxion(res: var Axion,
     pointDetectorWindow = vec3(0.0)
     pointEndDetector = vec3(0.0)
     pointRadialComponent: float
-    distDet: MilliMeter
     n: UnitLess
     n3: UnitLess
-  case expSetup.kind
-  of esCAST:
-    var d = - expSetup.optics_entrance[0]
-    pointDetectorWindow = getPointDetectorWindow(
-      pointMirror2,
-      pointAfterMirror2, expSetup.RAYTRACER_FOCAL_LENGTH_XRT,
-      expSetup.lMirror, expSetup.allXsep[8], 62.1.mm, d, 2.75.°
-    )
-    pointEndDetector = getPointDetectorWindow(
-      pointMirror2, pointAfterMirror2,
-      (expSetup.RAYTRACER_FOCAL_LENGTH_XRT + detectorSetup.depthDet),
-      expSetup.lMirror,
-      expSetup.allXsep[8], 62.1.mm, d, 2.75.°
-    )
-  of esBabyIAXO:
     distDet = distanceMirrors - 0.5 * expSetup.allXsep[8] * cos(beta) +
         expSetup.RAYTRACER_FOCAL_LENGTH_XRT -
         expSetup.RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW #distanc of the detector from the entrance of the optics
-    n = (distDet - pointMirror2[2].mm) / vectorAfterMirrors[2].mm
-    n3 = ((distDet + detectorSetup.depthDet) - pointMirror2[2].mm) / vectorAfterMirrors[2].mm
-    pointDetectorWindow = pointMirror2 + n.float * vectorAfterMirrors
-    pointEndDetector = pointMirror2 + n3.float * vectorAfterMirrors
+    d = - expSetup.optics_entrance[0]
+  pointDetectorWindow = getPointDetectorWindow(
+    pointMirror2,
+    pointAfterMirror2,
+    distDet, expSetup.allXsep[8], d, expSetup.pipes_turned
+  )
+  pointEndDetector = getPointDetectorWindow(
+    pointMirror2, pointAfterMirror2,
+    (distDet + detectorSetup.depthDet),
+    expSetup.allXsep[8], d, expSetup.pipes_turned
+  )
+  
 
   ## TODO: what is this? 2^{x - y} ??
   res.deviationDet = sqrt(
