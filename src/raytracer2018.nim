@@ -107,6 +107,7 @@ type
   Axion = object
     passed: bool # indicates whether axion reached the detector
     passedTillWindow: bool
+    hitNickel: bool
     pointdataX: float
     pointdataY: float
     pointdataXBefore: float
@@ -435,7 +436,7 @@ proc lineIntersectsCylinderOnce(point_1: Vec3, point_2: Vec3, centerBegin: Vec3,
   if abs(centerEnd[1]) <= abs(centerBegin[1]):
     offset_y = centerEnd[1]
   else: offset_y = centerBegin[1]
-  echo alpha_y.radToDeg, " ", offset_y
+  #echo alpha_y.radToDeg, " ", offset_y
   p_1[0] -= offset_x
   p_1[1] -= offset_y
   p_1[0] = p_1[0] * cos(alpha_x) + p_1[2] * sin(alpha_x)
@@ -925,7 +926,7 @@ proc newExperimentSetup*(setup: ExperimentSetupKind,
       optics_entrance: @[0.0, -0.0, 0.0].mapIt(it.mm),
       optics_exit: @[0.0, -0.0, 600.0].mapIt(it.mm),
       telescope_turned_x: 0.0.°, #the angle by which the telescope is turned in respect to the magnet
-      telescope_turned_y: -0.16.°, #the angle by which the telescope is turned in respect to the magnet
+      telescope_turned_y: -0.05.°, #the angle by which the telescope is turned in respect to the magnet
                              # Measurements of the Telescope mirrors in the following, R1 are the radii of the mirror shells at the entrance of the mirror
       #allR3: @[151.61, 153.88, 156.17, 158.48, 160.82, 163.18, 165.57, 167.98, 170.42, 172.88, 175.37, 177.88, 180.42, 183.14, 185.89, 188.67, 191.48,
           #194.32, 197.19, 200.09, 203.02, 206.03, 209.07, 212.14, 215.24, 218.37, 221.54, 224.74, 227.97, 231.24, 234.54, 237.87, 241.24, 244.85,
@@ -1191,22 +1192,22 @@ proc traceAxion(res: var Axion,
   ##get the length of the path of the axion in the magnetic field to get the probability of conversion later
   let pathCB = (pointExitCBMagneticField - intersect).length.mm
   var pointExitCB = vec3(0.0)
-  if (not lineIntersectsCircle(pointInSun, pointExitCBMagneticField,
+  #[if (not lineIntersectsCircle(pointInSun, pointExitCBMagneticField,
       centerVecs.centerExitCB, expSetup.radiusCB)): 
         echo "start"
         echo "exit magnet", pointExitCBMagneticField
-        return
+        return]#
 
   pointExitCB = pointInSun + ((centerVecs.centerExitCB[2] - pointInSun[2]) / (
       pointExitCBMagneticField - pointInSun)[2]) * (pointExitCBMagneticField - pointInSun)
 
   var pointExitPipeCBVT3 = vec3(0.0)
 
-  if (not lineIntersectsCircle(pointExitCBMagneticField, pointExitCB,
+  #[if (not lineIntersectsCircle(pointExitCBMagneticField, pointExitCB,
       centerVecs.centerExitPipeCBVT3, expSetup.radiusPipeCBVT3)):
         echo "start"
         echo "exit magnet", pointExitCBMagneticField, "exit cb", pointExitCB
-        return
+        return]#
 
   pointExitPipeCBVT3 = pointExitCBMagneticField + ((
       centerVecs.centerExitPipeCBVT3[2] - pointExitCBMagneticField[2]) / (
@@ -1270,13 +1271,14 @@ proc traceAxion(res: var Axion,
     radius1Spider = sqrt((pointEntrancSpider[0].mm) *
       (pointEntrancSpider[0].mm) + (pointEntrancSpider[1].mm) * (pointEntrancSpider[1].mm))
     phi_flatSpider = radtoDeg(arccos(pointEntrancSpider[0].mm / radius1Spider))
-  echo phi_flat, " ", phi_flatSpider, " ", pointEntrancSpider
+  #echo phi_flat, " ", phi_flatSpider, " ", pointEntrancSpider
 
   ## there is a 2mm wide graphite block between each glass mirror, to seperate them
   ## in the middle of the X-ray telescope. Return if hit
   ## BabyIAXO return if X-ray its the spider structure
   case expSetup.kind
   of esCAST:
+    ## graphite blockers of the LLNL optics
     if pointEntranceXRT[1] <= 1.0 and pointEntranceXRT[1] >= -1.0: return
   of esBabyIAXO:
     ## here we have a spider structure for the XMM telescope:
@@ -1397,7 +1399,7 @@ proc traceAxion(res: var Axion,
     pointMirror2 = findPosXRT(pointAfterMirror1, pointMirror1, r4, r5, beta3,
                               expSetup.lMirror, distanceMirrors, 0.01.mm, 0.0.mm, 2.5.mm)
   #echo r1, " ", expSetup.allR1[h-1], " ", r2, " ", expSetup.allR1[h-1] - expSetup.lMirror * sin(expSetup.allAngles[h-1].to(Radian))
-  if (pointMirror1[2] +  0.001 >  pointMirror2[2] and pointMirror1[2] -  0.001 <  pointMirror2[2]): return
+  
 
   if pointMirror2[0] == 0.0 and pointMirror2[1] == 0.0 and pointMirror2[2] ==
       0.0: return ## with more uncertainty, 10% of the 0.1% we loose here can be recovered, but it gets more uncertain
@@ -1405,7 +1407,23 @@ proc traceAxion(res: var Axion,
     vectorAfterMirrors = getVectoraAfterMirror(pointAfterMirror1, pointMirror1,
         pointMirror2, beta3, "vectorAfter")
     pointAfterMirror2 = pointMirror2 + 200.0 * vectorAfterMirrors
+  let
+    angle1 = getVectoraAfterMirror(pointEntranceXRTZylKart,
+    pointExitCBZylKart, pointMirror1, beta, "angle")
+    angle2 = getVectoraAfterMirror(pointAfterMirror1, pointMirror1,
+        pointMirror2, beta3, "angle")
+    alpha1 = angle1[1].round(2)
+    alpha2 = angle2[1].round(2)
+  #echo (angle1[1].degToRad) , " ", (r1.float - (expSetup.allR1[h-1] + expSetup.allThickness[h-1]).float) / (expSetup.lMirror.float - pointMirror1[2]) #radToDeg(arcsin(r1.float - (expSetup.allR1[h-1] + expSetup.allThickness[h-1]).float) / (expSetup.lMirror.float - pointMirror1[2]))
 
+  # getting rid of the X-rays that hit the shell below 
+  if testXray == false and tan(angle1[1].degToRad) > (r1.float - (expSetup.allR1[h-1] + expSetup.allThickness[h-1]).float) / (expSetup.lMirror.float - pointMirror1[2]):
+    #if not (pointMirror1[2] +  0.0001 >  pointLowerMirror[2] and pointMirror1[2] -  0.0001 <  pointLowerMirror[2]):
+    echo "hit Nickel"
+    res.hitNickel = true
+    return
+    #echo pointLowerMirror, " ", pointMirror1, " ", pointMirror2, " ", angle1[1], " ", angle2[1], " ", h
+  if (pointMirror1[2] +  0.001 >  pointMirror2[2] and pointMirror1[2] -  0.001 <  pointMirror2[2]): return
   ############################################# Mirrors end #################################################
   ## now get the points in the focal / detector plane
 
@@ -1531,19 +1549,7 @@ proc traceAxion(res: var Axion,
   res.transmissionMagnets = transmissionMagnet
   res.yawAngles = ya
 
-  let
-    angle1 = getVectoraAfterMirror(pointEntranceXRTZylKart,
-    pointExitCBZylKart, pointMirror1, beta, "angle")
-    angle2 = getVectoraAfterMirror(pointAfterMirror1, pointMirror1,
-        pointMirror2, beta3, "angle")
-    alpha1 = angle1[1].round(2)
-    alpha2 = angle2[1].round(2)
-  #echo (angle1[1].degToRad) , " ", (r1.float - (expSetup.allR1[h-1] + expSetup.allThickness[h-1]).float) / (expSetup.lMirror.float - pointMirror1[2]) #radToDeg(arcsin(r1.float - (expSetup.allR1[h-1] + expSetup.allThickness[h-1]).float) / (expSetup.lMirror.float - pointMirror1[2]))
-
-  if testXray == false and sin(angle1[1].degToRad) > (r1.float - (expSetup.allR1[h-1] + expSetup.allThickness[h-1]).float) / (expSetup.lMirror.float - pointMirror1[2]):
-    #if not (pointMirror1[2] +  0.0001 >  pointLowerMirror[2] and pointMirror1[2] -  0.0001 <  pointLowerMirror[2]):
-    return
-    #echo pointLowerMirror, " ", pointMirror1, " ", pointMirror2, " ", angle1[1], " ", angle2[1], " ", h
+  
 
   var reflect = 0.0
   case expSetup.kind
@@ -1717,6 +1723,8 @@ proc generateResultPlots(axions: seq[Axion],
   echo "Passed axions ", axionsPass.len
   let axionsPassW = axions.filterIt(it.passedTillWindow)
   echo "Passed axions until the Window ", axionsPassW.len
+  let hitNickelLayer = axions.filterIt(it.hitNickel)
+  echo "Number of X-rays hitting nickel: ", hitNickelLayer.len
 
   template extractPass(n: untyped): untyped =
     let n = axionsPass.mapIt(it.n)
