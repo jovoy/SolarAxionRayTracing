@@ -147,31 +147,30 @@ type
 ## WARNING: cannot be `const` at the moment, due to Nim compiler bug with distinct types
 defUnit(GeV⁻¹)
 let
-  RAYTRACER_DISTANCE_SUN_EARTH = 1.5e14.mm # #ok
-  radiusSun = 6.9e11.mm                    # #ok
-  numberOfPointsSun = 1_000_000            #100000 for statistics   #37734 for CAST if BabyIaxo 10 mio  #26500960 corresponding to 100_000 axions at CAST, doesnt work
+  DistanceSunEarth = 1.5e14.mm # #ok
+  RadiusSun = 6.9e11.mm                    # #ok
+  NumberOfPointsSun = 1_000_000            #100000 for statistics   #37734 for CAST if BabyIaxo 10 mio  #26500960 corresponding to 100_000 axions at CAST, doesnt work
   # 1000000 axions that reach the coldbore then are reached after an operating time of 2.789 \times 10^{-5}\,\si{\second} for CAST
 
-
-  roomTemp = 293.15.K
+  RoomTemp = 293.15.K
   mAxion = 0.0853#0.26978249412621896 #eV, corresponds to set p and T gas valus #0.4 #eV for example
   g_aγ = 2e-12.GeV⁻¹
 
 ## Chipregions#####
 
 let
-  CHIPREGIONS_CHIP_X_MIN = 0.0.mm
-  CHIPREGIONS_CHIP_X_MAX = 66.0.mm #14.0.mm
-  CHIPREGIONS_CHIP_Y_MIN = 0.0.mm
-  CHIPREGIONS_CHIP_Y_MAX = 66.0.mm #14.0.mm
-  CHIPREGIONS_CHIP_CENTER_X = CHIPREGIONS_CHIP_X_MAX / 2.0 #7.0.mm
-  CHIPREGIONS_CHIP_CENTER_Y = CHIPREGIONS_CHIP_Y_MAX / 2.0 #7.0.mm
-  CHIPREGIONS_GOLD_X_MIN = 4.5.mm
-  CHIPREGIONS_GOLD_X_MAX = 9.5.mm
-  CHIPREGIONS_GOLD_Y_MIN = 4.5.mm
-  CHIPREGIONS_GOLD_Y_MAX = 9.5.mm
-  CHIPREGIONS_SILVER_RADIUS_MAX = 4.5.mm
-  CHIPREGIONS_BRONZE_RADIUS_MAX = 5.5.mm
+  ChipXMin     = 0.0.mm
+  ChipXMax     = 66.0.mm #14.0.mm
+  ChipYMin     = 0.0.mm
+  ChipYMax     = 66.0.mm #14.0.mm
+  ChipCenterX  = ChipXMax / 2.0 #7.0.mm
+  ChipCenterY  = ChipYMax / 2.0 #7.0.mm
+  GoldXMin     = 4.5.mm
+  GoldXMax     = 9.5.mm
+  GoldYMin     = 4.5.mm
+  GoldYMax     = 9.5.mm
+  SilverRadius = 4.5.mm
+  BronzeRadius = 5.5.mm
 
 ################################
 
@@ -719,7 +718,7 @@ proc plotHeatmap(diagramtitle: string,
 
   #d.zmin = 0.0
   #d.zmax = 5e-22
-  let offset = CHIPREGIONS_CHIP_CENTER_X.float
+  let offset = ChipCenterX.float
   let
     yr = linspace(- rSigma1, rSigma1, xs.len)
     yr2 = linspace(- rSigma2, rSigma2, xs.len)
@@ -730,8 +729,8 @@ proc plotHeatmap(diagramtitle: string,
                       "photon flux" : zs,
                       "yr0": yr,
                       "yr02": yr2})
-    .mutate(f{float: "x-position [mm]" ~ `x` * CHIPREGIONS_CHIP_X_MAX.float / width.float},
-            f{float: "y-position [mm]" ~ `y` * CHIPREGIONS_CHIP_Y_MAX.float / width.float},
+    .mutate(f{float: "x-position [mm]" ~ `x` * ChipXMax.float / width.float},
+            f{float: "y-position [mm]" ~ `y` * ChipYMax.float / width.float},
             f{float: "xr" ~ sqrt(rSigma1 * rSigma1 - `yr0` * `yr0`) + offset},
             f{float: "xrneg" ~ - sqrt(rSigma1 * rSigma1 - `yr0` * `yr0`) + offset},
             f{float: "yr" ~ `yr0` + offset},
@@ -740,7 +739,7 @@ proc plotHeatmap(diagramtitle: string,
             f{float: "yr2" ~ `yr02` + offset})
   template makeMinMax(knd, ax: untyped): untyped =
     template `knd ax`(): untyped =
-      `CHIPREGIONS_GOLD ax knd` * width.float / CHIPREGIONS_CHIP_X_MAX.float
+      `Gold ax knd` * width.float / ChipXMax.float
   makeMinMax(min, X)
   makeMinMax(max, X)
   makeMinMax(min, Y)
@@ -1056,7 +1055,7 @@ proc newDetectorSetup*(setup: DetectorSetupKind): DetectorSetup =
     result.openApertureRatio = 0.838 #0.95 #
     result.windowThickness = 0.3.μm #0.1.μm #microns #options are: 0.3, 0.15 and 0.1
     result.alThickness = 0.02.μm #0.01.μm
-  result.detectorWindowAperture = CHIPREGIONS_CHIP_X_MAX
+  result.detectorWindowAperture = ChipXMax
   let (width, dist) = calcWindowVals(result.radiusWindow,
                                      result.numberOfStrips,
                                      result.openApertureRatio)
@@ -1110,7 +1109,8 @@ proc traceAxion(res: var Axion,
                ) =
   ## Get a random point in the sun, biased by the emission rate, which is higher
   ## at smalller radii, so this will give more points in the center of the sun ##
-  var pointInSun = getRandomPointFromSolarModel(centerVecs.centerSun, radiusSun, emRatesRadiusCumSum)
+  var pointInSun = getRandomPointFromSolarModel(centerVecs.centerSun, RadiusSun, emRatesRadiusCumSum)
+
   var weight = 1.0
   ## Get a random point at the end of the coldbore of the magnet to take all axions into account that make it to this point no matter where they enter the magnet ##
   var pointExitCBMagneticField = getRandomPointOnDisk(
@@ -1121,7 +1121,7 @@ proc traceAxion(res: var Axion,
 
   ## Get a random energy for the axion biased by the emission rate ##
   var energyAx = getRandomEnergyFromSolarModel(
-    pointInSun, centerVecs.centerSun, radiusSun, energies, emRateCDFs)
+    pointInSun, centerVecs.centerSun, RadiusSun, energies, emRateCDFs)
   if cfXrayTest in flags:
     pointInSun = pointXraySource
     energyAx = energyXraySource
@@ -1152,7 +1152,7 @@ proc traceAxion(res: var Axion,
     var testTime = 1_000_000 / (xraysThroughHole * 3600.0.s * 24.0)
     #echo "Days Testing ", testTime, " with a ", expSetup.activityXraySource, " source"
   #let emissionRateAx = getRandomEmissionRateFromSolarModel(
-  #  pointInSun, centerVecs.centerSun, radiusSun, emRates, emRateCDFs
+  #  pointInSun, centerVecs.centerSun, RadiusSun, emRates, emRateCDFs
   #)
   ## Throw away all the axions, that don't make it through the piping system and therefore exit the system at some point ##
 
@@ -1510,7 +1510,7 @@ proc traceAxion(res: var Axion,
     transmissionMagnet = cos(ya) * probConversionMagnet
   of skGas:
     let
-      pGas = expSetup.pGasRoom / roomTemp * expSetup.tGas
+      pGas = expSetup.pGasRoom / RoomTemp * expSetup.tGas
       ## TODO: use `unchained` in `axionMass` and avoid manual float conversions / use `to`
       effPhotonMass = effPhotonMass2(
         pGas.float, pathCB.to(m).float,
@@ -1532,7 +1532,7 @@ proc traceAxion(res: var Axion,
         distancePipe.float,
         pGas.float,
         expSetup.tGas.float,
-        roomTemp.float) #room temperature in K
+        RoomTemp.float) #room temperature in K
     #echo "axion mass in [eV] ", mAxion, " effective photon mass in [eV] ", effPhotonMass
     transmissionMagnet = cos(ya) * probConversionMagnetGas * absorbtionXrays # for setup with gas
 
@@ -1579,7 +1579,7 @@ proc traceAxion(res: var Axion,
       return
 
   else:
-    if abs(pointDetectorWindow[0].mm) > CHIPREGIONS_CHIP_CENTER_X or abs(pointDetectorWindow[1].mm) > CHIPREGIONS_CHIP_CENTER_Y:
+    if abs(pointDetectorWindow[0].mm) > ChipCenterX or abs(pointDetectorWindow[1].mm) > ChipCenterY:
       return
 
   var pointDetectorWindowTurned = vec3(0.0)
@@ -1639,8 +1639,8 @@ proc traceAxion(res: var Axion,
   ###detector COS has (0/0) at the bottom left corner of the chip
   pointRadialComponent = sqrt(pointDetectorWindow[0]*pointDetectorWindow[0]+pointDetectorWindow[1]*pointDetectorWindow[1])
   res.pointdataR = pointRadialComponent
-  pointDetectorWindow[0] = - pointDetectorWindow[0] + CHIPREGIONS_CHIP_CENTER_X.float # for the view from the detector to the sun
-  pointDetectorWindow[1] = pointDetectorWindow[1] + CHIPREGIONS_CHIP_CENTER_Y.float
+  pointDetectorWindow[0] = - pointDetectorWindow[0] + ChipCenterX.float # for the view from the detector to the sun
+  pointDetectorWindow[1] = pointDetectorWindow[1] + ChipCenterY.float
 
   if cfXrayTest notin flags:
     case expSetup.kind
@@ -1657,21 +1657,21 @@ proc traceAxion(res: var Axion,
 
   ## TODO: the following are not used for anything!
   let
-    gold = ( (pointDetectorWindow[0] >= CHIPREGIONS_GOLD_X_MIN.float) and (
-        pointDetectorWindow[0] <= CHIPREGIONS_GOLD_X_MAX.float) and (
-        pointDetectorWindow[1] >= CHIPREGIONS_GOLD_Y_MIN.float) and (
-        pointDetectorWindow[1] <= CHIPREGIONS_GOLD_Y_MAX.float))
-    r_xy = sqrt( ( (pointDetectorWindow[0] - CHIPREGIONS_CHIP_CENTER_X.float) * (
-        pointDetectorWindow[0] - CHIPREGIONS_CHIP_CENTER_X.float)) + ( (
-        pointDetectorWindow[1] - CHIPREGIONS_CHIP_CENTER_Y.float) * (
-        pointDetectorWindow[1] - CHIPREGIONS_CHIP_CENTER_Y.float))).mm
-    silver = (r_xy <= CHIPREGIONS_SILVER_RADIUS_MAX.mm) and not gold
-    bronze = not gold and not silver and (r_xy <= CHIPREGIONS_BRONZE_RADIUS_MAX)
+    gold = ( (pointDetectorWindow[0] >= GoldXMin.float) and (
+        pointDetectorWindow[0] <= GoldXMax.float) and (
+        pointDetectorWindow[1] >= GoldYMin.float) and (
+        pointDetectorWindow[1] <= GoldYMax.float))
+    r_xy = sqrt( ( (pointDetectorWindow[0] - ChipCenterX.float) * (
+        pointDetectorWindow[0] - ChipCenterX.float)) + ( (
+        pointDetectorWindow[1] - ChipCenterY.float) * (
+        pointDetectorWindow[1] - ChipCenterY.float))).mm
+    silver = (r_xy <= SilverRadius.mm) and not gold
+    bronze = not gold and not silver and (r_xy <= BronzeRadius)
     withinWindow = r_xy < detectorSetup.detectorWindowAperture / 2
-    detector = ( (pointDetectorWindow[0] >= CHIPREGIONS_CHIP_X_MIN.float) and (
-        pointDetectorWindow[0] <= CHIPREGIONS_CHIP_X_MAX.float) and (
-        pointDetectorWindow[1] >= CHIPREGIONS_CHIP_Y_MIN.float) and (
-        pointDetectorWindow[1] <= CHIPREGIONS_CHIP_Y_MAX.float))
+    detector = ( (pointDetectorWindow[0] >= ChipXMin.float) and (
+        pointDetectorWindow[0] <= ChipXMax.float) and (
+        pointDetectorWindow[1] >= ChipYMin.float) and (
+        pointDetectorWindow[1] <= ChipYMax.float))
   #if (energyAx < 0.3.keV) or (energyAx > 1.9.keV and energyAx < 2.1.keV):
     #echo energyAx, " ", weight #(transWindow), " tel: ", reflect, " det: ", 1.0 - transDet
   ## finally set the `passed` field to indicate this axion went all the way
@@ -2009,7 +2009,7 @@ proc generateResultPlots(axions: seq[Axion],
     geompoint(size = some(0.5), alpha = some(0.1)) +
     ggtitle("X and Y") +
     ggsave(&"../out/xy_{windowYear}.pdf")]#
-  let dfRadFilter = dfRadSig.filter(f{`x` < (CHIPREGIONS_CHIP_CENTER_X.float + 0.05)}).filter(f{`x` > (CHIPREGIONS_CHIP_CENTER_X.float - 0.05)})
+  let dfRadFilter = dfRadSig.filter(f{`x` < (ChipCenterX.float + 0.05)}).filter(f{`x` > (ChipCenterX.float - 0.05)})
   echo dfRadFilter
   ggplot(dfRadFilter, aes("y", fill = factor("Sigma"), weight = "Transmission probability")) +
     geom_histogram(binWidth = 0.001) +
@@ -2054,7 +2054,7 @@ proc generateResultPlots(axions: seq[Axion],
 
   let dfFluxE2 = seqsToDf({ "Axion energy [keV]": energiesAx.mapIt(it.float),
                             "Flux after experiment": weights })
-  dfFluxE2.write_csv(&"axion_gae_1e13_gagamma_{g_aγ.float}_flux_after_exp_N_{numberOfPointsSun}.csv")
+  dfFluxE2.write_csv(&"axion_gae_1e13_gagamma_{g_aγ.float}_flux_after_exp_N_{NumberOfPointsSun}.csv")
   ggplot(dfFluxE2, aes("Axion energy [keV]", weight = "Flux after experiment")) +
     geom_histogram(binWidth = 0.001, lineWidth= some(1.2)) +
     ylab("The flux after the experiment") +
@@ -2080,12 +2080,12 @@ proc generateResultPlots(axions: seq[Axion],
   ## compared to the overall amount and then the data in one pixel compared to the maximal amount of data in any pixel ##
   var
     beginX = 0.0 #- distanceCBAxisXRTAxis * 0.01
-    endX = CHIPREGIONS_CHIP_X_MAX.float  #- distanceCBAxisXRTAxis * 0.01
+    endX = ChipXMax.float  #- distanceCBAxisXRTAxis * 0.01
     beginY = 0.0 #- distanceCBAxisXRTAxis * 0.01
-    endY = CHIPREGIONS_CHIP_Y_MAX.float  #- distanceCBAxisXRTAxis * 0.01
+    endY = ChipYMax.float  #- distanceCBAxisXRTAxis * 0.01
   var heatmaptable1 = prepareHeatmap(3000, 3000, beginX, endX, beginY, endY,
       pointdataX, pointdataY, weights,
-      numberOfPointsSun.float) #colour scale is now the number of points in one pixel divided by the the number of all events
+      NumberOfPointsSun.float) #colour scale is now the number of points in one pixel divided by the the number of all events
   var heatmaptable2 = prepareHeatmap(256, 256, beginX, endX, beginY, endY,
       pointdataX, pointdataY, weights, 1.0)
   var heatmaptable3 = prepareHeatmap(3000, 3000, beginX, endX, beginY, endY,
@@ -2198,13 +2198,13 @@ proc calculateFluxFractions(setup: ExperimentSetupKind,
     var ps = newSeq[float]()
 
     for i in 0 ..< 100_000:
-      let pos = getRandomPointFromSolarModel(centerSun, radiusSun, emratesRadiusCumSum)
+      let pos = getRandomPointFromSolarModel(centerSun, RadiusSun, emratesRadiusCumSum)
       let r = (pos - centerSun).length()
       let energyAx = getRandomEnergyFromSolarModel(
-        pos, centerSun, radiusSun, energies, emrates, emRateCDFs, "energy"
+        pos, centerSun, RadiusSun, energies, emrates, emRateCDFs, "energy"
       )
       let em = getRandomEnergyFromSolarModel(
-        pos, centerSun, radiusSun, energies, emrates, emRateCDFs, "emissionRate"
+        pos, centerSun, RadiusSun, energies, emrates, emRateCDFs, "emissionRate"
       )
       ts.add arccos(pos[2] / r)
       ps.add arctan(pos[1] / pos[0])
@@ -2229,13 +2229,13 @@ proc calculateFluxFractions(setup: ExperimentSetupKind,
   ## In the following we will go over a number of points in the sun, whose location and
   ## energy will be biased by the emission rate and whose track will be through the CAST
   ## experimental setup from 2018 at VT3
-  var axions = newSeq[Axion](numberOfPointsSun)
+  var axions = newSeq[Axion](NumberOfPointsSun)
   var axBuf = cast[ptr UncheckedArray[Axion]](axions[0].addr)
   echo "start"
   #echo emRatesRadiusSum.len
   echo emRates.len
   init(Weave)
-  traceAxionWrapper(axBuf, numberOfPointsSun,
+  traceAxionWrapper(axBuf, NumberOfPointsSun,
                     centerVecs,
                     expSetup,
                     detectorSetup,
