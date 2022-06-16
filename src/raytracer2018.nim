@@ -1410,8 +1410,8 @@ proc traceAxion(res: var Axion,
     pointExitCBZylKart, pointMirror1, beta, "angle")
     angle2 = getVectoraAfterMirror(pointAfterMirror1, pointMirror1,
         pointMirror2, beta3, "angle")
-    alpha1 = angle1[1].round(2)
-    alpha2 = angle2[1].round(2)
+    alpha1 = angle1[1]
+    alpha2 = angle2[1]
   #echo (angle1[1].degToRad) , " ", (r1.float - (expSetup.allR1[h-1] + expSetup.allThickness[h-1]).float) / (expSetup.lMirror.float - pointMirror1[2]) #radToDeg(arcsin(r1.float - (expSetup.allR1[h-1] + expSetup.allThickness[h-1]).float) / (expSetup.lMirror.float - pointMirror1[2]))
 
   # getting rid of the X-rays that hit the shell below
