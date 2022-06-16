@@ -422,14 +422,14 @@ proc lineIntersectsCylinderOnce(point_1: Vec3, point_2: Vec3, centerBegin: Vec3,
   ## and then only once, because else the axions would have just flown through ##
   ##
   ## TODO: can this *please* be merged with the proc below somehow?
-  var 
+  var
     alpha_x = arcsin((centerEnd[0] - centerBegin[0]) / abs(centerBegin[2] - centerEnd[2]))
     alpha_y = arcsin((centerEnd[1] - centerBegin[1]) / abs(centerBegin[2] - centerEnd[2]))
     p_1 = point_1
     p_2 = point_2
     offset_x = 0.0
     offset_y = 0.0
-  
+
   if abs(centerEnd[0]) <= abs(centerBegin[0]):
     offset_x = centerEnd[0]
   else: offset_x = centerBegin[0]
@@ -467,7 +467,7 @@ proc lineIntersectsCylinderOnce(point_1: Vec3, point_2: Vec3, centerBegin: Vec3,
                         (intersect_1[2] < centerEnd[2])
     intersect_2_valid = (intersect_2[2] > centerBegin[2]) and
                         (intersect_2[2] < centerEnd[2])
-  
+
   if ( (intersect_1_valid and intersect_2_valid) or (not intersect_1_valid and
       not intersect_2_valid)):
     return false
@@ -483,7 +483,7 @@ proc getIntersectLineIntersectsCylinderOnce(
   centerBegin: Vec3, centerEnd: Vec3, radius: MilliMeter
      ): Vec3 =
 
-  var 
+  var
     alpha_x = arcsin((centerEnd[0] - centerBegin[0]) / abs(centerBegin[2] - centerEnd[2]))
     alpha_y = arcsin((centerEnd[1] - centerBegin[1]) / abs(centerBegin[2] - centerEnd[2]))
     p_1 = point_1
@@ -567,13 +567,13 @@ proc findPosXRT*(pointXRT: Vec3, pointCB: Vec3,
     sMaxHigh = sMax
     pointMirror = vec3(0.0)
   let direc = pointXRT - pointCB
-  var sValue = ((-direc[1] * point[0].mm * lMirror - direc[0] * point[1].mm * lMirror + direc[2].mm * r1.mm * sec(angle) - 
-                direc[2].mm * r2 * sec(angle)).float - sqrt(pow((-direc[2].mm * r1.mm + direc[2].mm * r2 + 
-                direc[1] * point[0].mm * lMirror * cos(angle) + direc[0] * point[1].mm * lMirror * cos(angle)).float, 2.0) - 
-                4.0 * direc[0] * direc[1] * lMirror.float * cos(angle) * (distMirr * r1.mm - point[2].mm * r1.mm - 
-                distMirr * r2 + point[2].mm * r2 + point[0].mm * point[1].mm * lMirror.float * cos(angle) + 
+  var sValue = ((-direc[1] * point[0].mm * lMirror - direc[0] * point[1].mm * lMirror + direc[2].mm * r1.mm * sec(angle) -
+                direc[2].mm * r2 * sec(angle)).float - sqrt(pow((-direc[2].mm * r1.mm + direc[2].mm * r2 +
+                direc[1] * point[0].mm * lMirror * cos(angle) + direc[0] * point[1].mm * lMirror * cos(angle)).float, 2.0) -
+                4.0 * direc[0] * direc[1] * lMirror.float * cos(angle) * (distMirr * r1.mm - point[2].mm * r1.mm -
+                distMirr * r2 + point[2].mm * r2 + point[0].mm * point[1].mm * lMirror.float * cos(angle) +
                 lMirror * r1.mm * cos(angle)).float) * sec(angle))/(2.0 * direc[0] * direc[1] * lMirror.float)
-  
+
   template calcVal(s: MilliMeter): untyped =
     ## Point + scalar * unit vector essentially. Hence no `mm` for direction.
     ## TODO: this should be handled differently...
@@ -643,13 +643,13 @@ proc getPointDetectorWindow(pointMirror2: Vec3, pointAfterMirror2: Vec3,
                            pointMirror2[2] * sin(pipeRad)) - dCBXray.float
   pointMirror2Turned[1] = pointMirror2[1]
   pointMirror2Turned[2] = (pointMirror2[2] * cos(pipeRad) -
-                           pointMirror2[0] * sin(pipeRad)) 
+                           pointMirror2[0] * sin(pipeRad))
   var pointAfterMirror2Turned = vec3(0.0)
   pointAfterMirror2Turned[0] = (pointAfterMirror2[0] * cos(pipeRad) +
                                 pointAfterMirror2[2] * sin(pipeRad)) - dCBXray.float
   pointAfterMirror2Turned[1] = pointAfterMirror2[1]
   pointAfterMirror2Turned[2] = (pointAfterMirror2[2] * cos(pipeRad) -
-                                pointAfterMirror2[0] * sin(pipeRad)) 
+                                pointAfterMirror2[0] * sin(pipeRad))
   let vectorAfterMirror2 = pointAfterMirror2Turned - pointMirror2Turned
   ## Then the distance from the middle of the telescope to the detector can be calculated with the focal length
   ## Then n can be calculated as hown many times the vector has to be applied to arrive at the detector
@@ -1144,7 +1144,7 @@ proc traceAxion(res: var Axion,
     #pointExitCBMagneticField = getRandomPointOnDisk(centerSpot, (radiusSpot).mm) # for more statistics with hole through optics
     if not lineIntersectsCircle(pointInSun, pointExitCBMagneticField, centerVecs.centerCollimator, expSetup.radiusXraySource):
 
-      
+
       return
     var xraysThroughHole = PI * radiusSpot * radiusSpot /
       (4.0 * PI * (- centerVecs.centerXraySource[2] + centerVecs.centerExitPipeVT3XRT[2]).mm *
@@ -1166,7 +1166,7 @@ proc traceAxion(res: var Axion,
   res.emratesPre = 1.0 #* energyAx.float * energyAx.float * (pointInSunInSun[0].float * pointInSunInSun[0].float + pointInSunInSun[1].float * pointInSunInSun[1].float + pointInSunInSun[2].float * pointInSunInSun[2].float) / 6.9e11 / 6.9e11
   res.energiesPre = energyAx
   if (not intersectsEntranceCB):
-    
+
     intersectsCB = lineIntersectsCylinderOnce(pointInSun,
         pointExitCBMagneticField, centerVecs.centerEntranceCB,
         centerVecs.centerExitCB, expSetup.radiusCB)
@@ -1191,7 +1191,7 @@ proc traceAxion(res: var Axion,
   let pathCB = (pointExitCBMagneticField - intersect).length.mm
   var pointExitCB = vec3(0.0)
   #[if (not lineIntersectsCircle(pointInSun, pointExitCBMagneticField,
-      centerVecs.centerExitCB, expSetup.radiusCB)): 
+      centerVecs.centerExitCB, expSetup.radiusCB)):
         echo "start"
         echo "exit magnet", pointExitCBMagneticField
         return]#
@@ -1220,7 +1220,7 @@ proc traceAxion(res: var Axion,
       pointExitPipeCBVT3 - pointExitCB)
 
   var vectorBeforeXRT = pointExitPipeVT3XRT - pointExitCB
-  
+
   #echo centerVecs.centerCollimator, " ", pointExitPipeVT3XRT
   ###################from the CB (coldbore(pipe in Magnet)) to the XRT (XrayTelescope)#######################
   var vectorXRT = vectorBeforeXRT
@@ -1240,12 +1240,12 @@ proc traceAxion(res: var Axion,
   pointExitCB[2] = pointExitCB[2] * cos(expSetup.telescope_turned_y.to(Radian)) + pointExitCB[1] * sin(expSetup.telescope_turned_y.to(Radian))
 
   var factor = (0.0 - pointExitCB[2]) / vectorXRT[2]
-  
+
   #echo "before ", pointExitCB, " ", vectorBeforeXRT, " after ", pointExitCBXRT, " ", vectorXRT
 
 
   var pointEntranceXRT = pointExitCB + factor * vectorXRT
-  
+
   vectorBeforeXRT = vectorXRT
   ## Coordinate transform from cartesian to polar at the XRT entrance
   var
@@ -1260,9 +1260,9 @@ proc traceAxion(res: var Axion,
   vectorEntranceXRTCircular[0] = radius1.float
   vectorEntranceXRTCircular[1] = phi_radius #in rad
   vectorEntranceXRTCircular[2] = alpha #in rad
-  
+
   ### 3D spider structure 1st draft ###
-  
+
   var factorSpider = (-85.0 - pointExitCB[2]) / vectorXRT[2]
   var pointEntrancSpider = pointExitCB + factorSpider * vectorXRT
   let
@@ -1300,7 +1300,7 @@ proc traceAxion(res: var Axion,
       return
     elif vectorEntranceXRTCircular[0] > 64.7:
       for i in 0..16:
-        if ((phi_flat >= (-1.25 + 22.5 * i.float) and phi_flat <= (1.25 + 22.5 * i.float))) or 
+        if ((phi_flat >= (-1.25 + 22.5 * i.float) and phi_flat <= (1.25 + 22.5 * i.float))) or
            ((phi_flatSpider >= (-1.25 + 22.5 * i.float) and phi_flatSpider <= (1.25 + 22.5 * i.float))): #spider strips (actually wider for innermost but doesnn't matter because it doesnt reach the window anyways)
           return
     #TODO: inner spider structure that doesnt matter
@@ -1397,7 +1397,7 @@ proc traceAxion(res: var Axion,
     pointMirror2 = findPosXRT(pointAfterMirror1, pointMirror1, r4, r5, beta3,
                               expSetup.lMirror, distanceMirrors, 0.01.mm, 0.0.mm, 2.5.mm)
   #echo r1, " ", expSetup.allR1[h-1], " ", r2, " ", expSetup.allR1[h-1] - expSetup.lMirror * sin(expSetup.allAngles[h-1].to(Radian))
-  
+
 
   if pointMirror2[0] == 0.0 and pointMirror2[1] == 0.0 and pointMirror2[2] ==
       0.0: return ## with more uncertainty, 10% of the 0.1% we loose here can be recovered, but it gets more uncertain
@@ -1414,7 +1414,7 @@ proc traceAxion(res: var Axion,
     alpha2 = angle2[1].round(2)
   #echo (angle1[1].degToRad) , " ", (r1.float - (expSetup.allR1[h-1] + expSetup.allThickness[h-1]).float) / (expSetup.lMirror.float - pointMirror1[2]) #radToDeg(arcsin(r1.float - (expSetup.allR1[h-1] + expSetup.allThickness[h-1]).float) / (expSetup.lMirror.float - pointMirror1[2]))
 
-  # getting rid of the X-rays that hit the shell below 
+  # getting rid of the X-rays that hit the shell below
   if testXray == false and tan(angle1[1].degToRad) > (r1.float - (expSetup.allR1[h-1] + expSetup.allThickness[h-1]).float) / (expSetup.lMirror.float - pointMirror1[2]):
     #if not (pointMirror1[2] +  0.0001 >  pointLowerMirror[2] and pointMirror1[2] -  0.0001 <  pointLowerMirror[2]):
     echo "hit Nickel"
@@ -1448,7 +1448,7 @@ proc traceAxion(res: var Axion,
     (distDet + detectorSetup.depthDet),
     expSetup.allXsep[8], d, expSetup.pipes_turned
   )
-  
+
 
   ## TODO: what is this? 2^{x - y} ??
   res.deviationDet = sqrt(
@@ -2017,7 +2017,7 @@ proc generateResultPlots(axions: seq[Axion],
     ylab("flux") +
     ggtitle("Simulated X-ray signal distribution along the y-axis") +
     ggsave(&"../out/y_{windowYear}.pdf")
-  
+
 
   #[let dfRadSigW = seqsToDf({"Radial component [mm]": pointdataRSig,
                         "Transmission probability": weightsSig,
@@ -2072,7 +2072,7 @@ proc generateResultPlots(axions: seq[Axion],
 
 
   ]#
-  
+
 
 
   echo "all plots done, now to heatmap!"
