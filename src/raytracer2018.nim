@@ -1,5 +1,5 @@
 # stdlib
-import std / [math, strutils, algorithm, random, sequtils, os, strformat, tables, sugar, strscans]
+import std / [math, strutils, algorithm, random, sequtils, os, strformat, tables, sugar, strscans, options]
 
 import ../axionMass/axionMassforMagnet
 
@@ -17,6 +17,21 @@ type
     esCAST = "CAST"
     esBabyIAXO = "BabyIAXO"
 
+  HoleType = enum
+    htNone = "none"
+    htCross = "cross"
+    htStar = "star"
+    htCircle = "circle"
+    htSquare = "square"
+    htDiamond = "diamond"
+
+  TelescopeKind = enum
+    tkLLNL, ## the LLNL telescope as used at CAST based on the nustar optics
+    tkXMM,  ## the XMM Newton optics as they may be used in BabyIAXO
+    tkCustomBabyIAXO, ## A hybrid optics specifically built for BabyIAXO mixing
+                      ## a nustar like inner core with an XMM like outer core
+    tkAbrixas, ## the Abrixas telescope as used at CAST
+
   StageKind = enum
     skVacuum = "vacuum"
     skGas = "gas"
@@ -27,62 +42,125 @@ type
     wyIAXO = "BabyIAXO"
 
   CenterVectors = ref object
-    centerEntranceCB: Vec3[float]
-    centerExitCB: Vec3[float]
-    centerExitPipeCBVT3: Vec3[float]
-    centerExitPipeVT3XRT: Vec3[float]
-    centerExitCBMagneticField: Vec3[float]
-    centerEnterCBMagneticField: Vec3[float]
-    centerXraySource: Vec3[float]
-    centerCollimator: Vec3[float]
-    centerSun: Vec3[float]
+    entranceCB: Vec3[float]
+    exitCB: Vec3[float]
+    exitPipeCBVT3: Vec3[float]
+    exitPipeVT3XRT: Vec3[float]
+    exitCBMagneticField: Vec3[float]
+    enterCBMagneticField: Vec3[float]
+    xraySource: Vec3[float]
+    collimator: Vec3[float]
+    sun: Vec3[float]
+
+  ReflectivityKind = enum
+    rkEffectiveArea, ## compute transmission probability from effective area (only used if
+                     ## no reflectivity can be computed from first principles using telescope
+                     ## layout and layer coatings)
+    rkSingleCoating, ## used for telescopes with a single kind of coating on all layers (XMM, Abrixas)
+    rkMultiCoating   ## used for telescopes with multiple different coatings (LLNL, custom BabyIAXO)
+
+  Reflectivity = object
+    case kind: ReflectivityKind
+    of rkEffectiveArea:
+      telescopeTransmission: InterpolatorType[float] # should be `keV`, but cannot do that atm
+    of rkSingleCoating:
+      reflectivity: Interpolator2DType[float]  # (angle / °, keV)
+    of rkMultiCoating:
+      ## Currently this assumes that the coatings are based on different layers and that the
+      ## coatings change from inner most to outer most layer without repeating the same layer.
+      ## Therefore, we have a mapping from layers to the correct interpolator via a lookup
+      ## sequence (via linear scan), which stores the "boundary layers", i.e. the number of the
+      ## first layer of the next type.
+      layers: seq[int] ## e.g. @[14, 36, 60] layers 0-13 type 0, 14-35 type 1, ...,
+                       ## given layer 18: layers.lowerBound(18) gives 1, implying to use reflectivity
+                       ## interpolator at index 1
+      reflectivities: seq[Interpolator2DType[float]]
+
+  Magnet = object
+    lengthColdbore: mm ## Length of the cold bore of the magnet
+    B: T               ## Magnetic field strength of the magnet (assumed homogeneous)
+    lengthB: mm        ## Length in which `B` applies
+    radiusCB: mm       ## Radius of the coldbore of the magnet
+    pGasRoom: bar      ## Pressure of gas inside the bore at room temperature
+    tGas: K            ## Temperature of a possible gas inside the bore
+
+  Telescope = object
+    optics_entrance: seq[MilliMeter]
+    optics_exit: seq[MilliMeter]
+    telescope_turned_x: Degree
+    telescope_turned_y: Degree
+    allThickness: seq[MilliMeter]
+    allR1: seq[MilliMeter]
+    allXsep: seq[MilliMeter]
+    allAngles: seq[Degree]
+    lMirror: mm
+    holeInOptics: mm
+    numberOfHoles: int
+    holeType: HoleType
+    reflectivity: Reflectivity
+
+  ## Information about an X-ray source installed for testing somewhere in front of the telescope
+  TestXraySource = object
+    active: bool  ## Whether the source is active (i.e. do we sample from the Sun or the source?)
+    energy: keV   ## The energy of the X-ray source
+    # distXraySource
+    distance: mm  ## Distance of the X-ray source from the readout
+    # radiusXraySource
+    radius: mm    ## Radius of the X-ray source
+    # offAxXraySourceUp
+    offAxisUp: mm
+    # offAxXraySourceLeft
+    offAxisLeft: mm
+    # activityXraySource
+    activity: GBq ## The activity in `GBq` of the source
+    lengthCol: mm ## Length of a collimator in front of the source
+
+  ## An object that represents a single pipe
+  Pipe = object
+    length: mm
+    radius: mm
+
+  ## Stores information about the geometry of the pipes used between the
+  ## magnet (coldbore), a gate valve (VT3) and the XRT
+  Pipes = object
+    # RAYTRACER_LENGTH_PIPE_CB_VT3
+    # pipe connecting the coldbore itself to the VT3 gate valve
+    coldBoreToVT3: Pipe
+    # the pipe connecting the VT3 gate valve to the telescope (XRT)
+    vt3ToXRT: Pipe
+    # RAYTRACER_LENGTH_PIPE_VT3_XRT*: mm
+    # radiusPipeVT3XRT*: mm
+    distanceCBAxisXRTAxis: mm ## ??? set to 0.
+    pipesTurned: Degree
+
+  ## Describes where exactly the detector is placed. In "ideal" conditions the
+  ## detector is placed exactly in the focal plane. In practice it describes
+  ## the distance of the raytracing "camera" from the XRT. Therefore moving the
+  ## detector installation changes the size / position of the image.
+  DetectorInstallation = object
+    # RAYTRACER_FOCAL_LENGTH_XRT*: mm
+    distanceDetectorXRT: mm ## Distance from the XRT to the readout plane, i.e. where we record the raytracing image!
+    # RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW
+    distanceWindowFocalPlane: mm ## Distance from the detector window to the focal plane (can be used to offset
+                                  ## `distanceDetectorXRT`)
+    lateralShift: mm
+    transversalShift: mm
 
   ExperimentSetup* = ref object
     kind: ExperimentSetupKind
     stage: StageKind
-    radiusCB*: mm
-    RAYTRACER_LENGTH_COLDBORE*: mm
-    RAYTRACER_LENGTH_COLDBORE_9T*: mm
-    distXraySource*: mm
-    radiusXraySource*: mm
-    offAxXraySourceUp*: mm
-    offAxXraySourceLeft*: mm
-    lengthCol*: mm
-    enXraySource*: keV
-    activityXraySource*: GBq
-    RAYTRACER_LENGTH_PIPE_CB_VT3*: mm
-    radiusPipeCBVT3*: mm
-    RAYTRACER_LENGTH_PIPE_VT3_XRT*: mm
-    radiusPipeVT3XRT*: mm
-    RAYTRACER_FOCAL_LENGTH_XRT*: mm
-    distanceCBAxisXRTAxis*: mm
-    RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW*: mm
-    pipes_turned*: Degree
-    optics_entrance: seq[MilliMeter]
-    optics_exit: seq[MilliMeter]
-    telescope_turned_x*: Degree
-    telescope_turned_y*: Degree
-    allThickness*: seq[MilliMeter]
-    allR1*: seq[MilliMeter]
-    allXsep*: seq[MilliMeter]
-    allAngles*: seq[Degree]
-    lMirror*: mm
-    B*: T
-    pGasRoom*: bar
-    tGas*: K
-    holeInOptics*: mm
-    numberOfHoles: int
-    holetype: string
-    lateralDetector*: mm
-    transversalDetector*: mm
-    telescopeTransmission*: InterpolatorType[float] # should be `keV`, but cannot do that atm
-    goldReflectivity*: Interpolator2DType[float]    # (angle / °, keV)
+    magnet*: Magnet
+    telescope*: Telescope
+    testSource*: TestXraySource
+    pipes*: Pipes
+    detectorInstall*: DetectorInstallation
 
   DetectorSetupKind = enum
     dkInGrid2017 = "InGrid2017" # the setup as used in 2017
     dkInGrid2018 = "InGrid2018" # the setup as used in 2018
     dkInGridIAXO = "InGridIAXO"  # hypothetical setup for BabyIAXO (impoved window...)
 
+  ## Describes the detector itself. What kind of gas it uses, the kind of window etc.
   DetectorSetup = ref object # ref object for smaller size for parallel task buffer
     windowYear: WindowYearKind
     stripDistWindow: mm
@@ -104,6 +182,7 @@ type
     mkSi = "Si"
     mkAr = "Ar"
 
+  ## Most of these field names should be renamed
   Axion = object
     passed: bool # indicates whether axion reached the detector
     passedTillWindow: bool
@@ -115,7 +194,7 @@ type
     pointdataR: float
     weights: float
     weightsAll: float
-    transmissionMagnets: float
+    transmissionMagnet: float
     yawAngles: float
     pixvalsX: float
     pixvalsY: float
@@ -140,7 +219,9 @@ type
     cfIgnoreGasAbs,      ## use to ignore the gas transmission
     cfIgnoreReflection,  ## use to ignore reflectivity (use 1.0) of telescope layer coating
     cfIgnoreConvProb,    ## use to ignore axion conversion probability
-    cfXrayTest
+    cfXrayTest,          ## if given reads the TestXraySource config values and uses it
+    cfReadMagnetConfig,  ## if given uses configuration of magnet from config file
+    cfReadDetInstallConfig ## if given uses configuration of detector install. from config file
 
 ################################
 # VARIABLES from rayTracer.h
@@ -177,60 +258,48 @@ let
 randomize(299792458)
 
 proc initCenterVectors(expSetup: ExperimentSetup): CenterVectors =
-  ## Initializes all the center vectors
-  var centerSun = vec3(0.0)
-  centerSun[0] = 0
-  centerSun[1] = - (0.0 * 1.33e10)   ## first number number of millimeters at bore entrance
-  centerSun[2] = - RAYTRACER_DISTANCE_SUN_EARTH.float
-
-  var centerEntranceCB = vec3(0.0)
-  centerEntranceCB[0] = 0
-  centerEntranceCB[1] = -0.0
-  centerEntranceCB[2] = 0 #coldboreBlockedLength # was 0 anyway
-
-  var centerExitCBMagneticField = vec3(0.0)
-  centerExitCBMagneticField[0] = 0
-  centerExitCBMagneticField[1] = 0
-  centerExitCBMagneticField[2] = expSetup.RAYTRACER_LENGTH_COLDBORE_9T.float
-
-  var centerEnterCBMagneticField = vec3(0.0)
-
-  var centerXraySource = vec3(0.0)
-  centerXraySource[0] = expSetup.offAxXraySourceLeft.float
-  centerXraySource[1] = expSetup.offAxXraySourceUp.float #250.0
-  centerXraySource[2] = - (expSetup.distXraySource.float)
-
-  var centerCollimator = vec3(0.0)
-  centerCollimator[0] = expSetup.offAxXraySourceLeft.float
-  centerCollimator[1] = expSetup.offAxXraySourceUp.float #250.0
-  centerCollimator[2] = - (expSetup.distXraySource.float) + expSetup.lengthCol.float
-
-  var centerExitCB = vec3(0.0)
-  centerExitCB[0] = 0
-  centerExitCB[1] = -0.0
-  centerExitCB[2] = expSetup.RAYTRACER_LENGTH_COLDBORE.float
-
-  var centerExitPipeCBVT3 = vec3(0.0)
-  centerExitPipeCBVT3[0] = 0
-  centerExitPipeCBVT3[1] = 0
-  centerExitPipeCBVT3[2] = (expSetup.RAYTRACER_LENGTH_COLDBORE +
-                            expSetup.RAYTRACER_LENGTH_PIPE_CB_VT3).float
-
-  var centerExitPipeVT3XRT = vec3(0.0)
-  centerExitPipeVT3XRT[0] = 0
-  centerExitPipeVT3XRT[1] = 0
-  centerExitPipeVT3XRT[2] = (expSetup.RAYTRACER_LENGTH_COLDBORE +
-                             expSetup.RAYTRACER_LENGTH_PIPE_CB_VT3 +
-                             expSetup.RAYTRACER_LENGTH_PIPE_VT3_XRT).float
-  result = CenterVectors(centerEntranceCB: centerEntranceCB,
-                         centerExitCB: centerExitCB,
-                         centerExitPipeCBVT3: centerExitPipeCBVT3,
-                         centerExitPipeVT3XRT: centerExitPipeVT3XRT,
-                         centerExitCBMagneticField: centerExitCBMagneticField,
-                         centerEnterCBMagneticField: centerEnterCBMagneticField,
-                         centerXraySource: centerXraySource,
-                         centerCollimator: centerCollimator,
-                         centerSun: centerSun)
+  ## Initializes all the center vectors, that is the center position of specific objects
+  ## part of the raytracing in the global coordinate system.
+  # Position of center of the Sun
+  let sun = vec3(0.0,
+                 - (0.0 * 1.33e10),   ## first number number of millimeters at bore entrance
+                 - DistanceSunEarth.float)
+  # position of the entrance of the magnet cold bore
+  let entranceCB = vec3(0.0, -0.0, 0.0) #coldboreBlockedLength # was 0 anyway
+  # position of beginning of magnetic field
+  ## XXX: why is this the same as the `entranceCB`? According to the types the CB is a bit longer than
+  ## the actual part of the magnetic field so shouldn't they differ?
+  let enterCBMagneticField = vec3(0.0, 0.0, 0.0)
+  # Exit of the CB magnetic field
+  let exitCBMagneticField = vec3(0.0, 0.0, expSetup.magnet.lengthB.float)
+  # position of the exit of the magnet cold bore
+  let exitCB = vec3(0.0, -0.0, expSetup.magnet.lengthColdbore.float)
+  # exit of the pipe connecting the coldbore to VT3
+  let exitPipeCBVT3 = vec3(0.0, 0.0,
+                           (expSetup.magnet.lengthColdbore +
+                            expSetup.pipes.coldBoreToVT3.length).float)
+  # exit of the pipe connecting VT3 to the telescope
+  let exitPipeVT3XRT = vec3(0.0, 0.0,
+                            (expSetup.magnet.lengthColdbore +
+                             expSetup.pipes.coldBoreToVT3.length +
+                             expSetup.pipes.vt3ToXRT.length).float)
+  # position of an optional X-ray source for testing
+  let xraySource = vec3(expSetup.testSource.offAxisLeft.float,
+                        expSetup.testSource.offAxisUp.float, #250.0
+                        - (expSetup.testSource.distance.float))
+  # position of the collimator of the X-ray test source
+  let collimator = vec3(expSetup.testSource.offAxisLeft.float,
+                        expSetup.testSource.offAxisUp.float, #250.0
+                        - (expSetup.testSource.distance.float) + expSetup.testSource.lengthCol.float)
+  result = CenterVectors(entranceCB: entranceCB,
+                         exitCB: exitCB,
+                         exitPipeCBVT3: exitPipeCBVT3,
+                         exitPipeVT3XRT: exitPipeVT3XRT,
+                         exitCBMagneticField: exitCBMagneticField,
+                         enterCBMagneticField: enterCBMagneticField,
+                         xraySource: xraySource,
+                         collimator: collimator,
+                         sun: sun)
 
 proc toRad(wyKind: WindowYearKind): float =
   ## Returns the radians corresponding to the angle of the detector window
@@ -377,7 +446,7 @@ proc lineIntersectsCircle(point_1, point_2, center: Vec3,
       intersect[1])
   result = r_xy_intersect < radius.float
 
-proc lineIntersectsObject(object_kind: string, point_1, point_2, center: Vec3,
+proc lineIntersectsObject(objectKind: HoleType, point_1, point_2, center: Vec3,
                           radius: MilliMeter): bool =
   ## Now a function to see if the lines from the sun will actually intersect
   ## the circle area from the magnet entrance (called coldbore) etc. ##
@@ -390,22 +459,27 @@ proc lineIntersectsObject(object_kind: string, point_1, point_2, center: Vec3,
     intersect_turned = vec3(0.0)
   intersect_turned[0] = intersect[0] / sqrt(2.0) - intersect[1] / sqrt(2.0)
   intersect_turned[1] = intersect[0] / sqrt(2.0) + intersect[1] / sqrt(2.0)
-  case object_kind
-  of "circle":
+  case objectKind
+  of htCircle:
     result = r_xy_intersect < radius.float
-  of "cross":
-    if (abs(intersect[0]) < radius.float and abs(intersect[1]) < radius.float * 16.0) or (abs(intersect[1]) < radius.float and abs(intersect[0]) < radius.float * 16.0):
+  of htCross:
+    if (abs(intersect[0]) < radius.float and abs(intersect[1]) < radius.float * 16.0) or
+       (abs(intersect[1]) < radius.float and abs(intersect[0]) < radius.float * 16.0):
       result = true
-  of "star":
-    if (abs(intersect[0]) < radius.float and abs(intersect[1]) < radius.float * 16.0) or (abs(intersect[1]) < radius.float and abs(intersect[0]) < radius.float * 16.0) or
-    (abs(intersect_turned[0]) < radius.float and abs(intersect_turned[1]) < radius.float * 16.0) or (abs(intersect_turned[1]) < radius.float and abs(intersect_turned[0]) < radius.float * 16.0):
+  of htStar:
+    if (abs(intersect[0]) < radius.float and abs(intersect[1]) < radius.float * 16.0) or
+       (abs(intersect[1]) < radius.float and abs(intersect[0]) < radius.float * 16.0) or
+       (abs(intersect_turned[0]) < radius.float and abs(intersect_turned[1]) < radius.float * 16.0) or
+       (abs(intersect_turned[1]) < radius.float and abs(intersect_turned[0]) < radius.float * 16.0):
       result = true
-  of "square":
+  of htSquare:
     if abs(intersect[0]) < radius.float and abs(intersect[1]) < radius.float :
       result = true
-  of "diamond":
+  of htDiamond:
     if abs(intersect_turned[0]) < radius.float and abs(intersect_turned[1]) < radius.float :
       result = true
+  of htNone:
+    result = false ## XXX: or should this be true? guess not, as it wasn't handled before, i.e. was false
 
 
 proc getIntersectlineIntersectsCircle(point_1, point_2, center: Vec3): Vec3 =
@@ -599,6 +673,8 @@ proc findPosXRT*(pointXRT: Vec3, pointCB: Vec3,
 proc getVectoraAfterMirror*(pointXRT, pointCB, pointMirror: Vec3,
                             angle: float, pointOrAngle: string): Vec3 =
   ## this is to find the vector after the reflection on the respective mirror
+  ##
+  ## TODO: clarify wheether this returns angles in rad or in degree!
   var normalVec = vec3(0.0)
   normalVec[0] = pointMirror[0]
   normalVec[1] = pointMirror[1]
@@ -845,115 +921,76 @@ proc parseSetup(): (ExperimentSetupKind, DetectorSetupKind, StageKind) =
   result[1] = config["Setup"]["detectorSetup"].getStr.parseEnum[:DetectorSetupKind]()
   result[2] = config["Setup"]["stageSetup"].getStr.parseEnum[:StageKind]()
 
-proc newExperimentSetup*(setup: ExperimentSetupKind,
-                         stage: StageKind,
-                         flags: set[ConfigFlags]): ExperimentSetup =
-  # TODO: clean up, possibly make this into a toml file where one can
-  # input different settings!
-  case setup
-  of esCAST:
-    result = ExperimentSetup(
-      kind: setup,
-      stage: stage,
-      radiusCB: 21.5.mm,
-      RAYTRACER_LENGTH_COLDBORE: 9756.0.mm, # half B field to end of CB #ok
-      RAYTRACER_LENGTH_COLDBORE_9T: 9260.0.mm, # half B field to half B field #ok
-      distXraySource: 100.0.mm, #distance between the entrance of the magnet an a test Xray source
-      radiusXraySource: 10.0.mm,
-      offAxXraySourceUp: 200.0.mm,
-      offAxXraySourceLeft: 0.0.mm,
-      lengthCol: 50.0.mm,
-      enXraySource: 1.0.keV,
-      activityXraySource: 1.0.GBq,
-      RAYTRACER_LENGTH_PIPE_CB_VT3: 2571.5.mm, # should stay the same #from beam pipe drawings #ok
-      radiusPipeCBVT3: 39.64.mm, #30.0 # smallest aperture between end of CB and VT3
-      RAYTRACER_LENGTH_PIPE_VT3_XRT: 150.0.mm, # from drawings #198.2 #mm from XRT drawing #ok
-      radiusPipeVT3XRT: 35.0.mm, #25.0 # from drawing #35.0 #m irrelevant, large enough to not loose anything # needs to be mm #ok
-      RAYTRACER_FOCAL_LENGTH_XRT: 1485.0.mm, #1300.0 # is from llnl XRT https://iopscience.iop.org/article/10.1088/1475-7516/2015/12/008/pdf #1600.0 # was the Telescope of 2014 (MPE XRT) also: Aperatur changed #ok
-      distanceCBAxisXRTAxis: 0.0.mm, #62.1#58.44 # from XRT drawing #there is no difference in the axis even though the picture gets transfered 62,1mm down, but in the detector center
-      RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW: 0.0.mm, # #no change, because don't know
-      pipes_turned: 2.75.°, #degree # this is the angle by which the pipes before the detector were turned in comparison to the telescope
-      optics_entrance: @[-83.0, 0.0, 0.0].mapIt(it.mm),
-      optics_exit: @[-83.0, 0.0, 454.0].mapIt(it.mm),
-      telescope_turned_x: 0.0.°, #the angle by which the telescope is turned in respect to the magnet
-      telescope_turned_y: 0.0.°, #the angle by which the telescope is turned in respect to the magnet
-                             # Measurements of the Telescope mirrors in the following, R1 are the radii of the mirror shells at the entrance of the mirror
-      allThickness: @[0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2,
-          0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2].mapIt(it.mm), ## the radii of the shells
-      allR1: @[60.7095, 63.006, 65.606, 68.305, 71.105, 74.011, 77.027, 80.157,
-          83.405, 86.775, 90.272, 93.902, 97.668, 101.576, 105.632].mapIt(it.mm), ## the radii of the shells
-      allXsep: @[4.0, 4.171, 4.140, 4.221, 4.190, 4.228, 4.245, 4.288, 4.284,
-          4.306, 4.324, 4.373, 4.387, 4.403, 4.481].mapIt(it.mm),
-      #allR2: @[0.0, 60.731, 63.237, 65.838, 68.538, 71.339, 74.246, 77.263, 80.394, 83.642]
-      allAngles: @[0.0, 0.579, 0.603, 0.628, 0.654, 0.680, 0.708, 0.737, 0.767,
-          0.798, 0.830, 0.863, 0.898, 0.933, 0.970].mapIt(it.Degree), ## the angles of the mirror shells coresponding to the radii above
-      lMirror: 225.0.mm, # Mirror length
-      B: 9.0.T, # magnetic field of magnet
-      pGasRoom: 1.0.bar, # pressure of the gas
-      tGas: 1.7.K, #
-      holeInOptics: 0.0.mm, #max 20.9.mm
-      numberOfHoles: 5,
-      holetype: "cross", #the type or shape of the hole in the middle of the optics
-      lateralDetector: 0.0.mm, #lateral ofset of the detector in repect to the beamline
-      transversalDetector: 0.0.mm #transversal ofset of the detector in repect to the beamline #0.0.mm #
+proc maybeParseMagnetConfig(flags: set[ConfigFlags]): Option[Magnet] =
+  ## parses the `Magnet` configuration from the `config.toml` file if
+  ## the `cfReadMagnetConfig` flag is set or the `useConfig`
+  ## from the `Magnet` config table is set to `true`.
+  ##
+  ## Returns `some[Magnet]` if parsing took place or `none[Magnet]` if
+  ## we should use the experiment specific magnet.
+  let cfg = parseToml.parseFile(sourceDir / "config.toml")["Magnet"]
+  if cfReadMagnetConfig in flags or cfg["useConfig"].getBool:
+    result = some(
+      Magnet(B:              cfg["B"].getFloat.T,
+             lengthB:        cfg["lengthB"].getFloat.mm,
+             radiusCB:       cfg["radiusCB"].getFloat.mm,
+             lengthColdbore: cfg["lengthColdbore"].getFloat.mm,
+             pGasRoom:       cfg["pGasRoom"].getFloat.bar,
+             tGas:           cfg["tGas"].getFloat.K
+      )
     )
-  of esBabyIAXO:
-    result = ExperimentSetup(
-      kind: setup,
-      stage: stage,
-      radiusCB: 500.0.mm, #350.0.mm,
-                             # Change:
-      RAYTRACER_LENGTH_COLDBORE: 11300.0.mm, # not sure if this is true but this is how its written on page 61 of the 2021 BabyIAXO paper
-      RAYTRACER_LENGTH_COLDBORE_9T: 11000.0.mm, # I know it's not 9T here should be the actual length of pipe with a stable magnetic field; can't be same length
-      distXraySource: 2000.0.mm, #88700.0.mm, #distance between the entrance of the magnet an a test Xray source
-      radiusXraySource: 350.0.mm,
-      offAxXraySourceUp: 0.0.mm,
-      offAxXraySourceLeft: 0.0.mm,#4.5.mm, #
-      lengthCol: 0.0.mm,
-      enXraySource: 0.021.keV,
-      activityXraySource: 0.125.GBq, #proposed source thing by Thomas #1.0.GBq,
-      RAYTRACER_LENGTH_PIPE_CB_VT3: 225.0.mm, #300.0.mm, # not determined
-      radiusPipeCBVT3: 370.0.mm, #mm smallest aperture between end of CB and VT4 # no Idea, I just made it wider than the coldbore
-      RAYTRACER_LENGTH_PIPE_VT3_XRT: 250.0.mm, #300.0.mm, # not determined
-      radiusPipeVT3XRT: 370.0.mm, # irrelevant, large enough to not loose anything # no idea
-      RAYTRACER_FOCAL_LENGTH_XRT: 7500.0.mm, # # one possibility, the other is 5050 mm
-      distanceCBAxisXRTAxis: 0.0.mm,
-      RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW: 0.0.mm, # #no change, because don't know #good idea
-      pipes_turned: 0.0.°, # this is the angle by which the pipes before the detector were turned in comparison to the telescope
-      optics_entrance: @[0.0, -0.0, 0.0].mapIt(it.mm),
-      optics_exit: @[0.0, -0.0, 600.0].mapIt(it.mm),
-      telescope_turned_x: 0.0.°, #the angle by which the telescope is turned in respect to the magnet
-      telescope_turned_y: -0.05.°, #the angle by which the telescope is turned in respect to the magnet
-                             # Measurements of the Telescope mirrors in the following, R1 are the radii of the mirror shells at the entrance of the mirror
-      #allR3: @[151.61, 153.88, 156.17, 158.48, 160.82, 163.18, 165.57, 167.98, 170.42, 172.88, 175.37, 177.88, 180.42, 183.14, 185.89, 188.67, 191.48,
-          #194.32, 197.19, 200.09, 203.02, 206.03, 209.07, 212.14, 215.24, 218.37, 221.54, 224.74, 227.97, 231.24, 234.54, 237.87, 241.24, 244.85,
-          #248.5, 252.19, 255.92, 259.68, 263.48, 267.32, 271.2, 275.12, 279.08, 283.09, 287.14, 291.38, 295.72, 300.11, 304.54, 309.02, 313.54,
-          #318.11, 322.73, 327.4, 332.12, 336.88, 341.69, 346.55] #these are the real values but R3
-      allThickness: @[0.468, 0.475, 0.482, 0.490, 0.497, 0.504, 0.511, 0.519, 0.526, 0.534, 0.542, 0.549, 0.557, 0.566, 0.574, 0.583, 0.591, 0.600, 0.609, 0.618,
-          0.627, 0.636, 0.646, 0.655, 0.665, 0.675, 0.684, 0.694, 0.704, 0.714, 0.724, 0.735, 0.745, 0.756, 0.768, 0.779, 0.790, 0.802, 0.814, 0.826, 0.838, 0.850,
-          0.862, 0.874, 0.887, 0.900, 0.913, 0.927, 0.941, 0.955, 0.968, 0.983, 0.997, 1.011, 1.026, 1.041, 1.055, 1.070].mapIt(it.mm),
-      allR1: @[153.126, 155.419, 157.731, 160.065, 162.428, 164.812, 167.225, 169.66, 172.124, 174.608, 177.123, 179.658, 182.224, 184.971, 187.749, 190.556,
-          193.394, 196.263, 199.161, 202.09, 205.05, 208.09, 211.16, 214.261, 217.392, 220.553, 223.755, 226.987, 230.249, 233.552, 236.885, 240.248, 243.652,
-          247.298, 250.984, 254.711, 258.478, 262.276, 266.114, 269.992, 273.911, 277.87, 281.869, 285.92, 290.01, 294.292, 298.676, 303.109, 307.584, 312.108,
-          316.674, 321.289, 325.955, 330.672, 335.439, 340.246, 345.104, 350.013].mapIt(it.mm), ## the radii of the shells closest to the magnet, now correct
-      allXsep: @[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-          0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0].mapIt(it.mm),
-      allAngles: @[0.29, 0.294, 0.298, 0.303, 0.307, 0.312, 0.316, 0.321, 0.325, 0.33, 0.335, 0.34, 0.345, 0.35, 0.355, 0.36, 0.366, 0.371, 0.377, 0.382, 0.388,
-          0.393, 0.399, 0.405, 0.411, 0.417, 0.423, 0.429, 0.435, 0.441, 0.448, 0.454, 0.461, 0.467, 0.474, 0.481, 0.489, 0.496, 0.503, 0.51, 0.518, 0.525, 0.533,
-          0.54, 0.548, 0.556, 0.564, 0.573, 0.581, 0.59, 0.598, 0.607, 0.616, 0.625, 0.634, 0.643, 0.652, 0.661].mapIt(it.Degree), ## the angles of the mirror shells coresponding to the radii above, now correct
-      lMirror: 300.0.mm, # Mirror length
-      B: 2.0.T, # magnetic field of magnet # Rather 2-3 T, not entirely homogeneous
-      pGasRoom: 1.0.bar, #, pressure of the gas #for example P = 14.3345 mbar (corresponds to 1 bar at room temperature).
-      tGas: 100.0.K, #293.15, # only Gas in BabyIAXO
-      holeInOptics: 0.2.mm, #max 20.9.mm
-      numberOfHoles: 1,
-      holetype: "none", #the type or shape of the hole in the middle of the optics
-      lateralDetector: 0.0.mm, #(sin(0.0.degToRad) * 7500.0).mm, #lateral ofset of the detector in repect to the beamline #0.0.mm #
-      transversalDetector: (sin(0.0.degToRad) * 7500.0).mm #-0.0.mm # ##transversal ofset of the detector in repect to the beamline #0.0.mm #
+  else:
+    result = none[Magnet]() # default, but let's be explicit
+
+proc maybeParseTestXraySource(flags: set[ConfigFlags]): Option[TestXraySource] =
+  ## parses the `TestXraySource` configuration from the `config.toml` file if
+  ## the `cfReadTestXraySourceConfig` flag is set or the `useConfig`
+  ## from the `TestXraySource` config table is set to `true`.
+  ##
+  ## Returns `some[TestXraySource]` if parsing took place or `none[TestXraySource]` if
+  ## we should use the experiment specific magnet.
+  let cfg = parseToml.parseFile(sourceDir / "config.toml")["TestXraySource"]
+  if cfXrayTest in flags or cfg["useConfig"].getBool:
+    result = some(
+      TestXraySource(
+        active:      cfg["active"].getBool,
+        energy:      cfg["energy"].getFloat.keV,
+        distance:    cfg["distance"].getFloat.mm,
+        radius:      cfg["radius"].getFloat.mm,
+        offAxisUp:   cfg["offAxisUp"].getFloat.mm,
+        offAxisLeft: cfg["offAxisLeft"].getFloat.mm,
+        activity:    cfg["activity"].getFloat.GBq,
+        lengthCol:   cfg["lengthCol"].getFloat.mm
+      )
     )
+  else:
+    result = none[TestXraySource]() # default, but let's be explicit
 
-  ## TODO: this needs to be moved out of this procedure
+proc maybeParseDetectorInstallation(flags: set[ConfigFlags]): Option[DetectorInstallation] =
+  ## parses the `DetectorInstallation` configuration from the `config.toml` file if
+  ## the `cfReadDetInstallConfig` flag is set or the `useConfig`
+  ## from the `DetectorInstallation` config table is set to `true`.
+  ##
+  ## Returns `some[DetectorInstallation]` if parsing took place or `none[DetectorInstallation]` if
+  ## we should use the experiment specific magnet.
+  let cfg = parseToml.parseFile(sourceDir / "config.toml")["DetectorInstallation"]
+  if cfReadDetInstallConfig in flags or cfg["useConfig"].getBool:
+    result = some(
+      DetectorInstallation(
+        distanceDetectorXRT: cfg["distanceDetectorXRT"].getFloat.mm,
+        distanceWindowFocalPlane: cfg["distanceWindowFocalPlane"].getFloat.mm,
+        lateralShift: cfg["lateralShift"].getFloat.mm,
+        transversalShift: cfg["transversalShift"].getFloat.mm
+      )
+    )
+  else:
+    result = none[DetectorInstallation]() # default, but let's be explicit
 
+proc assignReflectivity(setup: var ExperimentSetup, flags: set[ConfigFlags]) =
+  ## Assigns the `reflectivity` field of an `ExperimentSetup`, i.e. the reflectivities of
+  ## the telescope layers / the effecitve reflectivity based on the effective area, if applicable
+  ##
+  ## Note: the effective area is currently not fully implemented anymore.
   # TODO: this could be generalized to other telescopes until the multi layer stuff is implemented
   let resources = parseResourcesPath()
   let dfLlnl = readCsv(resources / parseLlnlTelescopeFile())
@@ -966,7 +1003,7 @@ proc newExperimentSetup*(setup: ExperimentSetupKind,
       geom_line() + ggsave("/tmp/transmission_llnl.pdf")
 
   var goldInterp: Interpolator2DType[float]
-  if cfIgnoreGoldReflect notin flags:
+  if cfIgnoreReflection notin flags:
     let prefix = resources / parseGoldFilePrefix()
     let goldFiles = collect(newSeq):
       for f in walkFiles(prefix & "*degGold0.25microns.csv"):
@@ -985,9 +1022,204 @@ proc newExperimentSetup*(setup: ExperimentSetupKind,
                                    (minAngle, maxAngle),
                                    (0.0, 15.0)) # 0 to 15 keV energy
 
-  result.telescopeTransmission = newLinear1D(dfLlnl["Energy[keV]", float].toRawSeq,
-                                             dfLlnl["Transmission", float].toRawSeq)
-  result.goldReflectivity = goldInterp
+  #setup.telescopeTransmission = newLinear1D(dfLlnl["Energy[keV]", float].toRawSeq,
+  #                                          dfLlnl["Transmission", float].toRawSeq)
+  #setup.goldReflectivity = goldInterp
+
+proc initMagnet(setup: ExperimentSetupKind, flags: set[ConfigFlags]): Magnet =
+  let magnetOpt = maybeParseMagnetConfig(flags)
+  if magnetOpt.isSome:
+    return magnetOpt.get
+  case setup
+  of esCAST:
+    ## Build a CAST LHC dipole prototype magnet
+    result = Magnet(
+      B: 9.0.T, # magnetic field of magnet
+      radiusCB: 21.5.mm, # radius of the cold bore
+      lengthColdbore: 9756.0.mm, # half B field to end of CB #ok
+      lengthB: 9260.0.mm, # half B field to half B field #ok
+      pGasRoom: 1.0.bar, # pressure of the (optional) gas
+      tGas: 1.7.K # temperature of (optional) gas
+    )
+  of esBabyIAXO:
+    ## Build a BabyIAXO magnet
+    result = Magnet(
+      B: 2.0.T, # magnetic field of magnet # Rather 2-3 T, not entirely homogeneous
+      radiusCB: 500.0.mm, #350.0.mm,
+                             # Change:
+      lengthColdbore: 11300.0.mm, # not sure if this is true but this is how its written on page 61 of the 2021 BabyIAXO paper
+      lengthB: 11000.0.mm, # I know it's not 9T here should be the actual length of pipe with a stable magnetic field; can't be same length
+      pGasRoom: 1.0.bar, #, pressure of the gas #for example P = 14.3345 mbar (corresponds to 1 bar at room temperature).
+      tGas: 100.0.K #293.15, # only Gas in BabyIAXO
+    )
+
+proc initPipes(setup: ExperimentSetupKind): Pipes =
+  case setup
+  of esCAST:
+    result = Pipes(
+      ## the next variable doesn't make sense. It's not 2.57m from the cold bore to VT3!
+      coldBoreToVT3: Pipe(length: 2571.5.mm, # should stay the same #from beam pipe drawings #ok
+                          radius: 39.64.mm), #30.0 # smallest aperture between end of CB and VT3
+      vt3ToXRT: Pipe(length: 150.0.mm, # from drawings #198.2 #mm from XRT drawing #ok
+                     radius: 35.0.mm), #25.0 # from drawing #35.0 #m irrelevant, large enough to not loose anything # needs to be mm #ok
+      pipesTurned: 2.75.°, #degree # this is the angle by which the pipes before the detector were turned in comparison to the telescope
+      distanceCBAxisXRTAxis: 0.0.mm #62.1#58.44 # from XRT drawing #there is no difference in the axis even though the picture gets transfered 62,1mm down, but in the detector center
+    )
+  of esBabyIAXO:
+    result = Pipes(
+      coldBoreToVT3: Pipe(length: 225.0.mm, #300.0.mm, # not determined
+                          radius: 370.0.mm), #mm smallest aperture between end of CB and VT4 # no Idea, I just made it wider than the coldbore
+      vt3ToXRT: Pipe(length: 250.0.mm, #300.0.mm, # not determined
+                     radius: 370.0.mm), # irrelevant, large enough to not loose anything # no idea
+      pipesTurned: 0.0.°, # this is the angle by which the pipes before the detector were turned in comparison to the telescope
+      distanceCBAxisXRTAxis: 0.0.mm
+    )
+
+proc initTelescope(optics: TelescopeKind): Telescope =
+  ## TODO: add telescope section to the config file!
+  case optics
+  of tkLLNL:
+    result = Telescope(
+      optics_entrance: @[-83.0, 0.0, 0.0].mapIt(it.mm),
+      optics_exit: @[-83.0, 0.0, 454.0].mapIt(it.mm),
+      telescope_turned_x: 0.0.°, #the angle by which the telescope is turned in respect to the magnet
+      telescope_turned_y: 0.0.°, #the angle by which the telescope is turned in respect to the magnet
+      # Measurements of the Telescope mirrors in the following, R1 are the radii of the mirror shells at the entrance of the mirror
+      # the radii of the shells
+      allThickness: @[0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2,
+                      0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2].mapIt(it.mm),
+      # the radii of the shells
+      allR1: @[60.7095, 63.006, 65.606, 68.305, 71.105, 74.011, 77.027, 80.157,
+               83.405, 86.775, 90.272, 93.902, 97.668, 101.576, 105.632].mapIt(it.mm),
+      allXsep: @[4.0, 4.171, 4.140, 4.221, 4.190, 4.228, 4.245, 4.288, 4.284,
+                 4.306, 4.324, 4.373, 4.387, 4.403, 4.481].mapIt(it.mm),
+      #allR2: @[0.0, 60.731, 63.237, 65.838, 68.538, 71.339, 74.246, 77.263, 80.394, 83.642]
+      # the angles of the mirror shells coresponding to the radii above
+      allAngles: @[0.0, 0.579, 0.603, 0.628, 0.654, 0.680, 0.708, 0.737, 0.767,
+                   0.798, 0.830, 0.863, 0.898, 0.933, 0.970].mapIt(it.Degree),
+      lMirror: 225.0.mm, # Mirror length
+      holeInOptics: 0.0.mm, #max 20.9.mm
+      numberOfHoles: 5,
+      holeType: htCross #the type or shape of the hole in the middle of the optics
+    )
+  of tkCustomBabyIAXO:
+    result = Telescope(
+      optics_entrance: @[0.0, -0.0, 0.0].mapIt(it.mm),
+      optics_exit: @[0.0, -0.0, 600.0].mapIt(it.mm),
+      telescope_turned_x: 0.0.°, #the angle by which the telescope is turned in respect to the magnet
+      telescope_turned_y: -0.05.°, #the angle by which the telescope is turned in respect to the magnet
+      # Measurements of the Telescope mirrors in the following, R1 are the radii of the mirror shells at the entrance of the mirror
+      #allR3: @[151.61, 153.88, 156.17, 158.48, 160.82, 163.18, 165.57, 167.98, 170.42, 172.88, 175.37, 177.88, 180.42, 183.14, 185.89, 188.67, 191.48,
+      #194.32, 197.19, 200.09, 203.02, 206.03, 209.07, 212.14, 215.24, 218.37, 221.54, 224.74, 227.97, 231.24, 234.54, 237.87, 241.24, 244.85,
+      #248.5, 252.19, 255.92, 259.68, 263.48, 267.32, 271.2, 275.12, 279.08, 283.09, 287.14, 291.38, 295.72, 300.11, 304.54, 309.02, 313.54,
+      #318.11, 322.73, 327.4, 332.12, 336.88, 341.69, 346.55] #these are the real values but R3
+      allThickness: @[0.468, 0.475, 0.482, 0.490, 0.497, 0.504, 0.511, 0.519, 0.526, 0.534,
+                      0.542, 0.549, 0.557, 0.566, 0.574, 0.583, 0.591, 0.600, 0.609, 0.618,
+                      0.627, 0.636, 0.646, 0.655, 0.665, 0.675, 0.684, 0.694, 0.704, 0.714,
+                      0.724, 0.735, 0.745, 0.756, 0.768, 0.779, 0.790, 0.802, 0.814, 0.826,
+                      0.838, 0.850, 0.862, 0.874, 0.887, 0.900, 0.913, 0.927, 0.941, 0.955,
+                      0.968, 0.983, 0.997, 1.011, 1.026, 1.041, 1.055, 1.070].mapIt(it.mm),
+      # the radii of the shells closest to the magnet, now correct
+      allR1: @[153.126, 155.419, 157.731, 160.065, 162.428, 164.812, 167.225, 169.66, 172.124,
+               174.608, 177.123, 179.658, 182.224, 184.971, 187.749, 190.556, 193.394, 196.263,
+               199.161, 202.09, 205.05, 208.09, 211.16, 214.261, 217.392, 220.553, 223.755,
+               226.987, 230.249, 233.552, 236.885, 240.248, 243.652, 247.298, 250.984, 254.711,
+               258.478, 262.276, 266.114, 269.992, 273.911, 277.87, 281.869, 285.92, 290.01,
+               294.292, 298.676, 303.109, 307.584, 312.108, 316.674, 321.289, 325.955, 330.672,
+               335.439, 340.246, 345.104, 350.013].mapIt(it.mm),
+      allXsep: @[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0].mapIt(it.mm),
+      # the angles of the mirror shells coresponding to the radii above, now correct
+      allAngles: @[0.29, 0.294, 0.298, 0.303, 0.307, 0.312, 0.316, 0.321, 0.325, 0.33, 0.335,
+                   0.34, 0.345, 0.35, 0.355, 0.36, 0.366, 0.371, 0.377, 0.382, 0.388, 0.393,
+                   0.399, 0.405, 0.411, 0.417, 0.423, 0.429, 0.435, 0.441, 0.448, 0.454, 0.461,
+                   0.467, 0.474, 0.481, 0.489, 0.496, 0.503, 0.51, 0.518, 0.525, 0.533, 0.54,
+                   0.548, 0.556, 0.564, 0.573, 0.581, 0.59, 0.598, 0.607, 0.616, 0.625, 0.634,
+                   0.643, 0.652, 0.661].mapIt(it.Degree),
+      lMirror: 300.0.mm, # Mirror length
+      holeInOptics: 0.2.mm, #max 20.9.mm
+      numberOfHoles: 1,
+      holeType: htNone #the type or shape of the hole in the middle of the optics
+    )
+  else:
+    doAssert false, "The telescope for kind " & $optics & " has not been implemented yet!"
+
+proc initTestXraySource(setup: ExperimentSetupKind, flags: set[ConfigFlags]): TestXraySource =
+  let active = cfXrayTest in flags
+  let sourceOpt = maybeParseTestXraySource(flags)
+  if sourceOpt.isSome:
+    return sourceOpt.get
+  case setup
+  of esCAST:
+    result = TestXraySource(
+      active: active,
+      distance: 100.0.mm, #distance between the entrance of the magnet an a test Xray source
+      radius: 10.0.mm,
+      offAxisUp: 200.0.mm,
+      offAxisLeft: 0.0.mm,
+      lengthCol: 50.0.mm,
+      energy: 1.0.keV,
+      activity: 1.0.GBq
+    )
+  of esBabyIAXO:
+    result = TestXraySource(
+      active: active,
+      distance: 2000.0.mm, #88700.0.mm, #distance between the entrance of the magnet an a test Xray source
+      radius: 350.0.mm,
+      offAxisUp: 0.0.mm,
+      offAxisLeft: 0.0.mm,#4.5.mm, #
+      lengthCol: 0.0.mm,
+      energy: 0.021.keV,
+      activity: 0.125.GBq, #proposed source thing by Thomas #1.0.GBq,
+    )
+
+proc initDetectorInstallation(setup: ExperimentSetupKind,
+                              flags: set[ConfigFlags]): DetectorInstallation =
+  let detOpt = maybeParseDetectorInstallation(flags)
+  if detOpt.isSome:
+    return detOpt.get
+  case setup
+  of esCAST:
+    result = DetectorInstallation(
+      distanceDetectorXRT: 1485.0.mm, #1300.0 # is from llnl XRT https://iopscience.iop.org/article/10.1088/1475-7516/2015/12/008/pdf #1600.0 # was the Telescope of 2014 (MPE XRT) also: Aperatur changed #ok
+      distanceWindowFocalPlane: 0.0.mm, # #no change, because don't know
+
+      lateralShift: 0.0.mm, #lateral ofset of the detector in repect to the beamline
+      transversalShift: 0.0.mm #transversal ofset of the detector in repect to the beamline #0.0.mm #
+    )
+  of esBabyIAXO:
+    result = DetectorInstallation(
+      distanceDetectorXRT: 7500.0.mm, # # one possibility, the other is 5050 mm
+      distanceWindowFocalPlane: 0.0.mm, # #no change, because don't know #good idea
+      lateralShift: 0.0.mm, #(sin(0.0.degToRad) * 7500.0).mm, #lateral ofset of the detector in repect to the beamline #0.0.mm #
+      transversalShift: (sin(0.0.degToRad) * 7500.0).mm #-0.0.mm # ##transversal ofset of the detector in repect to the beamline #0.0.mm #
+    )
+
+proc initReflectivity(optics: TelescopeKind): Reflectivity = discard
+
+proc getOpticForSetup(setup: ExperimentSetupKind): TelescopeKind =
+  ## XXX: replace this by user input & config file selection. Only fall back if
+  ## neither provided!
+  case setup
+  of esCAST: result = tkLLNL
+  of esBabyIAXO: result = tkCustomBabyIAXO
+
+proc newExperimentSetup*(setup: ExperimentSetupKind,
+                         stage: StageKind,
+                         # optics: TelescopeKind,
+                         flags: set[ConfigFlags]): ExperimentSetup =
+  let optics = getOpticForSetup(setup)
+  result = ExperimentSetup(
+    kind: setup,
+    stage: stage,
+    magnet: setup.initMagnet(flags),
+    telescope: optics.initTelescope(),
+    testSource: setup.initTestXraySource(flags),
+    pipes: setup.initPipes(),
+    detectorInstall: setup.initDetectorInstallation(flags)
+  )
 
 defUnit(MilliMeter²)
 proc sqrt(x: MilliMeter²): MilliMeter =
@@ -1097,6 +1329,81 @@ proc newDetectorSetup*(setup: DetectorSetupKind): DetectorSetup =
 template eval(interp: InterpolatorType[float], energy: keV): untyped =
   interp.eval(energy.float)
 
+proc computeReflectivity(expSetup: ExperimentSetup, energy: keV,
+                         alpha1, alpha2: float,
+                         flags: set[ConfigFlags]): tuple[reflect: float,
+                                                       weight: float] =
+  ## Computes the reflectivity of the two reflections in the telescope of `expSetup`
+  ## according to the given `angles1/2` and the `energy`.
+  when false:
+    if cfIgnoreReflection notin flags:
+      ## TODO: This needs to be replaced by a 2D interpolation!
+      {.gcsafe.}:
+        let
+          reflectionProb1 = expSetup.goldReflectivity.eval(alpha1, energyAx.float)
+          reflectionProb2 = expSetup.goldReflectivity.eval(alpha2, energyAx.float)
+        res.reflect = reflectionProb1 * reflectionProb2
+        weight = reflectionProb1 * reflectionProb2 * transmissionMagnet#also yaw and pitch dependend
+    else:
+      # without gold reflection just use perfect reflectivity
+      weight = transmissionMagnet#also yaw and pitch dependend
+
+    #result =
+    ## XXX: finish me!!!
+    case expSetup.kind
+    of esCAST:
+      let transmissionTel = expSetup.telescopeTransmission.eval(energyAx)
+      weight = (transmissionTel *
+                transmissionTelescopePitch * transmissionTelescopeYaw *
+                transmissionMagnet) #transmission probabilities times axion emission rate times the flux fraction
+    of esBabyIAXO:
+      discard
+
+proc computeMagnetTransmission(
+  expSetup: ExperimentSetup, energyAx: keV, distancePipe: Meter, pathCB: mm, ya: float,
+  flags: set[ConfigFlags]
+     ): float =
+  ## Computes the effective 'transmission' through the magnet. This means the conversion
+  ## probability for axions to X-rays and in case of a buffer gas in the cold bore also the
+  ## intensity suppression of the generated X-rays after conversion.
+  ##
+  ## TODO: the combination of conversion probability and intensity suppression of X-rays
+  ## in a gas, is more complicated than this!
+  case expSetup.stage
+  of skVacuum:
+    let probConversionMagnet = if cfIgnoreConvProb notin flags:
+                                 conversionProb(expSetup.magnet.B, g_aγ, pathCB)
+                               else:
+                                 1.0
+    result = cos(ya) * probConversionMagnet
+  of skGas:
+    let
+      pGas = expSetup.magnet.pGasRoom / RoomTemp * expSetup.magnet.tGas
+      ## TODO: use `unchained` in `axionMass` and avoid manual float conversions / use `to`
+      effPhotonMass = effPhotonMass2(
+        pGas.float, pathCB.to(m).float,
+        expSetup.magnet.radiusCB.to(m).float,
+        expSetup.magnet.tGas.float
+      )
+      probConversionMagnetGas =
+        if cfIgnoreConvProb notin flags:
+          axionConversionProb2(
+            mAxion, energyAx, pGas.float,
+            expSetup.magnet.tGas.float, pathCB.to(m).float,
+            expSetup.magnet.radiusCB.to(m).float,
+            g_aγ.float, expSetup.magnet.B.float
+          ) # for setup including gas: functions are in axionmass/axionMassforMagnet
+        else:
+          1.0 # else perfect transmission
+      absorbtionXrays = intensitySuppression2(
+        energyAx, pathCB.to(m).float,
+        distancePipe.float,
+        pGas.float,
+        expSetup.magnet.tGas.float,
+        RoomTemp.float) #room temperature in K
+    #echo "axion mass in [eV] ", mAxion, " effective photon mass in [eV] ", effPhotonMass
+    result = cos(ya) * probConversionMagnetGas * absorbtionXrays # for setup with gas
+
 proc traceAxion(res: var Axion,
                 centerVecs: CenterVectors,
                 expSetup: ExperimentSetup,
@@ -1107,137 +1414,156 @@ proc traceAxion(res: var Axion,
                 energies: seq[keV],
                 flags: set[ConfigFlags]
                ) =
-  ## Get a random point in the sun, biased by the emission rate, which is higher
-  ## at smalller radii, so this will give more points in the center of the sun ##
-  var pointInSun = getRandomPointFromSolarModel(centerVecs.centerSun, RadiusSun, emRatesRadiusCumSum)
-
+  ## NOTE: `weight` seems to be used in the beginning of the procedure more as a way to check if an
+  ## axion should be thrown out early. That might imply that the weight could possibly be
+  ## introduced later in this proc!
   var weight = 1.0
-  ## Get a random point at the end of the coldbore of the magnet to take all axions into account that make it to this point no matter where they enter the magnet ##
-  var pointExitCBMagneticField = getRandomPointOnDisk(
-      centerVecs.centerExitCBMagneticField, expSetup.radiusCB) #350.0.mm)
-  let pointXraySource = getRandomPointOnDisk(
-      centerVecs.centerXraySource, expSetup.radiusXraySource)
-  let energyXraySource = expSetup.enXraySource
+  var rayOrigin: Vec3[float] # Starting point of the ray (typically axion somewhere in the Sun)
+  var pointExitCBMagneticField: Vec3[float] # position at exit of magnet (entry from viewpoint of incoming ray)
+  var energyAx: keV # energy of the axion
+  if cfXrayTest notin flags:
+    # Get a random point in the sun, biased by the emission rate, which is higher
+    # at smalller radii, so this will give more points in the center of the sun
+    rayOrigin = getRandomPointFromSolarModel(centerVecs.sun, RadiusSun, emRatesRadiusCumSum)
+    # Get a random point at the end of the coldbore of the magnet to take all
+    # axions into account that make it to this point no matter where they enter the magnet
+    pointExitCBMagneticField = getRandomPointOnDisk(
+      centerVecs.exitCBMagneticField,
+      expSetup.magnet.radiusCB
+    )
+    # Get a random energy for the axion biased by the emission rate ##
+    energyAx = getRandomEnergyFromSolarModel(
+      rayOrigin, centerVecs.sun, RadiusSun, energies, emRateCDFs
+    )
+  else:
+    ## XXX: CLEAN THIS UP! likely just remove dead code & create procs for the "complicated parts" that
+    ## yield a single value for `pointExitCBMagneticField`!
+    rayOrigin = getRandomPointOnDisk(
+      centerVecs.xraySource, expSetup.testSource.radius
+    )
+    energyAx = expSetup.testSource.energy
 
-  ## Get a random energy for the axion biased by the emission rate ##
-  var energyAx = getRandomEnergyFromSolarModel(
-    pointInSun, centerVecs.centerSun, RadiusSun, energies, emRateCDFs)
-  if cfXrayTest in flags:
-    pointInSun = pointXraySource
-    energyAx = energyXraySource
-
+    ## i.e. all this here
     var centerSpot = vec3(0.0)
-    if abs(expSetup.offAxXraySourceUp.float) > 50.0:
-      centerSpot[0] = expSetup.offAxXraySourceLeft.float
-      centerSpot[1] = expSetup.offAxXraySourceUp.float
-    centerSpot[2] = expSetup.RAYTRACER_LENGTH_COLDBORE_9T.float
-    #var radiusProjection = expSetup.radiusXraySource * 2.0 * (- centerVecs.centerXraySource[2] - expSetup.lengthCol.float).mm / expSetup.lengthCol + expSetup.radiusXraySource
-    var radiusSpot = expSetup.holeInOptics.float
-    if expSetup.holetype == "cross" or expSetup.holetype == "star":
-      radiusSpot *= (expSetup.numberOfHoles.float + 16.0)
-    elif expSetup.holetype == "none":
-      radiusSpot = expSetup.radiusXraySource.float / 100.0 #* 3.0 #expSetup.radiusCB.float / 6.0 #
+    if abs(expSetup.testSource.offAxisUp.float) > 50.0:
+      centerSpot[0] = expSetup.testSource.offAxisLeft.float
+      centerSpot[1] = expSetup.testSource.offAxisUp.float
+    centerSpot[2] = expSetup.magnet.lengthB.float
+    #var radiusProjection = expSetup.testSource.radius * 2.0 * (- centerVecs.xraySource[2] - expSetup.lengthCol.float).mm / expSetup.lengthCol + expSetup.radiusXraySource
+    var radiusSpot = expSetup.telescope.holeInOptics.float
+    case expSetup.telescope.holeType
+    of htCross, htStar:
+      radiusSpot *= (expSetup.telescope.numberOfHoles.float + 16.0)
+    of htNone:
+      radiusSpot = expSetup.testSource.radius.float / 100.0 #* 3.0 #expSetup.telescope.radiusCB.float / 6.0 #
     else:
-      radiusSpot *= (expSetup.numberOfHoles.float + 3.0)
-    pointExitCBMagneticField[0] = pointInSun[0] + rand(0.1) - 0.05 #for parallel light
-    pointExitCBMagneticField[1] = pointInSun[1] + rand(0.1) - 0.05 #for parallel light
+      ## XXX: check if this branch should be triggered sometimes. What hole type does this correspond to?
+      radiusSpot *= (expSetup.telescope.numberOfHoles.float + 3.0)
+    pointExitCBMagneticField[0] = rayOrigin[0] + rand(0.1) - 0.05 #for parallel light
+    pointExitCBMagneticField[1] = rayOrigin[1] + rand(0.1) - 0.05 #for parallel light
+    ## XXX: this is my modification, as this is the value that would be at [2] if we still sampled from
+    ## via `getRandomPointOnDisk` before entering this `else` branch. CHECK THIS!
+    pointExitCBMagneticField[2] = expSetup.magnet.lengthB.float
+
     #pointExitCBMagneticField = getRandomPointOnDisk(centerSpot, (radiusSpot).mm) # for more statistics with hole through optics
-    if not lineIntersectsCircle(pointInSun, pointExitCBMagneticField, centerVecs.centerCollimator, expSetup.radiusXraySource):
-
-
+    if not lineIntersectsCircle(rayOrigin, pointExitCBMagneticField, centerVecs.collimator, expSetup.testSource.radius):
       return
+
     var xraysThroughHole = PI * radiusSpot * radiusSpot /
-      (4.0 * PI * (- centerVecs.centerXraySource[2] + centerVecs.centerExitPipeVT3XRT[2]).mm *
-      (- centerVecs.centerXraySource[2] + centerVecs.centerExitPipeVT3XRT[2]).mm) * expSetup.activityXraySource
+      (4.0 * PI * (- centerVecs.xraySource[2] + centerVecs.exitPipeVT3XRT[2]).mm *
+      (- centerVecs.xraySource[2] + centerVecs.exitPipeVT3XRT[2]).mm) * expSetup.testSource.activity
     var testTime = 1_000_000 / (xraysThroughHole * 3600.0.s * 24.0)
-    #echo "Days Testing ", testTime, " with a ", expSetup.activityXraySource, " source"
+    #echo "Days Testing ", testTime, " with a ", expSetup.testSource.activity, " source"
   #let emissionRateAx = getRandomEmissionRateFromSolarModel(
-  #  pointInSun, centerVecs.centerSun, RadiusSun, emRates, emRateCDFs
+  #  rayOrigin, centerVecs.centerSun, RadiusSun, emRates, emRateCDFs
   #)
   ## Throw away all the axions, that don't make it through the piping system and therefore exit the system at some point ##
 
 
-
-  let intersectsEntranceCB = lineIntersectsCircle(pointInSun,
-      pointExitCBMagneticField, centerVecs.centerEntranceCB, expSetup.radiusCB)
+  let intersectsEntranceCB = lineIntersectsCircle(rayOrigin,
+      pointExitCBMagneticField, centerVecs.entranceCB, expSetup.magnet.radiusCB)
   var intersectsCB = false
-  var pointInSunInSun = pointInSun - centerVecs.centerSun #
-  #echo energyAx.float, " ", sqrt(pointInSunInSun[0].float * pointInSunInSun[0].float + pointInSunInSun[1].float * pointInSunInSun[1].float + pointInSunInSun[2].float * pointInSunInSun[2].float) / 6.9e11, " ", energyAx.float  * energyAx.float * (pointInSunInSun[0].float * pointInSunInSun[0].float + pointInSunInSun[1].float * pointInSunInSun[1].float + pointInSunInSun[2].float * pointInSunInSun[2].float) / 6.9e11 / 6.9e11
-  res.emratesPre = 1.0 #* energyAx.float * energyAx.float * (pointInSunInSun[0].float * pointInSunInSun[0].float + pointInSunInSun[1].float * pointInSunInSun[1].float + pointInSunInSun[2].float * pointInSunInSun[2].float) / 6.9e11 / 6.9e11
+  var rayOriginInSun = rayOrigin - centerVecs.sun #
+  #echo energyAx.float, " ", sqrt(rayOriginInSun[0].float * rayOriginInSun[0].float + rayOriginInSun[1].float * rayOriginInSun[1].float + rayOriginInSun[2].float * rayOriginInSun[2].float) / 6.9e11, " ", energyAx.float  * energyAx.float * (rayOriginInSun[0].float * rayOriginInSun[0].float + rayOriginInSun[1].float * rayOriginInSun[1].float + rayOriginInSun[2].float * rayOriginInSun[2].float) / 6.9e11 / 6.9e11
+  res.emratesPre = 1.0 #* energyAx.float * energyAx.float * (rayOriginInSun[0].float * rayOriginInSun[0].float + rayOriginInSun[1].float * rayOriginInSun[1].float + rayOriginInSun[2].float * rayOriginInSun[2].float) / 6.9e11 / 6.9e11
   res.energiesPre = energyAx
   if (not intersectsEntranceCB):
 
-    intersectsCB = lineIntersectsCylinderOnce(pointInSun,
-        pointExitCBMagneticField, centerVecs.centerEntranceCB,
-        centerVecs.centerExitCB, expSetup.radiusCB)
+    intersectsCB = lineIntersectsCylinderOnce(rayOrigin,
+        pointExitCBMagneticField, centerVecs.entranceCB,
+        centerVecs.exitCB, expSetup.magnet.radiusCB)
   if (not intersectsEntranceCB and not intersectsCB): return
 
   var intersect = vec3(0.0) #isnt't changed for axions that hit the entrance of the coldbore because the z value is 0 then anyways
   if (not intersectsEntranceCB): #generates problems with the weight because the weight is multiplied with the difference of the leght of the path of the particle and the legth of the coldbore
     intersect = getIntersectLineIntersectsCylinderOnce(
-      pointInSun,
-      pointExitCBMagneticField, centerVecs.centerEntranceCB,
-      centerVecs.centerExitCB, expSetup.radiusCB
-    ) #pointInSun + ((centerVecs.centerEntranceCB[2] - pointInSun[2]) / (pointExitCBMagneticField - pointInSun)[2]) * (pointExitCBMagneticField - pointInSun)
+      rayOrigin,
+      pointExitCBMagneticField, centerVecs.entranceCB,
+      centerVecs.exitCB, expSetup.magnet.radiusCB
+    ) #rayOrigin + ((centerVecs.entranceCB[2] - rayOrigin[2]) / (pointExitCBMagneticField - rayOrigin)[2]) * (pointExitCBMagneticField - rayOrigin)
     #echo "doesn't intersect magnet entrance: ", intersect
   else:
     intersect = getIntersectlineIntersectsCircle(
-      pointInSun,
-      pointExitCBMagneticField, centerVecs.centerEntranceCB
+      rayOrigin,
+      pointExitCBMagneticField, centerVecs.entranceCB
     )
     #echo "does intersect magnet entrance: ", intersect
 
   ##get the length of the path of the axion in the magnetic field to get the probability of conversion later
   let pathCB = (pointExitCBMagneticField - intersect).length.mm
   var pointExitCB = vec3(0.0)
-  #[if (not lineIntersectsCircle(pointInSun, pointExitCBMagneticField,
-      centerVecs.centerExitCB, expSetup.radiusCB)):
-        echo "start"
-        echo "exit magnet", pointExitCBMagneticField
-        return]#
 
-  pointExitCB = pointInSun + ((centerVecs.centerExitCB[2] - pointInSun[2]) / (
-      pointExitCBMagneticField - pointInSun)[2]) * (pointExitCBMagneticField - pointInSun)
+  ## Return if... WRITE ME
+  if not lineIntersectsCircle(rayOrigin, pointExitCBMagneticField,
+                              centerVecs.exitCB, expSetup.magnet.radiusCB):
+    return
+
+  pointExitCB = rayOrigin + ((centerVecs.exitCB[2] - rayOrigin[2]) / (
+      pointExitCBMagneticField - rayOrigin)[2]) * (pointExitCBMagneticField - rayOrigin)
 
   var pointExitPipeCBVT3 = vec3(0.0)
 
-  #[if (not lineIntersectsCircle(pointExitCBMagneticField, pointExitCB,
-      centerVecs.centerExitPipeCBVT3, expSetup.radiusPipeCBVT3)):
-        echo "start"
-        echo "exit magnet", pointExitCBMagneticField, "exit cb", pointExitCB
-        return]#
+  ## Return if... WRITE ME
+  if not lineIntersectsCircle(pointExitCBMagneticField, pointExitCB,
+                              centerVecs.exitPipeCBVT3, expSetup.pipes.coldBoreToVT3.radius):
+    return
 
   pointExitPipeCBVT3 = pointExitCBMagneticField + ((
-      centerVecs.centerExitPipeCBVT3[2] - pointExitCBMagneticField[2]) / (
+      centerVecs.exitPipeCBVT3[2] - pointExitCBMagneticField[2]) / (
       pointExitCB - pointExitCBMagneticField)[2]) * (pointExitCB - pointExitCBMagneticField)
   var pointExitPipeVT3XRT = vec3(0.0)
 
-  if (not lineIntersectsCircle(pointExitCB, pointExitPipeCBVT3,
-      centerVecs.centerExitPipeVT3XRT, expSetup.radiusPipeVT3XRT)): return
+  ## Return if... WRITE ME
+  if not lineIntersectsCircle(pointExitCB, pointExitPipeCBVT3,
+                              centerVecs.exitPipeVT3XRT, expSetup.pipes.coldBoreToVT3.radius):
+    return
 
-  pointExitPipeVT3XRT = pointExitCB + ((centerVecs.centerExitPipeVT3XRT[2] -
+  pointExitPipeVT3XRT = pointExitCB + ((centerVecs.exitPipeVT3XRT[2] -
       pointExitCB[2]) / (pointExitPipeCBVT3 - pointExitCB)[2]) * (
       pointExitPipeCBVT3 - pointExitCB)
 
   var vectorBeforeXRT = pointExitPipeVT3XRT - pointExitCB
 
-  #echo centerVecs.centerCollimator, " ", pointExitPipeVT3XRT
+  #echo centerVecs.collimator, " ", pointExitPipeVT3XRT
   ###################from the CB (coldbore(pipe in Magnet)) to the XRT (XrayTelescope)#######################
   var vectorXRT = vectorBeforeXRT
-  vectorXRT[0] = vectorXRT[0] * cos(expSetup.telescope_turned_x.to(Radian)) + vectorXRT[2] * sin(expSetup.telescope_turned_x.to(Radian))
-  vectorXRT[2] = vectorXRT[2] * cos(expSetup.telescope_turned_x.to(Radian)) - vectorXRT[0] * sin(expSetup.telescope_turned_x.to(Radian))
+  ## XXX: what do these compute? Surely this can just be done in 1-3 lines as it's just a rotation of sorts?
+  let turnedX = expSetup.telescope.telescope_turned_x.to(Radian)
+  let turnedY = expSetup.telescope.telescope_turned_y.to(Radian)
+  vectorXRT[0] = vectorXRT[0] * cos(turnedX) + vectorXRT[2] * sin(turnedX)
+  vectorXRT[2] = vectorXRT[2] * cos(turnedX) - vectorXRT[0] * sin(turnedX)
 
-  vectorXRT[1] = vectorXRT[1] * cos(expSetup.telescope_turned_y.to(Radian)) - vectorXRT[2] * sin(expSetup.telescope_turned_y.to(Radian))
-  vectorXRT[2] = vectorXRT[2] * cos(expSetup.telescope_turned_y.to(Radian)) + vectorXRT[1] * sin(expSetup.telescope_turned_y.to(Radian))
+  vectorXRT[1] = vectorXRT[1] * cos(turnedY) - vectorXRT[2] * sin(turnedY)
+  vectorXRT[2] = vectorXRT[2] * cos(turnedY) + vectorXRT[1] * sin(turnedY)
 
-  pointExitCB[0] -= expSetup.optics_entrance[0].float
-  pointExitCB[1] -=  expSetup.optics_entrance[1].float
-  pointExitCB[2] -=  centerVecs.centerExitPipeVT3XRT[2]
-  pointExitCB[0] = pointExitCB[0] * cos(expSetup.telescope_turned_x.to(Radian)) + pointExitCB[2] * sin(expSetup.telescope_turned_x.to(Radian))
-  pointExitCB[2] = pointExitCB[2] * cos(expSetup.telescope_turned_x.to(Radian)) - pointExitCB[0] * sin(expSetup.telescope_turned_x.to(Radian))
+  pointExitCB[0] -= expSetup.telescope.optics_entrance[0].float
+  pointExitCB[1] -= expSetup.telescope.optics_entrance[1].float
+  pointExitCB[2] -= centerVecs.exitPipeVT3XRT[2]
+  pointExitCB[0] = pointExitCB[0] * cos(turnedX) + pointExitCB[2] * sin(turnedX)
+  pointExitCB[2] = pointExitCB[2] * cos(turnedX) - pointExitCB[0] * sin(turnedX)
 
-  pointExitCB[1] = pointExitCB[1] * cos(expSetup.telescope_turned_y.to(Radian)) - pointExitCB[2] * sin(expSetup.telescope_turned_y.to(Radian))
-  pointExitCB[2] = pointExitCB[2] * cos(expSetup.telescope_turned_y.to(Radian)) + pointExitCB[1] * sin(expSetup.telescope_turned_y.to(Radian))
+  pointExitCB[1] = pointExitCB[1] * cos(turnedY) - pointExitCB[2] * sin(turnedY)
+  pointExitCB[2] = pointExitCB[2] * cos(turnedY) + pointExitCB[1] * sin(turnedY)
 
   var factor = (0.0 - pointExitCB[2]) / vectorXRT[2]
 
@@ -1255,7 +1581,7 @@ proc traceAxion(res: var Axion,
       (pointEntranceXRT[0].mm) + (pointEntranceXRT[1].mm) * (pointEntranceXRT[1].mm))
     phi_radius = arctan2(-pointEntranceXRT[1], (pointEntranceXRT[
         0])) #arccos((pointEntranceXRT[1]+d) / radius1)
-    alpha = arctan(radius1 / expSetup.RAYTRACER_FOCAL_LENGTH_XRT)
+    alpha = arctan(radius1 / expSetup.detectorInstall.distanceDetectorXRT)
     phi_flat = radtoDeg(arccos(pointEntranceXRT[0].mm / radius1))
   vectorEntranceXRTCircular[0] = radius1.float
   vectorEntranceXRTCircular[1] = phi_radius #in rad
@@ -1281,18 +1607,20 @@ proc traceAxion(res: var Axion,
   of esBabyIAXO:
     ## here we have a spider structure for the XMM telescope:
     if vectorEntranceXRTCircular[0] <= 64.7: #and vectorEntranceXRTCircular[0] > expSetup.holeInOptics.float * expSetup.numberOfHoles.float: #doesnt really matter because there are no mirrors in the middle and these axions dont reach the window anyways
-      for l in -(expSetup.numberOfHoles - ceil(expSetup.numberOfHoles.float / 2.0).int)..(expSetup.numberOfHoles - ceil(expSetup.numberOfHoles.float / 2.0).int):
+      let nHoles = expSetup.telescope.numberOfHoles
+      ## XXX: same kind of loop repeats below again. Why?
+      for l in -(nHoles - ceil(nHoles.float / 2.0).int) .. (nHoles - ceil(nHoles.float / 2.0).int):
         var centerHole = vec3(0.0)
-        #var typeHole: string
         if l != 0:
           if abs(l) %% 2 == 0:
-            centerHole[1] += 2.0 * l.float * expSetup.holeInOptics.float
+            centerHole[1] += 2.0 * l.float * expSetup.telescope.holeInOptics.float
           elif abs(l) %% 2 != 0:
-            centerHole[0] += 2.0 * (l + (l / abs(l))).float * expSetup.holeInOptics.float
+            centerHole[0] += 2.0 * (l + (l / abs(l))).float * expSetup.telescope.holeInOptics.float
           #if abs(l) < 3: typeHole = expSetup.holetype
           #else: typeHole = "square"
         #else: typeHole = "square"
-        if lineIntersectsObject(expSetup.holetype, pointExitCB, pointEntranceXRT, centerHole, expSetup.holeInOptics):
+        if lineIntersectsObject(expSetup.telescope.holeType, pointExitCB, pointEntranceXRT,
+                                centerHole, expSetup.telescope.holeInOptics):
           weight = 1.0
           break
         else: weight = 0.0
@@ -1319,84 +1647,96 @@ proc traceAxion(res: var Axion,
     xSep = 0.0.mm
     h: int
     testXray = false
-    lengthTelescope = (expSetup.lMirror + 0.5 * xSep) * cos(expSetup.allAngles[0].to(Radian)) + (expSetup.lMirror + 0.5 * xSep) * cos(3.0 * expSetup.allAngles[0].to(Radian))
+    lengthTelescope = (expSetup.telescope.lMirror + 0.5 * xSep) * cos(expSetup.telescope.allAngles[0].to(Radian)) +
+                      (expSetup.telescope.lMirror + 0.5 * xSep) * cos(3.0 * expSetup.telescope.allAngles[0].to(Radian))
     centerEndXRT = vec3(0.0)
   centerEndXRT[0] = 0.0 #lengthTelescope.float * tan(expSetup.telescope_turned.to(Radian)) thats not corrrect but the thing is already turned
   centerEndXRT[2] = lengthTelescope.float
 
-
-  if vectorEntranceXRTCircular[0].mm > expSetup.allR1[expSetup.allR1.len - 1]: return
-  for j in 0..<expSetup.allR1.len:
+  let allR1 = expSetup.telescope.allR1
+  if vectorEntranceXRTCircular[0].mm > allR1[allR1.len - 1]: return
+  for j in 0 ..< allR1.len:
     # get rid of where the X-rays hit the glass frontal
-    if vectorEntranceXRTCircular[0].mm > expSetup.allR1[j] and
-        vectorEntranceXRTCircular[0].mm < (expSetup.allR1[j] + expSetup.allThickness[j]):
+    if vectorEntranceXRTCircular[0].mm > allR1[j] and
+        vectorEntranceXRTCircular[0].mm < (allR1[j] + expSetup.telescope.allThickness[j]):
       return
-    if expSetup.allR1[j] - vectorEntranceXRTCircular[0].mm > 0.0.mm:
-      dist.add(expSetup.allR1[j] - vectorEntranceXRTCircular[0].mm)
+    if allR1[j] - vectorEntranceXRTCircular[0].mm > 0.0.mm:
+      dist.add(allR1[j] - vectorEntranceXRTCircular[0].mm)
 
+  ## XXX: The same kind of for loop as further up? Why?
   if min(dist) > 100.0.mm:
     testXray = true
     h = 50
-    for l in -(expSetup.numberOfHoles - ceil(expSetup.numberOfHoles.float / 2.0).int)..(expSetup.numberOfHoles - ceil(expSetup.numberOfHoles.float / 2.0).int):
+    let nHoles = expSetup.telescope.numberOfHoles
+    for l in -(nHoles - ceil(nHoles.float / 2.0).int) .. (nHoles - ceil(nHoles.float / 2.0).int):
       var centerHole = centerEndXRT
       #var typeHole: string
       if l != 0:
         if abs(l) %% 2 == 0:
-          centerHole[1] += 2.0 * l.float * expSetup.holeInOptics.float
+          centerHole[1] += 2.0 * l.float * expSetup.telescope.holeInOptics.float
         if abs(l) %% 2 != 0:
-          centerHole[0] += 2.0 * (l + (l / abs(l))).float * expSetup.holeInOptics.float
-        #if abs(l) < 3: typeHole = expSetup.holetype
+          centerHole[0] += 2.0 * (l + (l / abs(l))).float * expSetup.telescope.holeInOptics.float
+        #if abs(l) < 3: typeHole = expSetup.telescope.holeType
         #else: typeHole = "square"
       #else: typeHole = "square"
-      if lineIntersectsObject(expSetup.holetype, pointExitCB, pointEntranceXRT, centerHole, expSetup.holeInOptics):
+      if lineIntersectsObject(expSetup.telescope.holeType, pointExitCB, pointEntranceXRT,
+                              centerHole, expSetup.telescope.holeInOptics):
         weight = 1.0
         break
       else: weight = 0.0
   if weight == 0.0: return
   if testXray == false:
-    for k in 0..<expSetup.allR1.len:
-      if min(dist) == expSetup.allR1[k] - vectorEntranceXRTCircular[0].mm:
+    for k in 0..<allR1.len:
+      if min(dist) == allR1[k] - vectorEntranceXRTCircular[0].mm:
         h = k
 
 
-        r1 = expSetup.allR1[h]
-        beta = expSetup.allAngles[h].to(Radian)
-        xSep = expSetup.allXsep[h]
-        r2 = r1 - expSetup.lMirror * sin(beta)
+        r1 = allR1[h]
+        beta = expSetup.telescope.allAngles[h].to(Radian)
+        xSep = expSetup.telescope.allXsep[h]
+        r2 = r1 - expSetup.telescope.lMirror * sin(beta)
         r3 = r2 - 0.5 * xSep * tan(beta)
         r4 = r3 - 0.5 * xSep * tan(3.0 * beta)
-        r5 = r4 - expSetup.lMirror * sin(3.0 * beta)
+        r5 = r4 - expSetup.telescope.lMirror * sin(3.0 * beta)
 
-  if testXray == false and r1 == expSetup.allR1[0]: return
+  if testXray == false and r1 == allR1[0]: return
 
   var pointEntranceXRTZylKart = vec3(0.0)
   pointEntranceXRTZylKart[0] = pointEntranceXRT[0]
   pointEntranceXRTZylKart[1] = pointEntranceXRT[1]
-  pointEntranceXRTZylKart[2] = pointEntranceXRT[2] #- centerVecs.centerExitPipeVT3XRT[2]
+  pointEntranceXRTZylKart[2] = pointEntranceXRT[2] #- centerVecs.exitPipeVT3XRT[2]
 
   var pointExitCBZylKart = vec3(0.0)
   pointExitCBZylKart[0] = pointExitCB[0]
   pointExitCBZylKart[1] = pointExitCB[1]
-  pointExitCBZylKart[2] = pointExitCB[2] #- centerVecs.centerExitPipeVT3XRT[2]
+  pointExitCBZylKart[2] = pointExitCB[2] #- centerVecs.exitPipeVT3XRT[2]
 
   let
     beta3 = 3.0 * beta
-    distanceMirrors = cos(beta) * (xSep + expSetup.lMirror)
+    distanceMirrors = cos(beta) * (xSep + expSetup.telescope.lMirror)
     pointMirror1 = findPosXRT(pointEntranceXRTZylKart, pointExitCBZylKart, r1,
-                              r2, beta, expSetup.lMirror, 0.0.mm, 0.001.mm, 1.0.mm, 1.1.mm)
+                              r2, beta, expSetup.telescope.lMirror, 0.0.mm, 0.001.mm, 1.0.mm, 1.1.mm)
 
 
   let
     vectorAfterMirror1 = getVectoraAfterMirror(pointEntranceXRTZylKart,
         pointExitCBZylKart, pointMirror1, beta, "vectorAfter")
     pointAfterMirror1 = pointMirror1 + 200.0 * vectorAfterMirror1
-    pointLowerMirror = findPosXRT(pointAfterMirror1, pointMirror1, expSetup.allR1[h-1] + expSetup.allThickness[h-1],
-                              expSetup.allR1[h-1] - expSetup.lMirror * sin(expSetup.allAngles[h-1].to(Radian)) + expSetup.allThickness[h-1],
-                              expSetup.allAngles[h-1].to(Radian),
-                              expSetup.lMirror, 0.0.mm, 0.01.mm, 0.0.mm, 2.5.mm)
-    pointMirror2 = findPosXRT(pointAfterMirror1, pointMirror1, r4, r5, beta3,
-                              expSetup.lMirror, distanceMirrors, 0.01.mm, 0.0.mm, 2.5.mm)
-  #echo r1, " ", expSetup.allR1[h-1], " ", r2, " ", expSetup.allR1[h-1] - expSetup.lMirror * sin(expSetup.allAngles[h-1].to(Radian))
+    pointLowerMirror = findPosXRT(
+      pointAfterMirror1, pointMirror1,
+      allR1[h-1] + expSetup.telescope.allThickness[h-1],
+      allR1[h-1] -
+        expSetup.telescope.lMirror * sin(expSetup.telescope.allAngles[h-1].to(Radian)) +
+        expSetup.telescope.allThickness[h-1],
+      expSetup.telescope.allAngles[h-1].to(Radian),
+      expSetup.telescope.lMirror,
+      0.0.mm, 0.01.mm, 0.0.mm, 2.5.mm
+    )
+    pointMirror2 = findPosXRT(
+      pointAfterMirror1, pointMirror1, r4, r5, beta3,
+      expSetup.telescope.lMirror, distanceMirrors, 0.01.mm, 0.0.mm, 2.5.mm
+    )
+  #echo r1, " ", allR1[h-1], " ", r2, " ", allR1[h-1] - expSetup.telescope.lMirror * sin(expSetup.allAngles[h-1].to(Radian))
 
 
   if pointMirror2[0] == 0.0 and pointMirror2[1] == 0.0 and pointMirror2[2] ==
@@ -1412,10 +1752,10 @@ proc traceAxion(res: var Axion,
         pointMirror2, beta3, "angle")
     alpha1 = angle1[1]
     alpha2 = angle2[1]
-  #echo (angle1[1].degToRad) , " ", (r1.float - (expSetup.allR1[h-1] + expSetup.allThickness[h-1]).float) / (expSetup.lMirror.float - pointMirror1[2]) #radToDeg(arcsin(r1.float - (expSetup.allR1[h-1] + expSetup.allThickness[h-1]).float) / (expSetup.lMirror.float - pointMirror1[2]))
+  #echo (angle1[1].degToRad) , " ", (r1.float - (allR1[h-1] + expSetup.telescope.allThickness[h-1]).float) / (expSetup.telescope.lMirror.float - pointMirror1[2]) #radToDeg(arcsin(r1.float - (allR1[h-1] + expSetup.telescope.allThickness[h-1]).float) / (expSetup.telescope.lMirror.float - pointMirror1[2]))
 
   # getting rid of the X-rays that hit the shell below
-  if testXray == false and tan(angle1[1].degToRad) > (r1.float - (expSetup.allR1[h-1] + expSetup.allThickness[h-1]).float) / (expSetup.lMirror.float - pointMirror1[2]):
+  if testXray == false and tan(angle1[1].degToRad) > (r1.float - (allR1[h-1] + expSetup.telescope.allThickness[h-1]).float) / (expSetup.telescope.lMirror.float - pointMirror1[2]):
     #if not (pointMirror1[2] +  0.0001 >  pointLowerMirror[2] and pointMirror1[2] -  0.0001 <  pointLowerMirror[2]):
     echo "hit Nickel"
     res.hitNickel = true
@@ -1434,19 +1774,19 @@ proc traceAxion(res: var Axion,
     pointRadialComponent: float
     n: UnitLess
     n3: UnitLess
-    distDet = distanceMirrors - 0.5 * expSetup.allXsep[8] * cos(beta) +
-        expSetup.RAYTRACER_FOCAL_LENGTH_XRT -
-        expSetup.RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW #distanc of the detector from the entrance of the optics
-    d = - expSetup.optics_entrance[0]
+    distDet = distanceMirrors - 0.5 * expSetup.telescope.allXsep[8] * cos(beta) +
+        expSetup.detectorInstall.distanceDetectorXRT -
+        expSetup.detectorInstall.distanceWindowFocalPlane # distance of the detector from the entrance of the optics
+    d = - expSetup.telescope.optics_entrance[0]
   pointDetectorWindow = getPointDetectorWindow(
     pointMirror2,
     pointAfterMirror2,
-    distDet, expSetup.allXsep[8], d, expSetup.pipes_turned
+    distDet, expSetup.telescope.allXsep[8], d, expSetup.pipes.pipesTurned
   )
   pointEndDetector = getPointDetectorWindow(
     pointMirror2, pointAfterMirror2,
     (distDet + detectorSetup.depthDet),
-    expSetup.allXsep[8], d, expSetup.pipes_turned
+    expSetup.telescope.allXsep[8], d, expSetup.pipes.pipesTurned
   )
 
 
@@ -1496,78 +1836,23 @@ proc traceAxion(res: var Axion,
         0.0001 * pow(ya, 4.0) + 0.0034 * pow(ya, 3.0) - 0.0292 * pow(ya, 2.0) -
         0.1534 * ya + 99.959) / 100.0
     distancePipe = (pointDetectorWindow[2] - pointExitCBZylKart[2]).mm.to(m) # needs to be in meter
+
   ## this is the transformation probability of an axion into a photon, if an axion
   ## flying straight through the magnet had one of 100%, angular dependency of the primakoff effect
-  var
-    transmissionMagnet: float
-
-  case expSetup.stage
-  of skVacuum:
-    let probConversionMagnet = if cfIgnoreConvProb notin flags:
-                                 conversionProb(expSetup.B, g_aγ, pathCB)
-                               else:
-                                 1.0
-    transmissionMagnet = cos(ya) * probConversionMagnet
-  of skGas:
-    let
-      pGas = expSetup.pGasRoom / RoomTemp * expSetup.tGas
-      ## TODO: use `unchained` in `axionMass` and avoid manual float conversions / use `to`
-      effPhotonMass = effPhotonMass2(
-        pGas.float, pathCB.to(m).float,
-        expSetup.radiusCB.to(m).float,
-        expSetup.tGas.float
-      )
-      probConversionMagnetGas =
-        if cfIgnoreConvProb notin flags:
-          axionConversionProb2(
-            mAxion, energyAx, pGas.float,
-            expSetup.tGas.float, pathCB.to(m).float,
-            expSetup.radiusCB.to(m).float,
-            g_aγ.float, expSetup.B.float
-          ) # for setup including gas: functions are in axionmass/axionMassforMagnet
-        else:
-          1.0 # else perfect transmission
-      absorbtionXrays = intensitySuppression2(
-        energyAx, pathCB.to(m).float,
-        distancePipe.float,
-        pGas.float,
-        expSetup.tGas.float,
-        RoomTemp.float) #room temperature in K
-    #echo "axion mass in [eV] ", mAxion, " effective photon mass in [eV] ", effPhotonMass
-    transmissionMagnet = cos(ya) * probConversionMagnetGas * absorbtionXrays # for setup with gas
-
-  res.transmissionMagnets = transmissionMagnet
+  res.transmissionMagnet = expSetup.computeMagnetTransmission(
+    energyAx, distancePipe, pathCB, ya, flags
+  )
   res.yawAngles = ya
 
-  
-
-  var reflect = 0.0
-  case expSetup.kind
-  of esCAST:
-    let transmissionTel = expSetup.telescopeTransmission.eval(energyAx)
-    weight = (transmissionTel *
-              transmissionTelescopePitch * transmissionTelescopeYaw *
-              transmissionMagnet) #transmission probabilities times axion emission rate times the flux fraction
-  of esBabyIAXO:
-    if cfIgnoreGoldReflect notin flags:
-      ## TODO: This needs to be replaced by a 2D interpolation!
-      {.gcsafe.}:
-        let
-          reflectionProb1 = expSetup.goldReflectivity.eval(alpha1, energyAx.float)
-          reflectionProb2 = expSetup.goldReflectivity.eval(alpha2, energyAx.float)
-        res.reflect = reflectionProb1 * reflectionProb2
-        weight = reflectionProb1 * reflectionProb2 * transmissionMagnet#also yaw and pitch dependend
-    else:
-      # without gold reflection just use perfect reflectivity
-      weight = transmissionMagnet#also yaw and pitch dependend
+  (res.reflect, weight) = expSetup.computeReflectivity(energyAx, alpha1, alpha2, flags)
 
   if testXray != false:
     if cfXrayTest notin flags:
-      weight = transmissionMagnet
+      weight = res.transmissionMagnet
     n = (distDet - pointExitCB[2].mm) / (pointEntranceXRT - pointExitCB)[2].mm
     pointDetectorWindow = pointExitCB + n.float * (pointEntranceXRT - pointExitCB)
-  pointDetectorWindow[0] -= expSetup.lateralDetector.float
-  pointDetectorWindow[1] -= expSetup.transversalDetector.float
+  pointDetectorWindow[0] -= expSetup.detectorInstall.lateralShift.float
+  pointDetectorWindow[1] -= expSetup.detectorInstall.transversalShift.float
   if weight != 0:
     res.passedTillWindow = true
   #echo h, " ", pointEntranceXRT, " ", pointDetectorWindow
@@ -1725,7 +2010,7 @@ proc generateResultPlots(axions: seq[Axion],
   extractPass(shellNumber)
 
   extractPass(weights)
-  extractPass(transmissionMagnets)
+  extractPass(transmissionMagnet)
   extractPass(yawAngles)
   extractPass(transProbArgon)
 
@@ -1900,7 +2185,7 @@ proc generateResultPlots(axions: seq[Axion],
     ggtitle("R") +
     ggsave(&"../out/R_{windowYear}.pdf")
 
-  let dfMag = seqsToDf({"Transmission probability": transmissionMagnets,
+  let dfMag = seqsToDf({"Transmission probability": transmissionMagnet,
                        "Angles between path and magnetic field": yawAngles,
                        "Axion energy[keV]": energiesAx}).arrange("Angles between path and magnetic field")
 
@@ -2253,8 +2538,11 @@ proc calculateFluxFractions(setup: ExperimentSetupKind,
 
   generateResultPlots(axions, detectorSetup.windowYear)
 
-proc main(ignoreDetWindow = false, ignoreGasAbs = false,
-          ignoreConvProb = false, ignoreReflection = false, xrayTest = false) =
+proc main(
+  ignoreDetWindow = false, ignoreGasAbs = false,
+  ignoreConvProb = false, ignoreReflection = false, xrayTest = false,
+  detectorInstall = false, magnet = false
+         ) =
   # check if the `config.toml` file exists, otherwise recreate from the default
   if not fileExists("config.toml"):
     let cdata = readFile("config_default.toml")
@@ -2269,6 +2557,8 @@ proc main(ignoreDetWindow = false, ignoreGasAbs = false,
   if ignoreConvProb:   flags.incl cfIgnoreConvProb
   if ignoreReflection: flags.incl cfIgnoreReflection
   if xrayTest: flags.incl cfXrayTest
+  if magnet: flags.incl cfReadMagnetConfig
+  if detectorInstall: flags.incl cfReadDetInstallConfig
   echo "Flags: ", flags
 
   let (esKind, dkKind, skKind) = parseSetup()

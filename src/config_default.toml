@@ -9,3 +9,30 @@ solarModelFile = "solar_model_tensor15.csv"
 experimentSetup = "BabyIAXO"   # [BabyIAXO, CAST]
 detectorSetup   = "InGridIAXO" # [InGrid2017, InGrid2018, InGridIAXO]
 stageSetup      = "vacuum"     # [vacuum, gas]
+
+[Magnet] # allows to adjust any property of the magnet
+useConfig = false        # sets whether to read these values here. Can be overriden here or using flag `--magnet`
+B = 2.0                  # T  magnetic field of the magnet
+radiusCB = 350.0         # mm radius of the magnet cold bore
+lengthColdbore = 11300.0 # mm length of the cold bore
+lengthB = 11000.0        # mm length of the part of cold bore w/ B field
+pGasRoom = 1.0           # bar pressure of (optional) gas in magnet at room temp.
+tGas = 100.0             # K temperature of (optional) gas in magnet
+
+[TestXraySource]
+useConfig = false # sets whether to read these values here. Can be overriden here or useng flag `--testXray`
+active = true     # whether the source is active (i.e. Sun or source?)
+energy = 1.0      # keV The energy of the X-ray source
+distance = 2000.0 # mm  Distance of the X-ray source from the readout
+radius = 350.0    # mm  Radius of the X-ray source
+offAxisUp = 0.0   # mm
+offAxisLeft = 0.0 # mm
+activity = 0.125  # GBq The activity in `GBq` of the source
+lengthCol = 0.021 # mm  Length of a collimator in front of the source
+
+[DetectorInstallation]
+useConfig = false # sets whether to read these values here. Can be overriden here or useng flag `--detectorInstall`
+distanceDetectorXRT = 1485.0   # mm
+distanceWindowFocalPlane = 0.0 # mm
+lateralShift = 0.0             # mm lateral ofset of the detector in repect to the beamline
+transversalShift = 0.0         # mm transversal ofset of the detector in repect to the beamline #0.0.mm #
