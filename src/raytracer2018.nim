@@ -138,7 +138,7 @@ type
   ConfigFlags = enum
     cfIgnoreDetWindow,   ## use to ignore the detector window absorbtion
     cfIgnoreGasAbs,      ## use to ignore the gas transmission
-    cfIgnoreGoldReflect, ## use to ignore gold reflectivity (use 1.0)
+    cfIgnoreReflection,  ## use to ignore reflectivity (use 1.0) of telescope layer coating
     cfIgnoreConvProb,    ## use to ignore axion conversion probability
     cfXrayTest
 
@@ -2254,7 +2254,7 @@ proc calculateFluxFractions(setup: ExperimentSetupKind,
   generateResultPlots(axions, detectorSetup.windowYear)
 
 proc main(ignoreDetWindow = false, ignoreGasAbs = false,
-          ignoreConvProb = false, ignoreGoldReflect = false, xrayTest = false) =
+          ignoreConvProb = false, ignoreReflection = false, xrayTest = false) =
   # check if the `config.toml` file exists, otherwise recreate from the default
   if not fileExists("config.toml"):
     let cdata = readFile("config_default.toml")
@@ -2264,10 +2264,10 @@ proc main(ignoreDetWindow = false, ignoreGasAbs = false,
   coldboreBlockedLength = 0.0
 
   var flags: set[ConfigFlags]
-  if ignoreDetWindow:   flags.incl cfIgnoreDetWindow
-  if ignoreGasAbs:      flags.incl cfIgnoreGasAbs
-  if ignoreConvProb:    flags.incl cfIgnoreConvProb
-  if ignoreGoldReflect: flags.incl cfIgnoreGoldReflect
+  if ignoreDetWindow:  flags.incl cfIgnoreDetWindow
+  if ignoreGasAbs:     flags.incl cfIgnoreGasAbs
+  if ignoreConvProb:   flags.incl cfIgnoreConvProb
+  if ignoreReflection: flags.incl cfIgnoreReflection
   if xrayTest: flags.incl cfXrayTest
   echo "Flags: ", flags
 
