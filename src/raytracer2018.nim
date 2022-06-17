@@ -1401,6 +1401,60 @@ proc computeMagnetTransmission(
     #echo "axion mass in [eV] ", mAxion, " effective photon mass in [eV] ", effPhotonMass
     result = cos(ya) * probConversionMagnetGas * absorbtionXrays # for setup with gas
 
+proc lineIntersectsOpaqueTelescopeStructures(
+  expSetup: ExperimentSetup,
+  testVector, vectorEntranceXRTCircular, pointExitCB, pointEntranceXRT: Vec3[float],
+  onlyInnerPart = false
+     ): bool =
+
+  ## XXX: `onlyInnerPart` is a hack? for the case where we only want to enter the
+  ## first branch of the `if vectorEntrance...` for `esBabyIAXO`.
+  ##
+  ## XXX: Also the expSetup should become a `telescopeKind` case, no?
+  ##
+  ## XXX: can we please clean up the esBabyIAXO branch? Remove the commented code?
+
+  ## there is a 2mm wide graphite block between each glass mirror, to seperate them
+  ## in the middle of the X-ray telescope. Return if hit
+  ## BabyIAXO return if X-ray its the spider structure
+  case expSetup.kind
+  of esCAST:
+    ## graphite blockers of the LLNL optics
+    if pointEntranceXRT[1] <= 1.0 and pointEntranceXRT[1] >= -1.0: return
+  of esBabyIAXO:
+    ## here we have a spider structure for the XMM telescope:
+    ## XXX: the checks for the `vectorEntranceXRTCircular` stuff is extremely confusing!
+    if onlyInnerPart or vectorEntranceXRTCircular[0] <= 64.7: #and vectorEntranceXRTCircular[0] > expSetup.holeInOptics.float * expSetup.numberOfHoles.float: #doesnt really matter because there are no mirrors in the middle and these axions dont reach the window anyways
+      let nHoles = expSetup.telescope.numberOfHoles
+      for l in -(nHoles - ceil(nHoles.float / 2.0).int) .. (nHoles - ceil(nHoles.float / 2.0).int):
+        var centerHole = testVector
+        if l != 0:
+          if abs(l) mod 2 == 0:
+            centerHole[1] += 2.0 * l.float * expSetup.telescope.holeInOptics.float
+          else:
+            centerHole[0] += 2.0 * (l + (l / abs(l))).float * expSetup.telescope.holeInOptics.float
+          #if abs(l) < 3: typeHole = expSetup.holetype
+          #else: typeHole = "square"
+        #else: typeHole = "square"
+        if lineIntersectsObject(expSetup.telescope.holeType, pointExitCB, pointEntranceXRT,
+                                centerHole, expSetup.telescope.holeInOptics):
+          result = true
+          break
+        else:
+          result = false
+    # hole max 20.9 mm doesnt really matter because there are no mirrors in the
+    # middle and these axions dont reach the window anyways
+    elif vectorEntranceXRTCircular[0] < 151.6 and vectorEntranceXRTCircular[0] > (151.6 - 20.9):
+      result = false
+    elif vectorEntranceXRTCircular[0] > 64.7:
+      ## XXX: why 16? strips?
+      for i in 0 .. 16:
+        #spider strips (actually wider for innermost but doesnn't matter because it doesnt reach the window anyways)
+        if ((phi_flat >= (-1.25 + 22.5 * i.float) and phi_flat <= (1.25 + 22.5 * i.float))) or
+           ((phi_flatSpider >= (-1.25 + 22.5 * i.float) and phi_flatSpider <= (1.25 + 22.5 * i.float))):
+          result = false
+          break
+
 proc traceAxion(res: var Axion,
                 centerVecs: CenterVectors,
                 expSetup: ExperimentSetup,
@@ -1411,14 +1465,13 @@ proc traceAxion(res: var Axion,
                 energies: seq[keV],
                 flags: set[ConfigFlags]
                ) =
-  ## NOTE: `weight` seems to be used in the beginning of the procedure more as a way to check if an
-  ## axion should be thrown out early. That might imply that the weight could possibly be
-  ## introduced later in this proc!
-  var weight = 1.0
+  ## Check if we run with an X-ray source or compute from the Sun
+  let testXray = expSetup.testSource.active
+
   var rayOrigin: Vec3[float] # Starting point of the ray (typically axion somewhere in the Sun)
   var pointExitCBMagneticField: Vec3[float] # position at exit of magnet (entry from viewpoint of incoming ray)
   var energyAx: keV # energy of the axion
-  if cfXrayTest notin flags:
+  if not testXray:
     # Get a random point in the sun, biased by the emission rate, which is higher
     # at smalller radii, so this will give more points in the center of the sun
     rayOrigin = getRandomPointFromSolarModel(centerVecs.sun, RadiusSun, emRatesRadiusCumSum)
@@ -1594,42 +1647,12 @@ proc traceAxion(res: var Axion,
     phi_flatSpider = radtoDeg(arccos(pointEntrancSpider[0].mm / radius1Spider))
   #echo phi_flat, " ", phi_flatSpider, " ", pointEntrancSpider
 
-  ## there is a 2mm wide graphite block between each glass mirror, to seperate them
-  ## in the middle of the X-ray telescope. Return if hit
-  ## BabyIAXO return if X-ray its the spider structure
-  case expSetup.kind
-  of esCAST:
-    ## graphite blockers of the LLNL optics
-    if pointEntranceXRT[1] <= 1.0 and pointEntranceXRT[1] >= -1.0: return
-  of esBabyIAXO:
-    ## here we have a spider structure for the XMM telescope:
-    if vectorEntranceXRTCircular[0] <= 64.7: #and vectorEntranceXRTCircular[0] > expSetup.holeInOptics.float * expSetup.numberOfHoles.float: #doesnt really matter because there are no mirrors in the middle and these axions dont reach the window anyways
-      let nHoles = expSetup.telescope.numberOfHoles
-      ## XXX: same kind of loop repeats below again. Why?
-      for l in -(nHoles - ceil(nHoles.float / 2.0).int) .. (nHoles - ceil(nHoles.float / 2.0).int):
-        var centerHole = vec3(0.0)
-        if l != 0:
-          if abs(l) %% 2 == 0:
-            centerHole[1] += 2.0 * l.float * expSetup.telescope.holeInOptics.float
-          elif abs(l) %% 2 != 0:
-            centerHole[0] += 2.0 * (l + (l / abs(l))).float * expSetup.telescope.holeInOptics.float
-          #if abs(l) < 3: typeHole = expSetup.holetype
-          #else: typeHole = "square"
-        #else: typeHole = "square"
-        if lineIntersectsObject(expSetup.telescope.holeType, pointExitCB, pointEntranceXRT,
-                                centerHole, expSetup.telescope.holeInOptics):
-          weight = 1.0
-          break
-        else: weight = 0.0
-    elif vectorEntranceXRTCircular[0] < 151.6 and vectorEntranceXRTCircular[0] > (151.6 - 20.9): #hole max 20.9 mm doesnt really matter because there are no mirrors in the middle and these axions dont reach the window anyways
-      return
-    elif vectorEntranceXRTCircular[0] > 64.7:
-      for i in 0..16:
-        if ((phi_flat >= (-1.25 + 22.5 * i.float) and phi_flat <= (1.25 + 22.5 * i.float))) or
-           ((phi_flatSpider >= (-1.25 + 22.5 * i.float) and phi_flatSpider <= (1.25 + 22.5 * i.float))): #spider strips (actually wider for innermost but doesnn't matter because it doesnt reach the window anyways)
-          return
-    #TODO: inner spider structure that doesnt matter
-  if weight == 0.0: return
+  ## Check if any of the opaque structures of the telescopes are hit (graphite block for LLNL,
+  ## spider structure for XMM, ...)
+  if expSetup.lineIntersectsOpaqueTelescopeStructures(
+    vec3(0.0), vectorEntranceXRTCircular, pointExitCB, pointEntranceXRT
+  ):
+    return
 
   ## Calculate the way of the axion through the telescope by manually reflecting the ray on the two mirror layers and then ending up before the detector ##
 
@@ -1660,28 +1683,6 @@ proc traceAxion(res: var Axion,
     if allR1[j] - vectorEntranceXRTCircular[0].mm > 0.0.mm:
       dist.add(allR1[j] - vectorEntranceXRTCircular[0].mm)
 
-  ## XXX: The same kind of for loop as further up? Why?
-  if min(dist) > 100.0.mm:
-    testXray = true
-    h = 50
-    let nHoles = expSetup.telescope.numberOfHoles
-    for l in -(nHoles - ceil(nHoles.float / 2.0).int) .. (nHoles - ceil(nHoles.float / 2.0).int):
-      var centerHole = centerEndXRT
-      #var typeHole: string
-      if l != 0:
-        if abs(l) %% 2 == 0:
-          centerHole[1] += 2.0 * l.float * expSetup.telescope.holeInOptics.float
-        if abs(l) %% 2 != 0:
-          centerHole[0] += 2.0 * (l + (l / abs(l))).float * expSetup.telescope.holeInOptics.float
-        #if abs(l) < 3: typeHole = expSetup.telescope.holeType
-        #else: typeHole = "square"
-      #else: typeHole = "square"
-      if lineIntersectsObject(expSetup.telescope.holeType, pointExitCB, pointEntranceXRT,
-                              centerHole, expSetup.telescope.holeInOptics):
-        weight = 1.0
-        break
-      else: weight = 0.0
-  if weight == 0.0: return
   if testXray == false:
     for k in 0..<allR1.len:
       if min(dist) == allR1[k] - vectorEntranceXRTCircular[0].mm:
@@ -1696,7 +1697,13 @@ proc traceAxion(res: var Axion,
         r4 = r3 - 0.5 * xSep * tan(3.0 * beta)
         r5 = r4 - expSetup.telescope.lMirror * sin(3.0 * beta)
 
-  if testXray == false and r1 == allR1[0]: return
+  ## Why do we check for `lineIntersectsOpaqueTelescopeStructure` here again?
+  if testXray and minDist > 100.0.mm and
+     expSetup.lineIntersectsOpaqueTelescopeStructures(
+       centerEndXRT, vectorEntranceXRTCircular, pointExitCB, pointEntranceXRT,
+       onlyInnerPart = true
+     ):
+    return
 
   var pointEntranceXRTZylKart = vec3(0.0)
   pointEntranceXRTZylKart[0] = pointEntranceXRT[0]
