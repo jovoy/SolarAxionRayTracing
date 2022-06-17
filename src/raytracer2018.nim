@@ -1401,9 +1401,17 @@ proc computeMagnetTransmission(
     #echo "axion mass in [eV] ", mAxion, " effective photon mass in [eV] ", effPhotonMass
     result = cos(ya) * probConversionMagnetGas * absorbtionXrays # for setup with gas
 
+func radiusAndPhi(vec: Vec3[float]): (MilliMeter, float) =
+  ## Simple helper that computes the radius and angle φ from the given vector
+  ## in the x/y plane
+  let
+    radius = sqrt((vec[0].mm) * (vec[0].mm) + (vec[1].mm) * (vec[1].mm))
+    phi = radtoDeg(arccos(vec[0].mm / radius))
+  result = (radius, phi)
+
 proc lineIntersectsOpaqueTelescopeStructures(
   expSetup: ExperimentSetup,
-  testVector, vectorEntranceXRTCircular, pointExitCB, pointEntranceXRT: Vec3[float],
+  testVector, vectorEntranceXRTCircular, vectorXRT, pointExitCB, pointEntranceXRT: Vec3[float],
   onlyInnerPart = false
      ): bool =
 
@@ -1423,6 +1431,14 @@ proc lineIntersectsOpaqueTelescopeStructures(
     if pointEntranceXRT[1] <= 1.0 and pointEntranceXRT[1] >= -1.0: return
   of esBabyIAXO:
     ## here we have a spider structure for the XMM telescope:
+    ### 3D spider structure 1st draft ###
+
+    var factorSpider = (-85.0 - pointExitCB[2]) / vectorXRT[2]
+    var pointEntranceSpider = pointExitCB + factorSpider * vectorXRT
+    let
+      (radius, phiFlat) = radiusAndPhi(pointEntranceXRT)
+      (radiusSpider, phiFlatSpider) = radiusAndPhi(pointEntranceSpider)
+
     ## XXX: the checks for the `vectorEntranceXRTCircular` stuff is extremely confusing!
     if onlyInnerPart or vectorEntranceXRTCircular[0] <= 64.7: #and vectorEntranceXRTCircular[0] > expSetup.holeInOptics.float * expSetup.numberOfHoles.float: #doesnt really matter because there are no mirrors in the middle and these axions dont reach the window anyways
       let nHoles = expSetup.telescope.numberOfHoles
@@ -1450,8 +1466,8 @@ proc lineIntersectsOpaqueTelescopeStructures(
       ## XXX: why 16? strips?
       for i in 0 .. 16:
         #spider strips (actually wider for innermost but doesnn't matter because it doesnt reach the window anyways)
-        if ((phi_flat >= (-1.25 + 22.5 * i.float) and phi_flat <= (1.25 + 22.5 * i.float))) or
-           ((phi_flatSpider >= (-1.25 + 22.5 * i.float) and phi_flatSpider <= (1.25 + 22.5 * i.float))):
+        if ((phiFlat >= (-1.25 + 22.5 * i.float) and phiFlat <= (1.25 + 22.5 * i.float))) or
+           ((phiFlatSpider >= (-1.25 + 22.5 * i.float) and phiFlatSpider <= (1.25 + 22.5 * i.float))):
           result = false
           break
 
@@ -1624,33 +1640,20 @@ proc traceAxion(res: var Axion,
 
   vectorBeforeXRT = vectorXRT
   ## Coordinate transform from cartesian to polar at the XRT entrance
-  var
-    vectorEntranceXRTCircular = vec3(0.0)
   let
-    radius1 = sqrt((pointEntranceXRT[0].mm) *
-      (pointEntranceXRT[0].mm) + (pointEntranceXRT[1].mm) * (pointEntranceXRT[1].mm))
-    phi_radius = arctan2(-pointEntranceXRT[1], (pointEntranceXRT[
-        0])) #arccos((pointEntranceXRT[1]+d) / radius1)
-    alpha = arctan(radius1 / expSetup.detectorInstall.distanceDetectorXRT)
-    phi_flat = radtoDeg(arccos(pointEntranceXRT[0].mm / radius1))
-  vectorEntranceXRTCircular[0] = radius1.float
-  vectorEntranceXRTCircular[1] = phi_radius #in rad
-  vectorEntranceXRTCircular[2] = alpha #in rad
-
-  ### 3D spider structure 1st draft ###
-
-  var factorSpider = (-85.0 - pointExitCB[2]) / vectorXRT[2]
-  var pointEntrancSpider = pointExitCB + factorSpider * vectorXRT
-  let
-    radius1Spider = sqrt((pointEntrancSpider[0].mm) *
-      (pointEntrancSpider[0].mm) + (pointEntrancSpider[1].mm) * (pointEntrancSpider[1].mm))
-    phi_flatSpider = radtoDeg(arccos(pointEntrancSpider[0].mm / radius1Spider))
-  #echo phi_flat, " ", phi_flatSpider, " ", pointEntrancSpider
+    (radius1, _) = radiusAndPhi(pointEntranceXRT)
+    vectorEntranceXRTCircular = vec3(
+      radius1.float,
+      # phi
+      arctan2(-pointEntranceXRT[1], (pointEntranceXRT[0])), #arccos((pointEntranceXRT[1]+d) / radius1)
+      # alpha
+      arctan(radius1 / expSetup.detectorInstall.distanceDetectorXRT) # angle
+    ) #in rad
 
   ## Check if any of the opaque structures of the telescopes are hit (graphite block for LLNL,
   ## spider structure for XMM, ...)
   if expSetup.lineIntersectsOpaqueTelescopeStructures(
-    vec3(0.0), vectorEntranceXRTCircular, pointExitCB, pointEntranceXRT
+    vec3(0.0), vectorEntranceXRTCircular, vectorXRT, pointExitCB, pointEntranceXRT
   ):
     return
 
@@ -1708,11 +1711,12 @@ proc traceAxion(res: var Axion,
   ## Why do we check for `lineIntersectsOpaqueTelescopeStructure` here again?
   if testXray and minDist > 100.0.mm and
      expSetup.lineIntersectsOpaqueTelescopeStructures(
-       centerEndXRT, vectorEntranceXRTCircular, pointExitCB, pointEntranceXRT,
+       centerEndXRT, vectorEntranceXRTCircular, vectorXRT, pointExitCB, pointEntranceXRT,
        onlyInnerPart = true
      ):
     return
 
+  ## FIX ME
   var pointEntranceXRTZylKart = vec3(0.0)
   pointEntranceXRTZylKart[0] = pointEntranceXRT[0]
   pointEntranceXRTZylKart[1] = pointEntranceXRT[1]
