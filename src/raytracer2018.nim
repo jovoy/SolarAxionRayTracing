@@ -316,7 +316,7 @@ proc toRad(wyKind: WindowYearKind): float =
   of wyIAXO:
     result = degToRad(20.0) # who knows
 
-proc rotateInX(vector: Vec3, angle: Deg): Vec3 =
+proc rotateInX(vector: Vec3, angle: Radian): Vec3 =
   ## Rotation of a vector in x direction aka around the y axis counterclockwise when angle is positive 
   ## Or rotation of the coordinate system the vector is in clockwise
   result = vec3(vector[0] * cos(angle) + vector[2] * sin(angle),
@@ -1645,25 +1645,16 @@ proc traceAxion(res: var Axion,
   ## XXX: what do these compute? Surely this can just be done in 1-3 lines as it's just a rotation of sorts?
   let turnedX = expSetup.telescope.telescope_turned_x.to(Radian)
   let turnedY = expSetup.telescope.telescope_turned_y.to(Radian)
-  vectorXRT[0] = vectorXRT[0] * cos(turnedX) + vectorXRT[2] * sin(turnedX)
-  vectorXRT[2] = vectorXRT[2] * cos(turnedX) - vectorXRT[0] * sin(turnedX)
-
-  vectorXRT[1] = vectorXRT[1] * cos(turnedY) - vectorXRT[2] * sin(turnedY)
-  vectorXRT[2] = vectorXRT[2] * cos(turnedY) + vectorXRT[1] * sin(turnedY)
+  vectorXRT = rotateInX(vectorXRT, turnedX)
+  vectorXRT = rotateInY(vectorXRT, turnedY)
 
   pointExitCB[0] -= expSetup.telescope.optics_entrance[0].float
   pointExitCB[1] -= expSetup.telescope.optics_entrance[1].float
   pointExitCB[2] -= centerVecs.exitPipeVT3XRT[2]
-  pointExitCB[0] = pointExitCB[0] * cos(turnedX) + pointExitCB[2] * sin(turnedX)
-  pointExitCB[2] = pointExitCB[2] * cos(turnedX) - pointExitCB[0] * sin(turnedX)
-
-  pointExitCB[1] = pointExitCB[1] * cos(turnedY) - pointExitCB[2] * sin(turnedY)
-  pointExitCB[2] = pointExitCB[2] * cos(turnedY) + pointExitCB[1] * sin(turnedY)
+  pointExitCB = rotateInX(pointExitCB, turnedX)
+  pointExitCB = rotateInY(pointExitCB, turnedY)
 
   var factor = (0.0 - pointExitCB[2]) / vectorXRT[2]
-
-  #echo "before ", pointExitCB, " ", vectorBeforeXRT, " after ", pointExitCBXRT, " ", vectorXRT
-
 
   let pointEntranceXRT = pointExitCB + factor * vectorXRT
   vectorBeforeXRT = vectorXRT
