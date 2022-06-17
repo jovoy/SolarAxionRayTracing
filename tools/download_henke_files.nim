@@ -1,6 +1,8 @@
 import std / [httpclient, strutils, os, parseutils, strformat, math]
 import seqmath
 
+import cligen/[osUt,mslice,procpool]
+
 const henkeUrl = "https://henke.lbl.gov/"
 const materialInterface = "cgi-bin/laymir.pl"
 
@@ -118,7 +120,7 @@ proc postHenke(client: HttpClient, h: HenkeReq): string =
   let header = newHttpHeaders({"Content-Type" : "application/x-www-form-urlencoded"})
   let postPath = henkeUrl & materialInterface
   let resp = client.request(postPath, httpMethod = HttpPost, body = $h)
-  if resp.status == Http200:
+  if resp.status == $Http200:
     result = resp.body
   else:
     raise newException(HttpRequestError, "Request to henke with " & $h & " failed!")
@@ -147,17 +149,19 @@ proc downloadDatafile(client: HttpClient, file: string): seq[string] =
   result[1] = l0
 
 proc storeDatafile(data: seq[string], h: HenkeReq) =
-  let angle = &"{h.fixedValue.float:.2f}"
+  let angle = &"{h.fixedValue.float:.4f}"
   let thickness = &"{h.layerThickness / 1000.0:.2f}"
   let outfile = outpath / fileTmpl % [angle, thickness]
   createDir(outpath)
   let dataStr = data.join("\n")
   writeFile(outfile, dataStr.strip & "\n")
 
-proc download(client: HttpClient, h: HenkeReq) =
+proc download(client: HttpClient, h: HenkeReq): bool =
   ## Takes care of downloading (all) the file(s) for the given Henke request.
   ## This means if there are more than 500 data points requested, it will be
   ## split into multiple data files
+  ##
+  ## Returns `true` if the file was downloaded successfully.
   const maxPoints = 500
   let scanVals = linspace(h.scanMin, h.scanMax, h.numberOfPoints) # all values to scan
   let nchunks = ceilDiv(h.numberOfPoints, maxPoints)
@@ -177,26 +181,58 @@ proc download(client: HttpClient, h: HenkeReq) =
       data.add chkData[2 ..< chkData.len]
     if chunk < nchunks - 1: # in last chunk cannot decrease, as `pointsLeft` is a positive range
       dec pointsLeft, maxPoints
-  storeDatafile(data, h)
+  if h.numberOfPoints != data.len - 2:
+    result = false
+  else:
+    storeDatafile(data, h)
+    result = true
 
 proc downloadAllAngles(client: HttpClient,
                        energyMin = 30.0,
                        energyMax = 15000.0,
                        angleMin = 0.05,
                        angleMax = 1.0,
-                       numAngles = 100) =
+                       numAngles = 100,
+                       numEnergies = 1000,
+                       jobs = 8) =
   let angles = linspace(angleMin, angleMax, numAngles)
-  for angle in angles:
-    let req = initHenkeReq(fixedValue = angle,
-                           numberOfPoints = 1000,
-                           scanMin = energyMin,
-                           scanMax = energyMax)
-    echo "INFO: Downloading angle: ", angle
-    client.download(req)
+  var pp = initProcPool((
+    proc(r, w: cint) =
+      let i = open(r)
+      var angle: float
+      while i.uRd(angle):
+        let req = initHenkeReq(fixedValue = angle,
+                               numberOfPoints = numEnergies,
+                               scanMin = energyMin,
+                               scanMax = energyMax)
+        echo "INFO: Requesting angle: ", angle
+        var success = false
+        while not success:
+          # failed once, try once more. If we fail again, stop
+          try:
+            success = client.download(req)
+            if not success:
+              echo "WARN: Failed to download due to missing data at: ", $angle, ". Trying again..."
+          except HttpRequestError:
+            echo "WARN: Failed to download due to HttpRequestError: ", $req, ". Trying again..."
 
-let client = newHttpClient()
+        discard w.wrLine "INFO: Finished file angle: " & $angle
+    ), framesLines, jobs)
+  proc prn(s: MSlice) = echo s
+  pp.evalOb angles, prn
 
-client.downloadAllAngles()
+proc main(jobs: int) =
+  let client = newHttpClient()
+
+  let ϑs = linspace(0.0, 1.5, 1000) # [0.5] # the angle under which we check
+  client.downloadAllAngles(energyMin = 30.0, energyMax = 15000.0,
+                           angleMin = 0.0, angleMax = 1.5,
+                           numAngles = 1000, numEnergies = 1000,
+                           jobs = jobs)
+
+when isMainModule:
+  import cligen
+  dispatch main
 
 when false:
   import datamancer
