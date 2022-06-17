@@ -1924,6 +1924,7 @@ proc traceAxion(res: var Axion,
   pointDetectorWindow[0] = - pointDetectorWindow[0] + ChipCenterX.float # for the view from the detector to the sun
   pointDetectorWindow[1] = pointDetectorWindow[1] + ChipCenterY.float
 
+  ## TODO: replace by calculation based on user input solar tracking time
   if cfXrayTest notin flags:
     case expSetup.kind
     of esCAST:
