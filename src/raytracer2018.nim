@@ -1596,36 +1596,35 @@ proc traceAxion(res: var Axion,
 
   ##get the length of the path of the axion in the magnetic field to get the probability of conversion later
   let pathCB = (pointExitCBMagneticField - intersect).length.mm
-  var pointExitCB = vec3(0.0)
 
   ## Return if... WRITE ME
   if not lineIntersectsCircle(rayOrigin, pointExitCBMagneticField,
                               centerVecs.exitCB, expSetup.magnet.radiusCB):
     return
 
-  pointExitCB = rayOrigin + ((centerVecs.exitCB[2] - rayOrigin[2]) / (
-      pointExitCBMagneticField - rayOrigin)[2]) * (pointExitCBMagneticField - rayOrigin)
-
-  var pointExitPipeCBVT3 = vec3(0.0)
+  var pointExitCB = rayOrigin +
+    ((centerVecs.exitCB[2] - rayOrigin[2]) /
+     (pointExitCBMagneticField - rayOrigin)[2]) *
+    (pointExitCBMagneticField - rayOrigin)
 
   ## Return if... WRITE ME
   if not lineIntersectsCircle(pointExitCBMagneticField, pointExitCB,
                               centerVecs.exitPipeCBVT3, expSetup.pipes.coldBoreToVT3.radius):
     return
 
-  pointExitPipeCBVT3 = pointExitCBMagneticField + ((
-      centerVecs.exitPipeCBVT3[2] - pointExitCBMagneticField[2]) / (
-      pointExitCB - pointExitCBMagneticField)[2]) * (pointExitCB - pointExitCBMagneticField)
-  var pointExitPipeVT3XRT = vec3(0.0)
+  let pointExitPipeCBVT3 = pointExitCBMagneticField +
+   ((centerVecs.exitPipeCBVT3[2] - pointExitCBMagneticField[2]) /
+    (pointExitCB - pointExitCBMagneticField)[2]) *
+   (pointExitCB - pointExitCBMagneticField)
 
   ## Return if... WRITE ME
   if not lineIntersectsCircle(pointExitCB, pointExitPipeCBVT3,
                               centerVecs.exitPipeVT3XRT, expSetup.pipes.coldBoreToVT3.radius):
     return
 
-  pointExitPipeVT3XRT = pointExitCB + ((centerVecs.exitPipeVT3XRT[2] -
-      pointExitCB[2]) / (pointExitPipeCBVT3 - pointExitCB)[2]) * (
-      pointExitPipeCBVT3 - pointExitCB)
+  let pointExitPipeVT3XRT = pointExitCB +
+    ((centerVecs.exitPipeVT3XRT[2] - pointExitCB[2]) / (pointExitPipeCBVT3 - pointExitCB)[2]) *
+    (pointExitPipeCBVT3 - pointExitCB)
 
   var vectorBeforeXRT = pointExitPipeVT3XRT - pointExitCB
 
@@ -1655,8 +1654,7 @@ proc traceAxion(res: var Axion,
   #echo "before ", pointExitCB, " ", vectorBeforeXRT, " after ", pointExitCBXRT, " ", vectorXRT
 
 
-  var pointEntranceXRT = pointExitCB + factor * vectorXRT
-
+  let pointEntranceXRT = pointExitCB + factor * vectorXRT
   vectorBeforeXRT = vectorXRT
   ## Coordinate transform from cartesian to polar at the XRT entrance
   let
@@ -1838,12 +1836,12 @@ proc traceAxion(res: var Axion,
 
   vectorBeforeXRT = - vectorBeforeXRT # because we have to get the angles from the perspective of the XRT
 
-  var vectorBeforeXRTPolar = vec3(0.0) #(r,theta,phi)
-  vectorBeforeXRTPolar[0] = vectorBeforeXRT.length
-  vectorBeforeXRTPolar[1] = radToDeg(arccos(vectorBeforeXRT[
-      0]/vectorBeforeXRTPolar[0]))
-  vectorBeforeXRTPolar[2] = radToDeg(arctan2(vectorBeforeXRT[2], (
-      vectorBeforeXRT[1])))
+  let vecLength = vectorBeforeXRT.length
+  var vectorBeforeXRTPolar = vec3(
+    vecLength, # r
+    radToDeg(arccos(vectorBeforeXRT[0] / vecLength)), # θ
+    radToDeg(arctan2(vectorBeforeXRT[2], vectorBeforeXRT[1])) # φ
+  )
 
   #this is the pitch angle # not sure why plus 90
   vectorBeforeXRTPolar[1] = vectorBeforeXRTPolar[1] - 90.0
