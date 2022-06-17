@@ -1482,11 +1482,11 @@ proc lineIntersectsOpaqueTelescopeStructures(
     elif vectorEntranceXRTCircular[0] < 151.6 and vectorEntranceXRTCircular[0] > (151.6 - 20.9):
       result = false
     elif vectorEntranceXRTCircular[0] > 64.7:
-      ## XXX: why 16? strips?
+      # iterate all strips of the spider structure
       for i in 0 .. 16:
         #spider strips (actually wider for innermost but doesnn't matter because it doesnt reach the window anyways)
-        if ((phiFlat >= (-1.25 + 22.5 * i.float) and phiFlat <= (1.25 + 22.5 * i.float))) or
-           ((phiFlatSpider >= (-1.25 + 22.5 * i.float) and phiFlatSpider <= (1.25 + 22.5 * i.float))):
+        if ((phiFlat >= (-1.145 + 22.5 * i.float) and phiFlat <= (1.145 + 22.5 * i.float))) or
+           ((phiFlatSpider >= (-1.145 + 22.5 * i.float) and phiFlatSpider <= (1.145 + 22.5 * i.float))):
           result = false
           break
 
