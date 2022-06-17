@@ -1897,10 +1897,12 @@ proc traceAxion(res: var Axion,
   # one kinds field + the others we should have some additional field or something #made two assignments and now it works
   ## TODO: transmission of window material etc. can also be modeled using ray tracing.
   ## probability that transmission happens at all!
+
   let
     stripDistWindow = detectorSetup.stripDistWindow
     stripWidthWindow = detectorSetup.stripWidthWindow
   var transWindow = 0.0
+  ## XXX: move to a separate proc!
   for i in 0..(detectorSetup.numberOfStrips/2).round.int - 1:
     if abs(y).mm > (1.0 * i.float + 0.5) * stripDistWindow + i.float * stripWidthWindow and
       abs(y).mm < (1.0 * i.float + 0.5) * stripDistWindow + (i.float + 1.0) * stripWidthWindow:
