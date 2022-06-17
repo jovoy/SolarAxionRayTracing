@@ -1800,11 +1800,6 @@ proc traceAxion(res: var Axion,
   res.pixvalsX = valuesPix[0]
   res.pixvalsY = valuesPix[1]
 
-  var centerDetectorWindow = vec3(0.0)
-  centerDetectorWindow[0] = 0.0
-  centerDetectorWindow[1] = 0.0
-  centerDetectorWindow[2] = 0.0 #expSetup.RAYTRACER_DISTANCE_FOCAL_PLANE_DETECTOR_WINDOW # + pointEntranceXRT[2] + expSetup.RAYTRACER_FOCAL_LENGTH_XRT
-
   ## Calculate the weight for each axion as the probability of its signal arriving at the detector which consists of:
   ## The probability of conversion into Xrays in the path in the homogeneous magnetic field
   ## NOT! The fraction of the flux of actions emitted from the given point in the sun per second, that actually arrives at the random point in the coldbore end, because this is handled by biasing the random origin
