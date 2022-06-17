@@ -316,6 +316,21 @@ proc toRad(wyKind: WindowYearKind): float =
   of wyIAXO:
     result = degToRad(20.0) # who knows
 
+proc rotateInX(vector: Vec3, angle: Deg): Vec3 =
+  ## Rotation of a vector in x direction aka around the y axis counterclockwise when angle is positive 
+  ## Or rotation of the coordinate system the vector is in clockwise
+  result = vec3(vector[0] * cos(angle) + vector[2] * sin(angle),
+                vector[1],
+                vector[2] * cos(angle) - vector[0] * sin(angle))
+
+proc rotateInY(vector: Vec3, angle: Deg): Vec3 =
+  ## Rotation of a vector in y direction aka around the x axis counterclockwise when angle is positive 
+  ## Or rotation of the coordinate system the vector is in clockwise
+  result = vec3(vector[0],
+                vector[1] * cos(angle) - vector[2] * sin(angle),
+                vector[2] * cos(angle) + vector[1] * sin(angle))
+
+
 func conversionProb(B: Tesla, g_aγ: GeV⁻¹, length: MilliMeter): UnitLess =
   let L = length.mm.to(m)
   result = pow( g_aγ * B.toNaturalUnit() * L.toNaturalUnit() / 2.0, 2.0 )
