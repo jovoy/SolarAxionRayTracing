@@ -1327,37 +1327,56 @@ template eval(interp: InterpolatorType[float], energy: keV): untyped =
   interp.eval(energy.float)
 
 proc computeReflectivity(expSetup: ExperimentSetup, energy: keV,
-                         alpha1, alpha2: float,
+                         hitLayer: int, # the layer of the telescope hit
+                         transmissionMagnet: float,
+                         p, ya, alpha1, alpha2: float,
                          flags: set[ConfigFlags]): tuple[reflect: float,
-                                                       weight: float] =
+                                                         weight: float] =
   ## Computes the reflectivity of the two reflections in the telescope of `expSetup`
   ## according to the given `angles1/2` and the `energy`.
-  when false:
-    if cfIgnoreReflection notin flags:
-      ## TODO: This needs to be replaced by a 2D interpolation!
-      {.gcsafe.}:
-        let
-          reflectionProb1 = expSetup.goldReflectivity.eval(alpha1, energyAx.float)
-          reflectionProb2 = expSetup.goldReflectivity.eval(alpha2, energyAx.float)
-        res.reflect = reflectionProb1 * reflectionProb2
-        weight = reflectionProb1 * reflectionProb2 * transmissionMagnet#also yaw and pitch dependend
-    else:
-      # without gold reflection just use perfect reflectivity
-      weight = transmissionMagnet#also yaw and pitch dependend
+  if cfIgnoreReflection in flags: # short circut for
+    result.reflect = 1.0
+    result.weight = transmissionMagnet
+    return result
 
-    #result =
-    ## XXX: finish me!!!
-    case expSetup.kind
-    of esCAST:
-      let transmissionTel = expSetup.telescopeTransmission.eval(energyAx)
-      weight = (transmissionTel *
-                transmissionTelescopePitch * transmissionTelescopeYaw *
-                transmissionMagnet) #transmission probabilities times axion emission rate times the flux fraction
-    of esBabyIAXO:
-      discard
+  let refl = expSetup.telescope.reflectivity
+  case refl.kind
+  of rkEffectiveArea:
+    # we compute the pitch and yaw angles under which the ray reaches the telescope.
+    # Based on a very coarse set of data points for the efficiency under yaw/pitch angles
+    # a polynomial approximation (for the LLNL CAST telescope!) is used to compute the
+    # final efficiency.
+    let
+      transmissionTelescopePitch = (0.0008*p*p*p*p + 1e-04*p*p*p - 0.4489*p*p -
+          0.3116*p + 96.787) / 100.0
+      transmissionTelescopeYaw = (6.0e-7 * pow(ya, 6.0) - 1.0e-5 * pow(ya, 5.0) -
+          0.0001 * pow(ya, 4.0) + 0.0034 * pow(ya, 3.0) - 0.0292 * pow(ya, 2.0) -
+          0.1534 * ya + 99.959) / 100.0
+    let transmissionTel = refl.telescopeTransmission.eval(energy)
+    result.reflect = transmissionTel * transmissionTelescopePitch * transmissionTelescopeYaw
+    # transmission probabilities times axion emission rate times the flux fraction
+    result.weight = (result.reflect * transmissionMagnet)
+  of rkSingleCoating:
+    ## TODO: This needs to be replaced by a 2D interpolation!
+    {.gcsafe.}: # `{.gcsafe.}` due to closures in `numericalnim` missing the tag
+      let
+        reflectionProb1 = refl.reflectivity.eval(alpha1, energy.float)
+        reflectionProb2 = refl.reflectivity.eval(alpha2, energy.float)
+      result.reflect = reflectionProb1 * reflectionProb2
+      result.weight = result.reflect * transmissionMagnet#also yaw and pitch dependend
+  of rkMultiCoating:
+    # use the hit layer to know which interpolator we have to use
+    let layerIdx = refl.layers.lowerBound(hitLayer)
+    let reflLayer = refl.reflectivities[layerIdx]
+    {.gcsafe.}: # `{.gcsafe.}` due to closures in `numericalnim` missing the tag
+      let
+        reflectionProb1 = reflLayer.eval(alpha1, energy.float)
+        reflectionProb2 = reflLayer.eval(alpha2, energy.float)
+      result.reflect = reflectionProb1 * reflectionProb2
+      result.weight = result.reflect * transmissionMagnet#also yaw and pitch dependend
 
 proc computeMagnetTransmission(
-  expSetup: ExperimentSetup, energyAx: keV, distancePipe: Meter, pathCB: mm, ya: float,
+  expSetup: ExperimentSetup, energy: keV, distancePipe: Meter, pathCB: mm, ya: float,
   flags: set[ConfigFlags]
      ): float =
   ## Computes the effective 'transmission' through the magnet. This means the conversion
@@ -1385,7 +1404,7 @@ proc computeMagnetTransmission(
       probConversionMagnetGas =
         if cfIgnoreConvProb notin flags:
           axionConversionProb2(
-            mAxion, energyAx, pGas.float,
+            mAxion, energy, pGas.float,
             expSetup.magnet.tGas.float, pathCB.to(m).float,
             expSetup.magnet.radiusCB.to(m).float,
             g_aγ.float, expSetup.magnet.B.float
@@ -1393,7 +1412,7 @@ proc computeMagnetTransmission(
         else:
           1.0 # else perfect transmission
       absorbtionXrays = intensitySuppression2(
-        energyAx, pathCB.to(m).float,
+        energy, pathCB.to(m).float,
         distancePipe.float,
         pGas.float,
         expSetup.magnet.tGas.float,
@@ -1839,14 +1858,7 @@ proc traceAxion(res: var Axion,
   #this is the yaw angle, floor to roof
   vectorBeforeXRTPolar[2] = vectorBeforeXRTPolar[2] + 90.0
   let ya = vectorBeforeXRTPolar[2]
-  let
-    transmissionTelescopePitch = (0.0008*p*p*p*p + 1e-04*p*p*p - 0.4489*p*p -
-        0.3116*p + 96.787) / 100.0
-    # TODO: change this for CAST in the same way BabyIAXO was done with the direct reflectivity
-    transmissionTelescopeYaw = (6.0e-7 * pow(ya, 6.0) - 1.0e-5 * pow(ya, 5.0) -
-        0.0001 * pow(ya, 4.0) + 0.0034 * pow(ya, 3.0) - 0.0292 * pow(ya, 2.0) -
-        0.1534 * ya + 99.959) / 100.0
-    distancePipe = (pointDetectorWindow[2] - pointExitCBZylKart[2]).mm.to(m) # needs to be in meter
+  let distancePipe = (pointDetectorWindow[2] - pointExitCBZylKart[2]).mm.to(m) # needs to be in meter
 
   ## this is the transformation probability of an axion into a photon, if an axion
   ## flying straight through the magnet had one of 100%, angular dependency of the primakoff effect
@@ -1856,7 +1868,9 @@ proc traceAxion(res: var Axion,
   res.yawAngles = ya
 
   var weight = 1.0
-  (res.reflect, weight) = expSetup.computeReflectivity(energyAx, alpha1, alpha2, flags)
+  (res.reflect, weight) = expSetup.computeReflectivity(
+    energyAx, hitLayer, res.transmissionMagnet, p, ya, alpha1, alpha2, flags
+  )
 
   if testXray != false:
     if cfXrayTest notin flags:
