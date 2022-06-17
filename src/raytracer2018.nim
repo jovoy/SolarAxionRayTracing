@@ -317,19 +317,25 @@ proc toRad(wyKind: WindowYearKind): float =
     result = degToRad(20.0) # who knows
 
 proc rotateInX(vector: Vec3, angle: Radian): Vec3 =
-  ## Rotation of a vector in x direction aka around the y axis counterclockwise when angle is positive 
+  ## Rotation of a vector in x direction aka around the y axis counterclockwise when angle is positive and the y axis points towards observer
   ## Or rotation of the coordinate system the vector is in clockwise
   result = vec3(vector[0] * cos(angle) + vector[2] * sin(angle),
                 vector[1],
                 vector[2] * cos(angle) - vector[0] * sin(angle))
 
 proc rotateInY(vector: Vec3, angle: Deg): Vec3 =
-  ## Rotation of a vector in y direction aka around the x axis counterclockwise when angle is positive 
+  ## Rotation of a vector in y direction aka around the x axis counterclockwise when angle is positive and the x axis points towards observer
   ## Or rotation of the coordinate system the vector is in clockwise
   result = vec3(vector[0],
                 vector[1] * cos(angle) - vector[2] * sin(angle),
                 vector[2] * cos(angle) + vector[1] * sin(angle))
 
+proc rotateAroundZ(vector: Vec3, angle: Deg): Vec3 =
+  ## Rotation of a vector around the z axis counterclockwise when angle is positive and the z axis points away from the observer
+  ## Or rotation of the coordinate system the vector is in clockwise
+  result = vec3(vector[0] * cos(angle) + vector[1] * sin(angle),
+                vector[1] * cos(angle) - vector[0] * sin(angle),
+                vector[2])
 
 func conversionProb(B: Tesla, g_aγ: GeV⁻¹, length: MilliMeter): UnitLess =
   let L = length.mm.to(m)
@@ -1886,14 +1892,9 @@ proc traceAxion(res: var Axion,
     if abs(pointDetectorWindow[0].mm) > ChipCenterX or abs(pointDetectorWindow[1].mm) > ChipCenterY:
       return
 
-  var pointDetectorWindowTurned = vec3(0.0)
-  let theta = detectorSetup.theta
-  pointDetectorWindowTurned[0] = pointDetectorWindow[0] * cos(theta) +
-      pointDetectorWindow[1] * sin(theta)
-  pointDetectorWindowTurned[1] = pointDetectorWindow[1] * cos(theta) -
-      pointDetectorWindow[0] * sin(theta)
-  pointDetectorWindowTurned[2] = pointDetectorWindow[2]
-  let
+  let 
+    theta = detectorSetup.theta
+    pointDetectorWindowTurned = rotateAroundZ(pointDetectorWindow, theta)
     x = pointDetectorWindowTurned[0]
     y = pointDetectorWindowTurned[1]
 
