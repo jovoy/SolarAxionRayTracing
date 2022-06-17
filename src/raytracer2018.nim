@@ -1735,27 +1735,16 @@ proc traceAxion(res: var Axion,
      ):
     return
 
-  ## FIX ME
-  var pointEntranceXRTZylKart = vec3(0.0)
-  pointEntranceXRTZylKart[0] = pointEntranceXRT[0]
-  pointEntranceXRTZylKart[1] = pointEntranceXRT[1]
-  pointEntranceXRTZylKart[2] = pointEntranceXRT[2] #- centerVecs.exitPipeVT3XRT[2]
-
-  var pointExitCBZylKart = vec3(0.0)
-  pointExitCBZylKart[0] = pointExitCB[0]
-  pointExitCBZylKart[1] = pointExitCB[1]
-  pointExitCBZylKart[2] = pointExitCB[2] #- centerVecs.exitPipeVT3XRT[2]
-
   let
     beta3 = 3.0 * beta
     distanceMirrors = cos(beta) * (xSep + expSetup.telescope.lMirror)
-    pointMirror1 = findPosXRT(pointEntranceXRTZylKart, pointExitCBZylKart, r1,
+    pointMirror1 = findPosXRT(pointEntranceXRT, pointExitCB, r1,
                               r2, beta, expSetup.telescope.lMirror, 0.0.mm, 0.001.mm, 1.0.mm, 1.1.mm)
 
 
   let
-    vectorAfterMirror1 = getVectoraAfterMirror(pointEntranceXRTZylKart,
-        pointExitCBZylKart, pointMirror1, beta, "vectorAfter")
+    vectorAfterMirror1 = getVectoraAfterMirror(pointEntranceXRT,
+        pointExitCB, pointMirror1, beta, "vectorAfter")
     pointAfterMirror1 = pointMirror1 + 200.0 * vectorAfterMirror1
     pointLowerMirror = findPosXRT(
       pointAfterMirror1, pointMirror1,
@@ -1777,14 +1766,18 @@ proc traceAxion(res: var Axion,
   if pointMirror2[0] == 0.0 and pointMirror2[1] == 0.0 and pointMirror2[2] ==
       0.0: return ## with more uncertainty, 10% of the 0.1% we loose here can be recovered, but it gets more uncertain
   let
-    vectorAfterMirrors = getVectoraAfterMirror(pointAfterMirror1, pointMirror1,
-        pointMirror2, beta3, "vectorAfter")
+    vectorAfterMirrors = getVectoraAfterMirror(
+      pointAfterMirror1, pointMirror1, pointMirror2, beta3, "vectorAfter"
+    )
     pointAfterMirror2 = pointMirror2 + 200.0 * vectorAfterMirrors
   let
-    angle1 = getVectoraAfterMirror(pointEntranceXRTZylKart,
-    pointExitCBZylKart, pointMirror1, beta, "angle")
-    angle2 = getVectoraAfterMirror(pointAfterMirror1, pointMirror1,
-        pointMirror2, beta3, "angle")
+    angle1 = getVectoraAfterMirror(
+      pointEntranceXRT,
+      pointExitCB, pointMirror1, beta, "angle"
+    )
+    angle2 = getVectoraAfterMirror(
+      pointAfterMirror1, pointMirror1, pointMirror2, beta3, "angle"
+    )
     alpha1 = angle1[1]
     alpha2 = angle2[1]
   #echo (angle1[1].degToRad) , " ", (r1.float - (allR1[hitLayer - 1] + expSetup.telescope.allThickness[hitLayer - 1]).float) / (expSetup.telescope.lMirror.float - pointMirror1[2]) #radToDeg(arcsin(r1.float - (allR1[hitLayer - 1] + expSetup.telescope.allThickness[hitLayer - 1]).float) / (expSetup.telescope.lMirror.float - pointMirror1[2]))
@@ -1858,7 +1851,7 @@ proc traceAxion(res: var Axion,
   #this is the yaw angle, floor to roof
   vectorBeforeXRTPolar[2] = vectorBeforeXRTPolar[2] + 90.0
   let ya = vectorBeforeXRTPolar[2]
-  let distancePipe = (pointDetectorWindow[2] - pointExitCBZylKart[2]).mm.to(m) # needs to be in meter
+  let distancePipe = (pointDetectorWindow[2] - pointExitCB[2]).mm.to(m) # needs to be in meter
 
   ## this is the transformation probability of an axion into a photon, if an axion
   ## flying straight through the magnet had one of 100%, angular dependency of the primakoff effect
