@@ -85,6 +85,7 @@ type
     tGas: K            ## Temperature of a possible gas inside the bore
 
   Telescope = object
+    kind: TelescopeKind
     optics_entrance: seq[MilliMeter]
     optics_exit: seq[MilliMeter]
     telescope_turned_x: Degree
@@ -1082,6 +1083,7 @@ proc initTelescope(optics: TelescopeKind): Telescope =
   case optics
   of tkLLNL:
     result = Telescope(
+      kind: tkLLNL,
       optics_entrance: @[-83.0, 0.0, 0.0].mapIt(it.mm),
       optics_exit: @[-83.0, 0.0, 454.0].mapIt(it.mm),
       telescope_turned_x: 0.0.°, #the angle by which the telescope is turned in respect to the magnet
@@ -1105,6 +1107,7 @@ proc initTelescope(optics: TelescopeKind): Telescope =
     )
   of tkCustomBabyIAXO:
     result = Telescope(
+      kind: tkCustomBabyIAXO,
       optics_entrance: @[0.0, -0.0, 0.0].mapIt(it.mm),
       optics_exit: @[0.0, -0.0, 600.0].mapIt(it.mm),
       telescope_turned_x: 0.0.°, #the angle by which the telescope is turned in respect to the magnet
@@ -1433,22 +1436,15 @@ proc lineIntersectsOpaqueTelescopeStructures(
   testVector, vectorEntranceXRTCircular, vectorXRT, pointExitCB, pointEntranceXRT: Vec3[float],
   onlyInnerPart = false
      ): bool =
-
-  ## XXX: `onlyInnerPart` is a hack? for the case where we only want to enter the
-  ## first branch of the `if vectorEntrance...` for `esBabyIAXO`.
-  ##
-  ## XXX: Also the expSetup should become a `telescopeKind` case, no?
-  ##
-  ## XXX: can we please clean up the esBabyIAXO branch? Remove the commented code?
-
-  ## there is a 2mm wide graphite block between each glass mirror, to seperate them
-  ## in the middle of the X-ray telescope. Return if hit
-  ## BabyIAXO return if X-ray its the spider structure
-  case expSetup.kind
-  of esCAST:
-    ## graphite blockers of the LLNL optics
+  ## Checks whether the incoming ray hits any of the fully opaque parts of the telescope,
+  ## usually the support structure holding the shells in place.
+  case expSetup.telescope.kind
+  of tkLLNL:
+    ## there is a 2mm wide graphite block between each glass mirror, to seperate them
+    ## in the middle of the X-ray telescope. Return if hit
     if pointEntranceXRT[1] <= 1.0 and pointEntranceXRT[1] >= -1.0: return
-  of esBabyIAXO:
+  of tkCustomBabyIAXO:
+    ## BabyIAXO return if X-ray its the spider structure
     ## here we have a spider structure for the XMM telescope:
     ### 3D spider structure 1st draft ###
 
@@ -1457,9 +1453,8 @@ proc lineIntersectsOpaqueTelescopeStructures(
     let
       (radius, phiFlat) = radiusAndPhi(pointEntranceXRT)
       (radiusSpider, phiFlatSpider) = radiusAndPhi(pointEntranceSpider)
-
-    ## XXX: the checks for the `vectorEntranceXRTCircular` stuff is extremely confusing!
-    if onlyInnerPart or vectorEntranceXRTCircular[0] <= 64.7: #and vectorEntranceXRTCircular[0] > expSetup.holeInOptics.float * expSetup.numberOfHoles.float: #doesnt really matter because there are no mirrors in the middle and these axions dont reach the window anyways
+    # `onlyInnerPart` is used later in code to force entering this branch
+    if onlyInnerPart or vectorEntranceXRTCircular[0] <= 64.7:
       let nHoles = expSetup.telescope.numberOfHoles
       for l in -(nHoles - ceil(nHoles.float / 2.0).int) .. (nHoles - ceil(nHoles.float / 2.0).int):
         var centerHole = testVector
@@ -1468,9 +1463,6 @@ proc lineIntersectsOpaqueTelescopeStructures(
             centerHole[1] += 2.0 * l.float * expSetup.telescope.holeInOptics.float
           else:
             centerHole[0] += 2.0 * (l + (l / abs(l))).float * expSetup.telescope.holeInOptics.float
-          #if abs(l) < 3: typeHole = expSetup.holetype
-          #else: typeHole = "square"
-        #else: typeHole = "square"
         if lineIntersectsObject(expSetup.telescope.holeType, pointExitCB, pointEntranceXRT,
                                 centerHole, expSetup.telescope.holeInOptics):
           result = true
@@ -1484,11 +1476,15 @@ proc lineIntersectsOpaqueTelescopeStructures(
     elif vectorEntranceXRTCircular[0] > 64.7:
       # iterate all strips of the spider structure
       for i in 0 .. 16:
-        #spider strips (actually wider for innermost but doesnn't matter because it doesnt reach the window anyways)
+        # spider strips (actually wider for innermost but doesn't matter because
+        # it doesnt reach the window anyways)
         if ((phiFlat >= (-1.145 + 22.5 * i.float) and phiFlat <= (1.145 + 22.5 * i.float))) or
            ((phiFlatSpider >= (-1.145 + 22.5 * i.float) and phiFlatSpider <= (1.145 + 22.5 * i.float))):
           result = false
           break
+  else:
+    doAssert false, "The telescope kind " & $expSetup.telescope.kind & " does not have any opaque " &
+      "structures implemented yet."
 
 proc traceAxion(res: var Axion,
                 centerVecs: CenterVectors,
@@ -1872,7 +1868,7 @@ proc traceAxion(res: var Axion,
   pointDetectorWindow[1] -= expSetup.detectorInstall.transversalShift.float
   if weight != 0:
     res.passedTillWindow = true
-  #echo h, " ", pointEntranceXRT, " ", pointDetectorWindow
+
   ##Detector window:##
   if cfIgnoreDetWindow notin flags and sqrt(
       pointDetectorWindow[0].mm * pointDetectorWindow[0].mm +
