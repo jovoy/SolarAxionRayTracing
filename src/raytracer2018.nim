@@ -1077,6 +1077,8 @@ proc initPipes(setup: ExperimentSetupKind): Pipes =
 
 proc initTelescope(optics: TelescopeKind): Telescope =
   ## TODO: add telescope section to the config file!
+  # Note: The required other angles R2, R3, R4 and R5 are computed in the code
+  # based on R1 and the angles.
   case optics
   of tkLLNL:
     result = Telescope(
