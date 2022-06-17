@@ -1657,7 +1657,7 @@ proc traceAxion(res: var Axion,
   ## Calculate the way of the axion through the telescope by manually reflecting the ray on the two mirror layers and then ending up before the detector ##
 
   var
-    dist: seq[MilliMeter]
+    minDist: MilliMeter = Inf.mm # the minimal (positive) distance between ray and telescope layers
     r1 = 0.0.mm
     r2 = 0.0.mm
     r3 = 0.0.mm
@@ -1665,8 +1665,7 @@ proc traceAxion(res: var Axion,
     r5 = 0.0.mm
     beta = 0.0.Radian ## in degree
     xSep = 0.0.mm
-    h: int
-    testXray = false
+    hitLayer: int # the integer of the layer that was hit
     lengthTelescope = (expSetup.telescope.lMirror + 0.5 * xSep) * cos(expSetup.telescope.allAngles[0].to(Radian)) +
                       (expSetup.telescope.lMirror + 0.5 * xSep) * cos(3.0 * expSetup.telescope.allAngles[0].to(Radian))
     centerEndXRT = vec3(0.0)
@@ -1674,28 +1673,37 @@ proc traceAxion(res: var Axion,
   centerEndXRT[2] = lengthTelescope.float
 
   let allR1 = expSetup.telescope.allR1
-  if vectorEntranceXRTCircular[0].mm > allR1[allR1.len - 1]: return
+  # remove rays that are further out than outer most layer
+  if vectorEntranceXRTCircular[0].mm > allR1[allR1.high]: return
+  # walk all layers and check which one was hit, if glass is hit remove ray
+  ## TODO: possible optimization: as the layers are ordered from inner to outer, don't
+  ## we always go from most negative to most positive in distance? I.e. the first positive
+  ## distance value is also the smallest one? If so, we could immediately break after that
+  ## layer!
   for j in 0 ..< allR1.len:
     # get rid of where the X-rays hit the glass frontal
     if vectorEntranceXRTCircular[0].mm > allR1[j] and
         vectorEntranceXRTCircular[0].mm < (allR1[j] + expSetup.telescope.allThickness[j]):
       return
-    if allR1[j] - vectorEntranceXRTCircular[0].mm > 0.0.mm:
-      dist.add(allR1[j] - vectorEntranceXRTCircular[0].mm)
+    let dist = allR1[j] - vectorEntranceXRTCircular[0].mm # distance of ray from layer j
+    # if we are not above the layer and smaller than latest `minDist`, assign
+    if dist > 0.0.mm and dist < minDist:
+      minDist = dist
+      hitLayer = j # j-th layer currently hit layer
+      # now get/compute the radii for the hit layer
+      r1 = allR1[j]
+      beta = expSetup.telescope.allAngles[j].to(Radian)
+      xSep = expSetup.telescope.allXsep[j]
+      r2 = r1 - expSetup.telescope.lMirror * sin(beta)
+      r3 = r2 - 0.5 * xSep * tan(beta)
+      r4 = r3 - 0.5 * xSep * tan(3.0 * beta)
+      r5 = r4 - expSetup.telescope.lMirror * sin(3.0 * beta)
 
-  if testXray == false:
-    for k in 0..<allR1.len:
-      if min(dist) == allR1[k] - vectorEntranceXRTCircular[0].mm:
-        h = k
-
-
-        r1 = allR1[h]
-        beta = expSetup.telescope.allAngles[h].to(Radian)
-        xSep = expSetup.telescope.allXsep[h]
-        r2 = r1 - expSetup.telescope.lMirror * sin(beta)
-        r3 = r2 - 0.5 * xSep * tan(beta)
-        r4 = r3 - 0.5 * xSep * tan(3.0 * beta)
-        r5 = r4 - expSetup.telescope.lMirror * sin(3.0 * beta)
+  ## XXX: why do we return if we hit layer 0? (this was `r1 == allR1[0]` before) Does that imply
+  ## we're further inside than the inner most layer? Later in the code we always use `hitLayer - 1`,
+  ## but I still don't quite get it.
+  if hitLayer == 0:
+    return
 
   ## Why do we check for `lineIntersectsOpaqueTelescopeStructure` here again?
   if testXray and minDist > 100.0.mm and
@@ -1728,11 +1736,11 @@ proc traceAxion(res: var Axion,
     pointAfterMirror1 = pointMirror1 + 200.0 * vectorAfterMirror1
     pointLowerMirror = findPosXRT(
       pointAfterMirror1, pointMirror1,
-      allR1[h-1] + expSetup.telescope.allThickness[h-1],
-      allR1[h-1] -
-        expSetup.telescope.lMirror * sin(expSetup.telescope.allAngles[h-1].to(Radian)) +
-        expSetup.telescope.allThickness[h-1],
-      expSetup.telescope.allAngles[h-1].to(Radian),
+      allR1[hitLayer - 1] + expSetup.telescope.allThickness[hitLayer - 1],
+      allR1[hitLayer - 1] -
+        expSetup.telescope.lMirror * sin(expSetup.telescope.allAngles[hitLayer - 1].to(Radian)) +
+        expSetup.telescope.allThickness[hitLayer - 1],
+      expSetup.telescope.allAngles[hitLayer - 1].to(Radian),
       expSetup.telescope.lMirror,
       0.0.mm, 0.01.mm, 0.0.mm, 2.5.mm
     )
@@ -1740,7 +1748,7 @@ proc traceAxion(res: var Axion,
       pointAfterMirror1, pointMirror1, r4, r5, beta3,
       expSetup.telescope.lMirror, distanceMirrors, 0.01.mm, 0.0.mm, 2.5.mm
     )
-  #echo r1, " ", allR1[h-1], " ", r2, " ", allR1[h-1] - expSetup.telescope.lMirror * sin(expSetup.allAngles[h-1].to(Radian))
+  #echo r1, " ", allR1[hitLayer - 1], " ", r2, " ", allR1[hitLayer - 1] - expSetup.telescope.lMirror * sin(expSetup.allAngles[hitLayer - 1].to(Radian))
 
 
   if pointMirror2[0] == 0.0 and pointMirror2[1] == 0.0 and pointMirror2[2] ==
@@ -1756,10 +1764,13 @@ proc traceAxion(res: var Axion,
         pointMirror2, beta3, "angle")
     alpha1 = angle1[1]
     alpha2 = angle2[1]
-  #echo (angle1[1].degToRad) , " ", (r1.float - (allR1[h-1] + expSetup.telescope.allThickness[h-1]).float) / (expSetup.telescope.lMirror.float - pointMirror1[2]) #radToDeg(arcsin(r1.float - (allR1[h-1] + expSetup.telescope.allThickness[h-1]).float) / (expSetup.telescope.lMirror.float - pointMirror1[2]))
+  #echo (angle1[1].degToRad) , " ", (r1.float - (allR1[hitLayer - 1] + expSetup.telescope.allThickness[hitLayer - 1]).float) / (expSetup.telescope.lMirror.float - pointMirror1[2]) #radToDeg(arcsin(r1.float - (allR1[hitLayer - 1] + expSetup.telescope.allThickness[hitLayer - 1]).float) / (expSetup.telescope.lMirror.float - pointMirror1[2]))
 
   # getting rid of the X-rays that hit the shell below
-  if testXray == false and tan(angle1[1].degToRad) > (r1.float - (allR1[h-1] + expSetup.telescope.allThickness[h-1]).float) / (expSetup.telescope.lMirror.float - pointMirror1[2]):
+  if not testXray and
+     tan(angle1[1].degToRad) >
+     (r1.float - (allR1[hitLayer - 1] + expSetup.telescope.allThickness[hitLayer - 1]).float) /
+       (expSetup.telescope.lMirror.float - pointMirror1[2]):
     #if not (pointMirror1[2] +  0.0001 >  pointLowerMirror[2] and pointMirror1[2] -  0.0001 <  pointLowerMirror[2]):
     echo "hit Nickel"
     res.hitNickel = true
@@ -1840,6 +1851,7 @@ proc traceAxion(res: var Axion,
   )
   res.yawAngles = ya
 
+  var weight = 1.0
   (res.reflect, weight) = expSetup.computeReflectivity(energyAx, alpha1, alpha2, flags)
 
   if testXray != false:
@@ -1915,7 +1927,7 @@ proc traceAxion(res: var Axion,
   res.energiesAxAll = energyAx
   res.kinds = mkAr
   res.energiesAx = energyAx
-  res.shellNumber = h
+  res.shellNumber = hitLayer
 
   ###detector COS has (0/0) at the bottom left corner of the chip
   pointRadialComponent = sqrt(pointDetectorWindow[0]*pointDetectorWindow[0]+pointDetectorWindow[1]*pointDetectorWindow[1])
