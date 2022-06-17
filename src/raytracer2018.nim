@@ -1093,7 +1093,6 @@ proc initTelescope(optics: TelescopeKind): Telescope =
                83.405, 86.775, 90.272, 93.902, 97.668, 101.576, 105.632].mapIt(it.mm),
       allXsep: @[4.0, 4.171, 4.140, 4.221, 4.190, 4.228, 4.245, 4.288, 4.284,
                  4.306, 4.324, 4.373, 4.387, 4.403, 4.481].mapIt(it.mm),
-      #allR2: @[0.0, 60.731, 63.237, 65.838, 68.538, 71.339, 74.246, 77.263, 80.394, 83.642]
       # the angles of the mirror shells coresponding to the radii above
       allAngles: @[0.0, 0.579, 0.603, 0.628, 0.654, 0.680, 0.708, 0.737, 0.767,
                    0.798, 0.830, 0.863, 0.898, 0.933, 0.970].mapIt(it.Degree),
@@ -1109,10 +1108,6 @@ proc initTelescope(optics: TelescopeKind): Telescope =
       telescope_turned_x: 0.0.°, #the angle by which the telescope is turned in respect to the magnet
       telescope_turned_y: -0.05.°, #the angle by which the telescope is turned in respect to the magnet
       # Measurements of the Telescope mirrors in the following, R1 are the radii of the mirror shells at the entrance of the mirror
-      #allR3: @[151.61, 153.88, 156.17, 158.48, 160.82, 163.18, 165.57, 167.98, 170.42, 172.88, 175.37, 177.88, 180.42, 183.14, 185.89, 188.67, 191.48,
-      #194.32, 197.19, 200.09, 203.02, 206.03, 209.07, 212.14, 215.24, 218.37, 221.54, 224.74, 227.97, 231.24, 234.54, 237.87, 241.24, 244.85,
-      #248.5, 252.19, 255.92, 259.68, 263.48, 267.32, 271.2, 275.12, 279.08, 283.09, 287.14, 291.38, 295.72, 300.11, 304.54, 309.02, 313.54,
-      #318.11, 322.73, 327.4, 332.12, 336.88, 341.69, 346.55] #these are the real values but R3
       allThickness: @[0.468, 0.475, 0.482, 0.490, 0.497, 0.504, 0.511, 0.519, 0.526, 0.534,
                       0.542, 0.549, 0.557, 0.566, 0.574, 0.583, 0.591, 0.600, 0.609, 0.618,
                       0.627, 0.636, 0.646, 0.655, 0.665, 0.675, 0.684, 0.694, 0.704, 0.714,
