@@ -520,8 +520,6 @@ proc lineIntersectsCylinderOnce(point_1: Vec3, point_2: Vec3, centerBegin: Vec3,
   var
     alpha_x = arcsin((centerEnd[0] - centerBegin[0]) / abs(centerBegin[2] - centerEnd[2]))
     alpha_y = arcsin((centerEnd[1] - centerBegin[1]) / abs(centerBegin[2] - centerEnd[2]))
-    p_1 = point_1
-    p_2 = point_2
     offset_x = 0.0
     offset_y = 0.0
 
@@ -531,21 +529,15 @@ proc lineIntersectsCylinderOnce(point_1: Vec3, point_2: Vec3, centerBegin: Vec3,
   if abs(centerEnd[1]) <= abs(centerBegin[1]):
     offset_y = centerEnd[1]
   else: offset_y = centerBegin[1]
-  #echo alpha_y.radToDeg, " ", offset_y
+
+  p_1 = rotateInY(rotateInX(point_1, alpha_x), alpha_y)
   p_1[0] -= offset_x
   p_1[1] -= offset_y
-  p_1[0] = p_1[0] * cos(alpha_x) + p_1[2] * sin(alpha_x)
-  p_1[2] = p_1[2] * cos(alpha_x) - p_1[0] * sin(alpha_x)
-  p_1[1] = p_1[1] * cos(alpha_y) - p_1[2] * sin(alpha_y)
-  p_1[2] = p_1[2] * cos(alpha_y) + p_1[1] * sin(alpha_y)
 
+  p_2 = rotateInY(rotateInX(point_2, alpha_x), alpha_y)
   p_2[0] -= offset_x
   p_2[1] -= offset_y
-  p_2[0] = p_2[0] * cos(alpha_x) + p_2[2] * sin(alpha_x)
-  p_2[2] = p_2[2] * cos(alpha_x) - p_2[0] * sin(alpha_x)
-  p_2[1] = p_2[1] * cos(alpha_y) - p_2[2] * sin(alpha_y)
-  p_2[2] = p_2[2] * cos(alpha_y) + p_2[1] * sin(alpha_y)
-  #echo alpha_y," ", point_2, " after ", p_2
+
   let
     vector = p_2 - p_1
     lambda_dummy = (-1000.0 - p_1[2]) / vector[2]
@@ -591,19 +583,15 @@ proc getIntersectLineIntersectsCylinderOnce(
   if abs(centerEnd[1]) <= abs(centerBegin[1]):
     offset_y = centerEnd[1]
   else: offset_y = centerBegin[1]
+   
+  p_1 = rotateInY(rotateInX(point_1, alpha_x), alpha_y) # was after offset but shouldn't be?
   p_1[0] -= offset_x
   p_1[1] -= offset_y
-  p_1[0] = p_1[0] * cos(alpha_x) + p_1[2] * sin(alpha_x)
-  p_1[2] = p_1[2] * cos(alpha_x) - p_1[0] * sin(alpha_x)
-  p_1[1] = p_1[1] * cos(alpha_y) - p_1[2] * sin(alpha_y)
-  p_1[2] = p_1[2] * cos(alpha_y) + p_1[1] * sin(alpha_y)
 
+  p_2 = rotateInY(rotateInX(point_2, alpha_x), alpha_y)
   p_2[0] -= offset_x
   p_2[1] -= offset_y
-  p_2[0] = p_2[0] * cos(alpha_x) + p_2[2] * sin(alpha_x)
-  p_2[2] = p_2[2] * cos(alpha_x) - p_2[0] * sin(alpha_x)
-  p_2[1] = p_2[1] * cos(alpha_y) - p_2[2] * sin(alpha_y)
-  p_2[2] = p_2[2] * cos(alpha_y) + p_2[1] * sin(alpha_y)
+
   let
     vector = p_2 - p_1
     lambda_dummy = (-1000.0 - p_1[2]) / vector[2]
@@ -621,19 +609,15 @@ proc getIntersectLineIntersectsCylinderOnce(
                         (intersect_1[2] < centerEnd[2])
     intersect_2_valid = (intersect_2[2] > centerBegin[2]) and
                         (intersect_2[2] < centerEnd[2])
+
+  intersect_1 = rotateInY(rotateInX(intersect_1, -alpha_x), -alpha_y) # was after offset but shouldn't be?
   intersect_1[0] += offset_x
   intersect_1[1] += offset_y
-  intersect_1[0] = intersect_1[0] * cos(-alpha_x) + intersect_1[2] * sin(-alpha_x)
-  intersect_1[2] = intersect_1[2] * cos(-alpha_x) - intersect_1[0] * sin(-alpha_x)
-  intersect_1[1] = intersect_1[1] * cos(-alpha_y) - intersect_1[2] * sin(-alpha_y)
-  intersect_1[2] = intersect_1[2] * cos(-alpha_y) + intersect_1[1] * sin(-alpha_y)
 
+  intersect_2 = rotateInY(rotateInX(intersect_2, -alpha_x), -alpha_y)
   intersect_2[0] += offset_x
   intersect_2[1] += offset_y
-  intersect_2[0] = intersect_2[0] * cos(-alpha_x) + intersect_2[2] * sin(-alpha_x)
-  intersect_2[2] = intersect_2[2] * cos(-alpha_x) - intersect_2[0] * sin(-alpha_x)
-  intersect_2[1] = intersect_2[1] * cos(-alpha_y) - intersect_2[2] * sin(-alpha_y)
-  intersect_2[2] = intersect_2[2] * cos(-alpha_y) + intersect_2[1] * sin(-alpha_y)
+
   result = if (intersect_1_valid): intersect_1 else: intersect_2
 
 
