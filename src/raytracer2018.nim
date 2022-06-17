@@ -1786,13 +1786,10 @@ proc traceAxion(res: var Axion,
     expSetup.telescope.allXsep[8], d, expSetup.pipes.pipesTurned
   )
 
-
-  ## TODO: what is this? 2^{x - y} ??
   res.deviationDet = sqrt(
-    pow(2.0,
-        (pointEndDetector[0] - pointDetectorWindow[0])) +
-    pow(2.0,
-        (pointEndDetector[1] - pointDetectorWindow[1])))
+    pow((pointEndDetector[0] - pointDetectorWindow[0]), 2.0) +
+    pow((pointEndDetector[1] - pointDetectorWindow[1]), 2.0)
+  )
 
   var valuesPix = getPixelValue(pointEntranceXRT)
   res.pointdataXBefore = pointEntranceXRT[0]
