@@ -734,19 +734,12 @@ proc getPointDetectorWindow(pointMirror2: Vec3, pointAfterMirror2: Vec3,
 
   ## To calculate the point in the detector window because the pipes are turned by 3 degree (angle here in rad)
   ## First switch into new coordinate system  with its origin in the middle of the telescope and z axis turned towards the detector
-  let pipeRad = pipeAngle.to(Radian)
-  var pointMirror2Turned = vec3(0.0)
-  pointMirror2Turned[0] = (pointMirror2[0] * cos(pipeRad) +
-                           pointMirror2[2] * sin(pipeRad)) - dCBXray.float
-  pointMirror2Turned[1] = pointMirror2[1]
-  pointMirror2Turned[2] = (pointMirror2[2] * cos(pipeRad) -
-                           pointMirror2[0] * sin(pipeRad))
-  var pointAfterMirror2Turned = vec3(0.0)
-  pointAfterMirror2Turned[0] = (pointAfterMirror2[0] * cos(pipeRad) +
-                                pointAfterMirror2[2] * sin(pipeRad)) - dCBXray.float
-  pointAfterMirror2Turned[1] = pointAfterMirror2[1]
-  pointAfterMirror2Turned[2] = (pointAfterMirror2[2] * cos(pipeRad) -
-                                pointAfterMirror2[0] * sin(pipeRad))
+  let 
+    pipeRad = pipeAngle.to(Radian)
+    pointMirror2Turned = rotateInX(pointMirror2, pipeRad)
+    pointAfterMirror2Turned = rotateInX(pointAfterMirror2, pipeRad)
+  pointMirror2Turned[0] -= dCBXray.float
+  pointAfterMirror2Turned[0] -= dCBXray.float
   let vectorAfterMirror2 = pointAfterMirror2Turned - pointMirror2Turned
   ## Then the distance from the middle of the telescope to the detector can be calculated with the focal length
   ## Then n can be calculated as hown many times the vector has to be applied to arrive at the detector
