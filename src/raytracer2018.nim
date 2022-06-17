@@ -530,13 +530,9 @@ proc lineIntersectsCylinderOnce(point_1: Vec3, point_2: Vec3, centerBegin: Vec3,
     offset_y = centerEnd[1]
   else: offset_y = centerBegin[1]
 
-  p_1 = rotateInY(rotateInX(point_1, alpha_x), alpha_y)
-  p_1[0] -= offset_x
-  p_1[1] -= offset_y
+  p_1 = rotateInY(rotateInX(point_1, alpha_x), alpha_y) - vec3(offset_x, offset_y, 0.0)
 
-  p_2 = rotateInY(rotateInX(point_2, alpha_x), alpha_y)
-  p_2[0] -= offset_x
-  p_2[1] -= offset_y
+  p_2 = rotateInY(rotateInX(point_2, alpha_x), alpha_y) - vec3(offset_x, offset_y, 0.0)
 
   let
     vector = p_2 - p_1
@@ -584,13 +580,9 @@ proc getIntersectLineIntersectsCylinderOnce(
     offset_y = centerEnd[1]
   else: offset_y = centerBegin[1]
    
-  p_1 = rotateInY(rotateInX(point_1, alpha_x), alpha_y) # was after offset but shouldn't be?
-  p_1[0] -= offset_x
-  p_1[1] -= offset_y
+  p_1 = rotateInY(rotateInX(point_1, alpha_x), alpha_y) - vec3(offset_x, offset_y, 0.0)
 
-  p_2 = rotateInY(rotateInX(point_2, alpha_x), alpha_y)
-  p_2[0] -= offset_x
-  p_2[1] -= offset_y
+  p_2 = rotateInY(rotateInX(point_2, alpha_x), alpha_y) - vec3(offset_x, offset_y, 0.0)
 
   let
     vector = p_2 - p_1
@@ -610,13 +602,11 @@ proc getIntersectLineIntersectsCylinderOnce(
     intersect_2_valid = (intersect_2[2] > centerBegin[2]) and
                         (intersect_2[2] < centerEnd[2])
 
-  intersect_1 = rotateInY(rotateInX(intersect_1, -alpha_x), -alpha_y) # was after offset but shouldn't be?
-  intersect_1[0] += offset_x
-  intersect_1[1] += offset_y
+  intersect_1 += vec3(offset_x, offset_y, 0.0)
+  intersect_1 = rotateInY(rotateInX(intersect_1, -alpha_x), -alpha_y)
 
+  intersect_2 += vec3(offset_x, offset_y, 0.0)
   intersect_2 = rotateInY(rotateInX(intersect_2, -alpha_x), -alpha_y)
-  intersect_2[0] += offset_x
-  intersect_2[1] += offset_y
 
   result = if (intersect_1_valid): intersect_1 else: intersect_2
 
@@ -720,10 +710,8 @@ proc getPointDetectorWindow(pointMirror2: Vec3, pointAfterMirror2: Vec3,
   ## First switch into new coordinate system  with its origin in the middle of the telescope and z axis turned towards the detector
   let 
     pipeRad = pipeAngle.to(Radian)
-    pointMirror2Turned = rotateInX(pointMirror2, pipeRad)
-    pointAfterMirror2Turned = rotateInX(pointAfterMirror2, pipeRad)
-  pointMirror2Turned[0] -= dCBXray.float
-  pointAfterMirror2Turned[0] -= dCBXray.float
+    pointMirror2Turned = rotateInX(pointMirror2, pipeRad) - vec3(dCBXray.float, 0.0, 0.0)
+    pointAfterMirror2Turned = rotateInX(pointAfterMirror2, pipeRad) - vec3(dCBXray.float, 0.0, 0.0)
   let vectorAfterMirror2 = pointAfterMirror2Turned - pointMirror2Turned
   ## Then the distance from the middle of the telescope to the detector can be calculated with the focal length
   ## Then n can be calculated as hown many times the vector has to be applied to arrive at the detector
@@ -1625,21 +1613,18 @@ proc traceAxion(res: var Axion,
   #echo centerVecs.collimator, " ", pointExitPipeVT3XRT
   ###################from the CB (coldbore(pipe in Magnet)) to the XRT (XrayTelescope)#######################
   var vectorXRT = vectorBeforeXRT
-  ## XXX: what do these compute? Surely this can just be done in 1-3 lines as it's just a rotation of sorts?
-  let turnedX = expSetup.telescope.telescope_turned_x.to(Radian)
-  let turnedY = expSetup.telescope.telescope_turned_y.to(Radian)
-  vectorXRT = rotateInX(vectorXRT, turnedX)
-  vectorXRT = rotateInY(vectorXRT, turnedY)
+  let 
+    turnedX = expSetup.telescope.telescope_turned_x.to(Radian)
+    turnedY = expSetup.telescope.telescope_turned_y.to(Radian)
+  vectorXRT = rotateInY(rotateInX(vectorXRT, turnedX), turnedY)
 
-  pointExitCB[0] -= expSetup.telescope.optics_entrance[0].float
-  pointExitCB[1] -= expSetup.telescope.optics_entrance[1].float
   pointExitCB[2] -= centerVecs.exitPipeVT3XRT[2]
-  pointExitCB = rotateInX(pointExitCB, turnedX)
-  pointExitCB = rotateInY(pointExitCB, turnedY)
+  pointExitCB = rotateInY(rotateInX(pointExitCB, turnedX), turnedY) - 
+                vec3(expSetup.telescope.optics_entrance[0].float, expSetup.telescope.optics_entrance[1].float, 0.0)
 
-  var factor = (0.0 - pointExitCB[2]) / vectorXRT[2]
-
-  let pointEntranceXRT = pointExitCB + factor * vectorXRT
+  let 
+    factor = (0.0 - pointExitCB[2]) / vectorXRT[2]
+    pointEntranceXRT = pointExitCB + factor * vectorXRT
   vectorBeforeXRT = vectorXRT
   ## Coordinate transform from cartesian to polar at the XRT entrance
   let
@@ -1763,7 +1748,6 @@ proc traceAxion(res: var Axion,
     )
     alpha1 = angle1[1]
     alpha2 = angle2[1]
-  #echo (angle1[1].degToRad) , " ", (r1.float - (allR1[hitLayer - 1] + expSetup.telescope.allThickness[hitLayer - 1]).float) / (expSetup.telescope.lMirror.float - pointMirror1[2]) #radToDeg(arcsin(r1.float - (allR1[hitLayer - 1] + expSetup.telescope.allThickness[hitLayer - 1]).float) / (expSetup.telescope.lMirror.float - pointMirror1[2]))
 
   # getting rid of the X-rays that hit the shell below
   if not testXray and
