@@ -1939,33 +1939,9 @@ proc traceAxion(res: var Axion,
   res.weights = weight
   res.weightsAll = weight
 
-
-  ## TODO: the following are not used for anything!
-  let
-    gold = ( (pointDetectorWindow[0] >= GoldXMin.float) and (
-        pointDetectorWindow[0] <= GoldXMax.float) and (
-        pointDetectorWindow[1] >= GoldYMin.float) and (
-        pointDetectorWindow[1] <= GoldYMax.float))
-    r_xy = sqrt( ( (pointDetectorWindow[0] - ChipCenterX.float) * (
-        pointDetectorWindow[0] - ChipCenterX.float)) + ( (
-        pointDetectorWindow[1] - ChipCenterY.float) * (
-        pointDetectorWindow[1] - ChipCenterY.float))).mm
-    silver = (r_xy <= SilverRadius.mm) and not gold
-    bronze = not gold and not silver and (r_xy <= BronzeRadius)
-    withinWindow = r_xy < detectorSetup.detectorWindowAperture / 2
-    detector = ( (pointDetectorWindow[0] >= ChipXMin.float) and (
-        pointDetectorWindow[0] <= ChipXMax.float) and (
-        pointDetectorWindow[1] >= ChipYMin.float) and (
-        pointDetectorWindow[1] <= ChipYMax.float))
-  #if (energyAx < 0.3.keV) or (energyAx > 1.9.keV and energyAx < 2.1.keV):
-    #echo energyAx, " ", weight #(transWindow), " tel: ", reflect, " det: ", 1.0 - transDet
   ## finally set the `passed` field to indicate this axion went all the way
   if weight != 0:
     res.passed = true
-  #if energyAx > 0.5.keV:
-    #res.passed = false
-
-
 
 proc traceAxionWrapper(axBuf: ptr UncheckedArray[Axion],
                        bufLen: int,
@@ -2380,32 +2356,12 @@ proc generateResultPlots(axions: seq[Axion],
 
   plotHeatmap("Axion Model Fluxfraction", heatmaptable2, 256, $windowYear, rSigma1W, rSigma2W) #rSigma1, rSigma2)
 
-  when false:
-    fluxFractionTotal = integralTotal #/ integralNormalisation
-    fluxFractionDetector = integralDetector #/ integralNormalisation
-    fluxFractionBronze = integralBronze #/ integralNormalisation
-    fluxFractionSilver = integralSilver #/ integralNormalisation
-    fluxFractionGold = integralGold #/ integralNormalisation
-
-    echo "Flux fraction for the gold region:"
-    echo getFluxFraction("region: gold")
-    echo "Flux fraction total"
-    echo fluxFractionTotal
-
 proc calculateFluxFractions(setup: ExperimentSetupKind,
                             detectorSetup: DetectorSetupKind,
                             stage: StageKind,
                             flags: set[ConfigFlags]) =
   let expSetup = newExperimentSetup(setup, stage, flags)
   let energies = linspace(0.001, 15.0, 15000).mapIt(it.keV)
-
-  var
-    integralNormalisation = 0.0
-    integralTotal = 0.0
-    integralDetector = 0.0
-    integralBronze = 0.0
-    integralSilver = 0.0
-    integralGold = 0.0
 
   ## TODO: make the code use tensor for the emission rates!
   let resources = parseResourcesPath()
@@ -2529,12 +2485,6 @@ proc calculateFluxFractions(setup: ExperimentSetupKind,
                     energies,
                     flags)
   exit(Weave)
-
-  # walk the axions and determine `integralTotal` and `integral*`
-  #if(gold and withinWindow): integralGold = integralGold + weight
-  #if(silver and withinWindow): integralSilver = integralSilver + weight
-  #if(bronze and withinWindow): integralBronze = integralBronze + weight
-  #if(detector and withinWindow): integralDetector = integralDetector + weight
 
   generateResultPlots(axions, detectorSetup.windowYear)
 
