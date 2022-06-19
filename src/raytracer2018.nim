@@ -1089,9 +1089,9 @@ proc initTelescope(optics: TelescopeKind): Telescope =
       numberOfHoles: 5,
       holeType: htCross #the type or shape of the hole in the middle of the optics
     )
-  of tkCustomBabyIAXO:
+  of tkXMM:
     result = Telescope(
-      kind: tkCustomBabyIAXO,
+      kind: tkXMM,
       optics_entrance: @[0.0, -0.0, 0.0].mapIt(it.mm),
       optics_exit: @[0.0, -0.0, 600.0].mapIt(it.mm),
       telescope_turned_x: 0.0.°, #the angle by which the telescope is turned in respect to the magnet
@@ -1188,7 +1188,7 @@ proc getOpticForSetup(setup: ExperimentSetupKind): TelescopeKind =
   ## neither provided!
   case setup
   of esCAST: result = tkLLNL
-  of esBabyIAXO: result = tkCustomBabyIAXO
+  of esBabyIAXO: result = tkXMM # tkCustomBabyIAXO
 
 proc newExperimentSetup*(setup: ExperimentSetupKind,
                          stage: StageKind,
@@ -1427,7 +1427,7 @@ proc lineIntersectsOpaqueTelescopeStructures(
     ## there is a 2mm wide graphite block between each glass mirror, to seperate them
     ## in the middle of the X-ray telescope. Return if hit
     if pointEntranceXRT[1] <= 1.0 and pointEntranceXRT[1] >= -1.0: return
-  of tkCustomBabyIAXO:
+  of tkXMM:
     ## BabyIAXO return if X-ray its the spider structure
     ## here we have a spider structure for the XMM telescope:
     ### 3D spider structure 1st draft ###
