@@ -2520,7 +2520,7 @@ proc main(
          ) =
   # check if the `config.toml` file exists, otherwise recreate from the default
   if not fileExists("config.toml"):
-    let cdata = readFile("config_default.toml")
+    let cdata = readFile(sourceDir / "config_default.toml")
     writeFile("config.toml", cdata)
 
   var coldboreBlockedLength: float64
