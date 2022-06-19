@@ -309,10 +309,8 @@ proc toRad(wyKind: WindowYearKind): float =
   ## Deduced from the calibration data & X-ray finger runs.
   ## TODO: Add reference to the sourcing of these numbers.
   case wyKind
-  of wy2017:
-    result = degToRad(10.8)
-  of wy2018:
-    result = degToRad(71.5)
+  of wy2017, wy2018:
+    result = degToRad(30.0)
   of wyIAXO:
     result = degToRad(20.0) # who knows
 
