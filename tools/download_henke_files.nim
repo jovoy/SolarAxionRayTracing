@@ -149,7 +149,7 @@ proc downloadDatafile(client: HttpClient, file: string): seq[string] =
   result[1] = l0
 
 proc storeDatafile(data: seq[string], h: HenkeReq) =
-  let angle = &"{h.fixedValue.float:.4f}"
+  let angle = &"{h.fixedValue.float:.6f}"
   let thickness = &"{h.layerThickness / 1000.0:.2f}"
   let outfile = outpath / fileTmpl % [angle, thickness]
   createDir(outpath)
