@@ -31,6 +31,7 @@ type
     tkCustomBabyIAXO, ## A hybrid optics specifically built for BabyIAXO mixing
                       ## a nustar like inner core with an XMM like outer core
     tkAbrixas, ## the Abrixas telescope as used at CAST
+    tkOther
 
   StageKind = enum
     skVacuum = "vacuum"
@@ -889,8 +890,19 @@ proc parseLlnlTelescopeFile(): string =
   let config = parseToml.parseFile(sourceDir / "config.toml")
   result = config["Resources"]["llnlEfficiency"].getStr
 
+proc parseLlnlReflectivityFile(): string =
+  ## parses the config.toml file containing the LLNL reflectivity filename
+  let config = parseToml.parseFile(sourceDir / "config.toml")
+  result = config["Resources"]["llnlReflFile"].getStr
+
+proc parseGoldReflectivityFile(): string =
+  ## parses the config.toml file containing the gold reflectivity filename as a H5 file
+  let config = parseToml.parseFile(sourceDir / "config.toml")
+  result = config["Resources"]["goldReflFile"].getStr
+
 proc parseGoldFilePrefix(): string =
   ## parses the config.toml file containing the path to the gold reflectivity files
+  ## as text data files directly from henke.gov
   let config = parseToml.parseFile(sourceDir / "config.toml")
   result = config["Resources"]["goldFilePrefix"].getStr
 
@@ -971,46 +983,6 @@ proc maybeParseDetectorInstallation(flags: set[ConfigFlags]): Option[DetectorIns
   else:
     result = none[DetectorInstallation]() # default, but let's be explicit
 
-proc assignReflectivity(setup: var ExperimentSetup, flags: set[ConfigFlags]) =
-  ## Assigns the `reflectivity` field of an `ExperimentSetup`, i.e. the reflectivities of
-  ## the telescope layers / the effecitve reflectivity based on the effective area, if applicable
-  ##
-  ## Note: the effective area is currently not fully implemented anymore.
-  # TODO: this could be generalized to other telescopes until the multi layer stuff is implemented
-  let resources = parseResourcesPath()
-  let dfLlnl = readCsv(resources / parseLlnlTelescopeFile())
-    .mutate(f{"Transmission" ~ idx("EffectiveArea[cm²]") /
-      # total eff area of telescope = 1438.338mm² = 14.38338cm²
-      (14.38338 - (4.3 * 0.2))}) # the last thing are the mirror seperators
-  # TODO: take this out once happy
-  when false:
-    ggplot(dfTab["LLNL_transEff"], aes("Energy[keV]", "Transmission")) +
-      geom_line() + ggsave("/tmp/transmission_llnl.pdf")
-
-  var goldInterp: Interpolator2DType[float]
-  if cfIgnoreReflection notin flags:
-    let prefix = resources / parseGoldFilePrefix()
-    let goldFiles = collect(newSeq):
-      for f in walkFiles(prefix & "*degGold0.25microns.csv"):
-        let (success, angle) = scanTuple(f.dup(removePrefix(prefix)), "$fdeg")
-        if not success: raise newException(IOError, "Could not parse input gold file: " & $f)
-        (f, angle)
-    var goldReflect = newTensor[float](0)
-    for i, (f, angle) in goldFiles:
-      let df = readCsv(f, sep = ' ', header = "#")
-      if goldReflect.size == 0: # means first iteration, don't know # elements in gold files
-        goldReflect = newTensor[float]([goldFiles.len, df.len])
-      goldReflect[i, _] = df["Reflectivity", float].unsqueeze(0)
-    let minAngle = goldFiles.mapIt(it[1]).min
-    let maxAngle = goldFiles.mapIt(it[1]).max
-    goldInterp = newBilinearSpline(goldReflect,
-                                   (minAngle, maxAngle),
-                                   (0.0, 15.0)) # 0 to 15 keV energy
-
-  #setup.telescopeTransmission = newLinear1D(dfLlnl["Energy[keV]", float].toRawSeq,
-  #                                          dfLlnl["Transmission", float].toRawSeq)
-  #setup.goldReflectivity = goldInterp
-
 proc initMagnet(setup: ExperimentSetupKind, flags: set[ConfigFlags]): Magnet =
   let magnetOpt = maybeParseMagnetConfig(flags)
   if magnetOpt.isSome:
@@ -1060,6 +1032,76 @@ proc initPipes(setup: ExperimentSetupKind): Pipes =
       distanceCBAxisXRTAxis: 0.0.mm
     )
 
+import nimhdf5 except linspace # only needed for here
+proc initReflectivity(optics: TelescopeKind): Reflectivity =
+  ## Inits the `reflectivity` field of an `ExperimentSetup`, i.e. the reflectivities of
+  ## the telescope layers / the effecitve reflectivity based on the effective area, if applicable
+  case optics
+  of tkLLNL:
+    result = Reflectivity(
+      kind: rkMultiCoating,
+      layers: @[2, 2+3, 2+3+4, 2+3+4+5] # layers of LLNL telescope
+    )
+    # read reflectivities from H5 file
+    let resources = parseResourcesPath()
+    let h5fname = resources / parseLlnlReflectivityFile()
+
+    let numCoatings = result.layers.len
+    var h5f = H5open(h5fname, "r")
+    let energies = h5f["/Energy", float]
+    let angles = h5f["/Angles", float]
+    var reflectivities = newSeq[Interpolator2DType[float]]()
+    for i in 0 ..< numCoatings:
+      let reflDset = h5f[("Reflectivity" & $i).dset_str]
+      let data = reflDset[float].toTensor.reshape(reflDset.shape)
+      reflectivities.add newBilinearSpline(
+        data,
+        (angles.min, angles.max),
+        (energies.min, energies.max)
+      )
+    discard h5f.close()
+    result.reflectivities = reflectivities
+  of tkXMM:
+    result = Reflectivity(
+      kind: rkSingleCoating
+    )
+    # read reflectivities from H5 file
+    let resources = parseResourcesPath()
+    let h5fname = resources / parseGoldReflectivityFile()
+
+    var h5f = H5open(h5fname, "r")
+    let energies = h5f["/Energy", float]
+    let angles = h5f["/Angles", float]
+    var reflectivities = newSeq[Interpolator2DType[float]]()
+    let reflDset = h5f[("Reflectivity").dset_str]
+    let data = reflDset[float].toTensor.reshape(reflDset.shape)
+    discard h5f.close()
+
+    let spl = newBilinearSpline(
+      data,
+      (angles.min, angles.max),
+      (energies.min, energies.max)
+    )
+    result.reflectivity = spl
+  of tkCustomBabyIAXO, tkAbrixas:
+    doAssert false, "Reflectivities are not yet implemented for the " &
+      "tkCustomBabyIAXO and tkAbrixas optics."
+  else:
+    let resources = parseResourcesPath()
+    var df = readCsv(resources / parseLlnlTelescopeFile())
+    when false: # to be implemented if required. Need the real area of the telescope (e.g. bore
+                # diameter, but that's not strictly what it is
+      let readRealArea = parseTelescopeArea()
+      let inactiveArea = parseInactiveTelArea() # area blocked by opaque structures
+      df = df
+      .mutate(f{"Transmission" ~ idx("EffectiveArea[cm²]") /
+        (readRealArea - inactiveArea)})
+    result = Reflectivity(
+      kind: rkEffectiveArea,
+      telescopeTransmission: newLinear1D(df["Energy[keV]", float].toRawSeq,
+                                         df["Transmission", float].toRawSeq)
+    )
+
 proc initTelescope(optics: TelescopeKind): Telescope =
   ## TODO: add telescope section to the config file!
   # Note: The required other angles R2, R3, R4 and R5 are computed in the code
@@ -1087,7 +1129,8 @@ proc initTelescope(optics: TelescopeKind): Telescope =
       lMirror: 225.0.mm, # Mirror length
       holeInOptics: 0.0.mm, #max 20.9.mm
       numberOfHoles: 5,
-      holeType: htCross #the type or shape of the hole in the middle of the optics
+      holeType: htCross, #the type or shape of the hole in the middle of the optics
+      reflectivity: optics.initReflectivity()
     )
   of tkXMM:
     result = Telescope(
@@ -1125,7 +1168,8 @@ proc initTelescope(optics: TelescopeKind): Telescope =
       lMirror: 300.0.mm, # Mirror length
       holeInOptics: 0.2.mm, #max 20.9.mm
       numberOfHoles: 1,
-      holeType: htNone #the type or shape of the hole in the middle of the optics
+      holeType: htNone, #the type or shape of the hole in the middle of the optics
+      reflectivity: optics.initReflectivity()
     )
   else:
     doAssert false, "The telescope for kind " & $optics & " has not been implemented yet!"
@@ -1181,7 +1225,6 @@ proc initDetectorInstallation(setup: ExperimentSetupKind,
       transversalShift: (sin(0.0.degToRad) * 7500.0).mm #-0.0.mm # ##transversal ofset of the detector in repect to the beamline #0.0.mm #
     )
 
-proc initReflectivity(optics: TelescopeKind): Reflectivity = discard
 
 proc getOpticForSetup(setup: ExperimentSetupKind): TelescopeKind =
   ## XXX: replace this by user input & config file selection. Only fall back if
@@ -1350,7 +1393,7 @@ proc computeReflectivity(expSetup: ExperimentSetup, energy: keV,
         reflectionProb1 = refl.reflectivity.eval(alpha1, energy.float)
         reflectionProb2 = refl.reflectivity.eval(alpha2, energy.float)
       result.reflect = reflectionProb1 * reflectionProb2
-      result.weight = result.reflect * transmissionMagnet#also yaw and pitch dependend
+      result.weight = result.reflect * transmissionMagnet
   of rkMultiCoating:
     # use the hit layer to know which interpolator we have to use
     let layerIdx = refl.layers.lowerBound(hitLayer)
@@ -1360,7 +1403,7 @@ proc computeReflectivity(expSetup: ExperimentSetup, energy: keV,
         reflectionProb1 = reflLayer.eval(alpha1, energy.float)
         reflectionProb2 = reflLayer.eval(alpha2, energy.float)
       result.reflect = reflectionProb1 * reflectionProb2
-      result.weight = result.reflect * transmissionMagnet#also yaw and pitch dependend
+      result.weight = result.reflect * transmissionMagnet
 
 proc computeMagnetTransmission(
   expSetup: ExperimentSetup, energy: keV, distancePipe: Meter, pathCB: mm, ya: float,

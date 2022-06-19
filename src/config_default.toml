@@ -4,6 +4,8 @@ resourcePath = "../resources"
 llnlEfficiency = "llnl_xray_telescope_cast_effective_area_parallel_light_DTU_thesis.csv"
 goldFilePrefix = "henke_download/"
 solarModelFile = "solar_model_tensor15.csv"
+llnlReflFile   = "llnl_layer_reflectivities.h5"
+goldReflFile   = "gold_0.25microns_reflectivities.h5"
 
 [Setup] # settings related to the setup we raytrace through
 experimentSetup = "BabyIAXO"   # [BabyIAXO, CAST]
