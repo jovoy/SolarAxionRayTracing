@@ -1,4 +1,4 @@
-import std / [httpclient, strutils, os, parseutils, strformat, math]
+import std / [httpclient, strutils, os, parseutils, strformat, math, strscans, sugar, random]
 import seqmath
 
 import cligen/[osUt,mslice,procpool]
@@ -134,9 +134,10 @@ proc extractDataPath(resp: string): string =
       let num = l.parseUntil(result, '\"', findIt.len + idx)
       break
 
-proc downloadDatafile(client: HttpClient, file: string): seq[string] =
+proc downloadDatafile(client: HttpClient, file: string, angle: float): seq[string] =
   ## Downloads the data file from the Henke server and returns is split by lines
   ## for easier handling of the header.
+  echo "Downloading the path: ", file, " for angle ", angle
   var data = client.getContent(henkeUrl & file)
   result = data.strip.splitLines
   var idx = 0
@@ -218,6 +219,10 @@ proc downloadAllAngles(client: HttpClient,
       let i = open(r)
       var angle: float
       while i.uRd(angle):
+        if jobs > 1:
+          var rnd = initRand((angle * 10000.0).round.int)
+          sleep(rnd.rand(jobs * 100)) # randomly sleep a bit to space out the requests to decrease likelihood
+                                      # of bad server responses (more or less seems to work)
         let req = initHenkeReq(fixedValue = angle,
                                numberOfPoints = numEnergies,
                                scanMin = energyMin,
