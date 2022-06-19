@@ -156,6 +156,21 @@ proc storeDatafile(data: seq[string], h: HenkeReq) =
   let dataStr = data.join("\n")
   writeFile(outfile, dataStr.strip & "\n")
 
+proc sanityCheckHeader(h: HenkeReq, data: seq[string], path: string): bool =
+  let header = data[1] # care only about line 1 similar to:
+  # Au 250.nm on SiO2 at 1.3363deg, P=0.
+  let prefix = "# Au 250.nm on SiO2 at "
+  let (success, angle) = scanTuple(header.dup(removePrefix(prefix)), "$fdeg")
+  if not success:
+    result = false
+    echo "ERROR: Could not parse angle from data header. Header was: " & $header &
+      " and post: " & $h & " from path " & path
+  else:
+    result = abs(angle - h.fixedValue) < 1e-4
+    if not result:
+      echo "ERROR: Expected " & $h.fixedValue & " but got " & $angle &
+        ". Something broke! We broke henke maybe. The line " & $header & " and post " & $h & " from path " & $path & "\n\n\n\n\n"
+
 proc download(client: HttpClient, h: HenkeReq): bool =
   ## Takes care of downloading (all) the file(s) for the given Henke request.
   ## This means if there are more than 500 data points requested, it will be
@@ -174,7 +189,9 @@ proc download(client: HttpClient, h: HenkeReq): bool =
     hl.scanMax = scanVals[min((chunk + 1) * maxPoints, h.numberOfPoints) - 1]
     echo "INFO: Downloading chunk ", chunk, " in range ", hl.scanMin, " ↦ ", hl.scanMax, " for ", hl.fixedValue
     let dataPath = client.postHenke(hl).extractDataPath()
-    let chkData = client.downloadDatafile(dataPath)
+    let chkData = client.downloadDatafile(dataPath, h.fixedValue)
+    if not h.sanityCheckHeader(chkData, dataPath):
+      return false # file did not pass sanity check. Abort and try again
     if data.len == 0: # simply add all data including header
       data.add chkData
     else:             # only add data without header
