@@ -1454,7 +1454,7 @@ func radiusAndPhi(vec: Vec3[float]): (MilliMeter, float) =
 
 proc lineIntersectsOpaqueTelescopeStructures(
   expSetup: ExperimentSetup,
-  testVector, vectorEntranceXRTCircular, vectorXRT, pointExitCB, pointEntranceXRT: Vec3[float],
+  radialDist: MilliMeter, testVector, vectorXRT, pointExitCB, pointEntranceXRT: Vec3[float],
   onlyInnerPart = false
      ): bool =
   ## Checks whether the incoming ray hits any of the fully opaque parts of the telescope,
@@ -1475,7 +1475,7 @@ proc lineIntersectsOpaqueTelescopeStructures(
       (radius, phiFlat) = radiusAndPhi(pointEntranceXRT)
       (radiusSpider, phiFlatSpider) = radiusAndPhi(pointEntranceSpider)
     # `onlyInnerPart` is used later in code to force entering this branch
-    if onlyInnerPart or vectorEntranceXRTCircular[0] <= 64.7:
+    if onlyInnerPart or radialDist <= 64.7.mm:
       let nHoles = expSetup.telescope.numberOfHoles
       for l in -(nHoles - ceil(nHoles.float / 2.0).int) .. (nHoles - ceil(nHoles.float / 2.0).int):
         var centerHole = testVector
@@ -1492,9 +1492,9 @@ proc lineIntersectsOpaqueTelescopeStructures(
           result = false
     # hole max 20.9 mm doesnt really matter because there are no mirrors in the
     # middle and these axions dont reach the window anyways
-    elif vectorEntranceXRTCircular[0] < 151.6 and vectorEntranceXRTCircular[0] > (151.6 - 20.9):
+    elif radialDist < 151.6.mm and radialDist > (151.6 - 20.9).mm:
       result = false
-    elif vectorEntranceXRTCircular[0] > 64.7:
+    elif radialDist > 64.7.mm:
       # iterate all strips of the spider structure
       for i in 0 .. 16:
         # spider strips (actually wider for innermost but doesn't matter because
@@ -1648,34 +1648,30 @@ proc traceAxion(res: var Axion,
   #echo centerVecs.collimator, " ", pointExitPipeVT3XRT
   ###################from the CB (coldbore(pipe in Magnet)) to the XRT (XrayTelescope)#######################
   var vectorXRT = vectorBeforeXRT
-  let 
+  let
     turnedX = expSetup.telescope.telescope_turned_x.to(Radian)
     turnedY = expSetup.telescope.telescope_turned_y.to(Radian)
   vectorXRT = rotateInY(rotateInX(vectorXRT, turnedX), turnedY)
 
   pointExitCB[2] -= centerVecs.exitPipeVT3XRT[2]
-  pointExitCB = rotateInY(rotateInX(pointExitCB, turnedX), turnedY) - 
+  pointExitCB = rotateInY(rotateInX(pointExitCB, turnedX), turnedY) -
                 vec3(expSetup.telescope.optics_entrance[0].float, expSetup.telescope.optics_entrance[1].float, 0.0)
 
-  let 
+  let
     factor = (0.0 - pointExitCB[2]) / vectorXRT[2]
     pointEntranceXRT = pointExitCB + factor * vectorXRT
   vectorBeforeXRT = vectorXRT
   ## Coordinate transform from cartesian to polar at the XRT entrance
   let
-    (radius1, _) = radiusAndPhi(pointEntranceXRT)
-    vectorEntranceXRTCircular = vec3(
-      radius1.float,
-      # phi
-      arctan2(-pointEntranceXRT[1], (pointEntranceXRT[0])), #arccos((pointEntranceXRT[1]+d) / radius1)
-      # alpha
-      arctan(radius1 / expSetup.detectorInstall.distanceDetectorXRT) # angle
-    ) #in rad
+    # compute the radial distance of the ray at the entrance of the XRT to the optical
+    # axis, as this is the basis to determine which layer will be hit (by comparing with
+    # the height of the layer)
+    (radialDist, _) = radiusAndPhi(pointEntranceXRT)
 
   ## Check if any of the opaque structures of the telescopes are hit (graphite block for LLNL,
   ## spider structure for XMM, ...)
   if expSetup.lineIntersectsOpaqueTelescopeStructures(
-    vec3(0.0), vectorEntranceXRTCircular, vectorXRT, pointExitCB, pointEntranceXRT
+    radialDist, vec3(0.0), vectorXRT, pointExitCB, pointEntranceXRT
   ):
     return
 
@@ -1699,7 +1695,7 @@ proc traceAxion(res: var Axion,
 
   let allR1 = expSetup.telescope.allR1
   # remove rays that are further out than outer most layer
-  if vectorEntranceXRTCircular[0].mm > allR1[allR1.high]: return
+  if radialDist > allR1[allR1.high]: return
   # walk all layers and check which one was hit, if glass is hit remove ray
   ## TODO: possible optimization: as the layers are ordered from inner to outer, don't
   ## we always go from most negative to most positive in distance? I.e. the first positive
@@ -1707,10 +1703,10 @@ proc traceAxion(res: var Axion,
   ## layer!
   for j in 0 ..< allR1.len:
     # get rid of where the X-rays hit the glass frontal
-    if vectorEntranceXRTCircular[0].mm > allR1[j] and
-        vectorEntranceXRTCircular[0].mm < (allR1[j] + expSetup.telescope.allThickness[j]):
+    if radialDist > allR1[j] and
+        radialDist < (allR1[j] + expSetup.telescope.allThickness[j]):
       return
-    let dist = allR1[j] - vectorEntranceXRTCircular[0].mm # distance of ray from layer j
+    let dist = allR1[j] - radialDist # distance of ray from layer j
     # if we are not above the layer and smaller than latest `minDist`, assign
     if dist > 0.0.mm and dist < minDist:
       minDist = dist
@@ -1733,7 +1729,7 @@ proc traceAxion(res: var Axion,
   ## Why do we check for `lineIntersectsOpaqueTelescopeStructure` here again?
   if testXray and minDist > 100.0.mm and
      expSetup.lineIntersectsOpaqueTelescopeStructures(
-       centerEndXRT, vectorEntranceXRTCircular, vectorXRT, pointExitCB, pointEntranceXRT,
+       radialDist, centerEndXRT, vectorXRT, pointExitCB, pointEntranceXRT,
        onlyInnerPart = true
      ):
     return
