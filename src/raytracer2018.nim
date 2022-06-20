@@ -1507,6 +1507,39 @@ proc lineIntersectsOpaqueTelescopeStructures(
     doAssert false, "The telescope kind " & $expSetup.telescope.kind & " does not have any opaque " &
       "structures implemented yet."
 
+proc lineHitsNickel(expSetup: ExperimentSetup, α1: Degree, r1: MilliMeter,
+                    hitLayer: int, # the shell of the telescope hit
+                    pointMirror1, pointAfterMirror1, pointMirror2: Vec3[float]): bool =
+  ## Checks if the ray described given `α1` (the angle from the optical axis)
+  ## hits the nickel after reflection
+  ##
+  ## Note: to generalize this to the "second part" of the telescope the arguments in
+  ## principle remain almost unchanged (`α1` becomes a generic `α` which gets `angle2`
+  ## from the calling code and the code uses `pointMirror2` instead of `pointMirror1`.
+  ## Further the radius `r1` must become the equivalent `r4` which would have to be computed
+  ## and the lengths adjusted.
+  const verbose = false
+  template tel(): untyped = expSetup.telescope
+  if hitLayer > 0: # cannot hit nickel if ray hits lowest shell (no nickel below!)
+    let tanα = tan(α1.to(Radian))
+    let hL = hitLayer - 1 # layer below the hit layer
+    let compVal = (r1 - (tel.allR1[hL] + tel.allThickness[hL])) /
+       (tel.lMirror - pointMirror1[2].mm)
+    when verbose:
+      let pointLowerMirror = findPosXRT(
+        pointAfterMirror1, pointMirror1,
+        tel.allR1[hL] + tel.allThickness[hL],
+        tel.allR1[hL] -
+          tel.lMirror * sin(tel.allAngles[hL].to(Radian)) +
+          tel.allThickness[hL],
+        tel.allAngles[hL].to(Radian),
+        tel.lMirror,
+        0.0.mm, 0.01.mm, 0.0.mm, 2.5.mm
+      )
+      echo "hit Nickel"
+      echo pointLowerMirror, " ", pointMirror1, " ", pointMirror2, " ", angle1[1], " ", angle2[1], " ", h
+    result = tanα > compVal
+
 proc traceAxion(res: var Axion,
                 centerVecs: CenterVectors,
                 expSetup: ExperimentSetup,
@@ -1742,20 +1775,12 @@ proc traceAxion(res: var Axion,
     vectorAfterMirror1 = getVectoraAfterMirror(pointEntranceXRT,
         pointExitCB, pointMirror1, beta, "vectorAfter")
     pointAfterMirror1 = pointMirror1 + 200.0 * vectorAfterMirror1
-    pointLowerMirror = findPosXRT(
-      pointAfterMirror1, pointMirror1,
-      allR1[hitLayer - 1] + expSetup.telescope.allThickness[hitLayer - 1],
-      allR1[hitLayer - 1] -
-        expSetup.telescope.lMirror * sin(expSetup.telescope.allAngles[hitLayer - 1].to(Radian)) +
-        expSetup.telescope.allThickness[hitLayer - 1],
-      expSetup.telescope.allAngles[hitLayer - 1].to(Radian),
-      expSetup.telescope.lMirror,
-      0.0.mm, 0.01.mm, 0.0.mm, 2.5.mm
-    )
     pointMirror2 = findPosXRT(
       pointAfterMirror1, pointMirror1, r4, r5, beta3,
       expSetup.telescope.lMirror, distanceMirrors, 0.01.mm, 0.0.mm, 2.5.mm
     )
+
+
   #echo r1, " ", allR1[hitLayer - 1], " ", r2, " ", allR1[hitLayer - 1] - expSetup.telescope.lMirror * sin(expSetup.allAngles[hitLayer - 1].to(Radian))
 
 
@@ -1779,16 +1804,21 @@ proc traceAxion(res: var Axion,
     alpha2 = angle2[1].Degree
 
   # getting rid of the X-rays that hit the shell below
-  if not testXray and
-     tan(angle1[1].degToRad) >
-     (r1.float - (allR1[hitLayer - 1] + expSetup.telescope.allThickness[hitLayer - 1]).float) /
-       (expSetup.telescope.lMirror.float - pointMirror1[2]):
-    #if not (pointMirror1[2] +  0.0001 >  pointLowerMirror[2] and pointMirror1[2] -  0.0001 <  pointLowerMirror[2]):
-    echo "hit Nickel"
-    res.hitNickel = true
+  res.hitNickel = expSetup.lineHitsNickel(
+    alpha1, r1, hitLayer,
+    pointMirror1, pointAfterMirror1, pointMirror2
+  )
+  # if nickel was hit, stop here
+  if res.hitNickel:
     return
-    #echo pointLowerMirror, " ", pointMirror1, " ", pointMirror2, " ", angle1[1], " ", angle2[1], " ", h
-  if (pointMirror1[2] +  0.001 >  pointMirror2[2] and pointMirror1[2] -  0.001 <  pointMirror2[2]): return
+
+  ## Check if `findPosXRT` did not find a hit on the layer. In that case the two `pointMirror`
+  ## variables actually contain the same (at least `z`) data, because the input is returned
+  ## unchanged in that case.
+  let z1 = pointMirror1[2]
+  let z2 = pointMirror2[2]
+  if almostEqual(z1, z2):
+    return
   ############################################# Mirrors end #################################################
   ## now get the points in the focal / detector plane
 
