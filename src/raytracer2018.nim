@@ -322,14 +322,14 @@ proc rotateInX(vector: Vec3, angle: Radian): Vec3 =
                 vector[1],
                 vector[2] * cos(angle) - vector[0] * sin(angle))
 
-proc rotateInY(vector: Vec3, angle: Deg): Vec3 =
+proc rotateInY(vector: Vec3, angle: Radian): Vec3 =
   ## Rotation of a vector in y direction aka around the x axis counterclockwise when angle is positive and the x axis points towards observer
   ## Or rotation of the coordinate system the vector is in clockwise
   result = vec3(vector[0],
                 vector[1] * cos(angle) - vector[2] * sin(angle),
                 vector[2] * cos(angle) + vector[1] * sin(angle))
 
-proc rotateAroundZ(vector: Vec3, angle: Deg): Vec3 =
+proc rotateAroundZ(vector: Vec3, angle: Radian): Vec3 =
   ## Rotation of a vector around the z axis counterclockwise when angle is positive and the z axis points away from the observer
   ## Or rotation of the coordinate system the vector is in clockwise
   result = vec3(vector[0] * cos(angle) + vector[1] * sin(angle),
@@ -502,7 +502,6 @@ proc lineIntersectsObject(objectKind: HoleType, point_1, point_2, center: Vec3,
   of htNone:
     result = false ## XXX: or should this be true? guess not, as it wasn't handled before, i.e. was false
 
-
 proc getIntersectlineIntersectsCircle(point_1, point_2, center: Vec3): Vec3 =
   ## Now a function to get the intersection with one of the entrance cross sections
   var vector = vec3(0.0)
@@ -568,8 +567,6 @@ proc getIntersectLineIntersectsCylinderOnce(
   var
     alpha_x = arcsin((centerEnd[0] - centerBegin[0]) / abs(centerBegin[2] - centerEnd[2]))
     alpha_y = arcsin((centerEnd[1] - centerBegin[1]) / abs(centerBegin[2] - centerEnd[2]))
-    p_1 = point_1
-    p_2 = point_2
     offset_x = 0.0
     offset_y = 0.0
   if abs(centerEnd[0]) <= abs(centerBegin[0]):
@@ -578,10 +575,10 @@ proc getIntersectLineIntersectsCylinderOnce(
   if abs(centerEnd[1]) <= abs(centerBegin[1]):
     offset_y = centerEnd[1]
   else: offset_y = centerBegin[1]
-   
-  p_1 = rotateInY(rotateInX(point_1, alpha_x), alpha_y) - vec3(offset_x, offset_y, 0.0)
 
-  p_2 = rotateInY(rotateInX(point_2, alpha_x), alpha_y) - vec3(offset_x, offset_y, 0.0)
+  let
+    p_1 = rotateInY(rotateInX(point_1, alpha_x), alpha_y) - vec3(offset_x, offset_y, 0.0)
+    p_2 = rotateInY(rotateInX(point_2, alpha_x), alpha_y) - vec3(offset_x, offset_y, 0.0)
 
   let
     vector = p_2 - p_1
@@ -616,9 +613,6 @@ proc getPixelValue(intersects: Vec3): Vec3 =
   intersectsPix[0] = floor(intersects[0] / (sizeViewfield/1400.0)) + 700
   intersectsPix[1] = floor(intersects[1] / (sizeViewfield/1400.0)) + 700
   result = intersectsPix
-
-
-## Some functions to include files from outside like the run file and the emissionrate/energy files ##
 
 proc abs[T: SomeUnit](x: T): T =
   result = abs(x.float).T
@@ -1359,7 +1353,7 @@ template eval(interp: InterpolatorType[float], energy: keV): untyped =
 proc computeReflectivity(expSetup: ExperimentSetup, energy: keV,
                          hitLayer: int, # the layer of the telescope hit
                          transmissionMagnet: float,
-                         p, ya, alpha1, alpha2: float,
+                         p, ya: float, alpha1, alpha2: Degree,
                          flags: set[ConfigFlags]): tuple[reflect: float,
                                                          weight: float] =
   ## Computes the reflectivity of the two reflections in the telescope of `expSetup`
@@ -1390,8 +1384,8 @@ proc computeReflectivity(expSetup: ExperimentSetup, energy: keV,
     ## TODO: This needs to be replaced by a 2D interpolation!
     {.gcsafe.}: # `{.gcsafe.}` due to closures in `numericalnim` missing the tag
       let
-        reflectionProb1 = refl.reflectivity.eval(alpha1, energy.float)
-        reflectionProb2 = refl.reflectivity.eval(alpha2, energy.float)
+        reflectionProb1 = refl.reflectivity.eval(alpha1.float, energy.float)
+        reflectionProb2 = refl.reflectivity.eval(alpha2.float, energy.float)
       result.reflect = reflectionProb1 * reflectionProb2
       result.weight = result.reflect * transmissionMagnet
   of rkMultiCoating:
@@ -1400,8 +1394,8 @@ proc computeReflectivity(expSetup: ExperimentSetup, energy: keV,
     let reflLayer = refl.reflectivities[layerIdx]
     {.gcsafe.}: # `{.gcsafe.}` due to closures in `numericalnim` missing the tag
       let
-        reflectionProb1 = reflLayer.eval(alpha1, energy.float)
-        reflectionProb2 = reflLayer.eval(alpha2, energy.float)
+        reflectionProb1 = reflLayer.eval(alpha1.float, energy.float)
+        reflectionProb2 = reflLayer.eval(alpha2.float, energy.float)
       result.reflect = reflectionProb1 * reflectionProb2
       result.weight = result.reflect * transmissionMagnet
 
@@ -1787,8 +1781,9 @@ proc traceAxion(res: var Axion,
     angle2 = getVectoraAfterMirror(
       pointAfterMirror1, pointMirror1, pointMirror2, beta3, "angle"
     )
-    alpha1 = angle1[1]
-    alpha2 = angle2[1]
+    # `getVectoraAfterMirror` with `"angle"` argument returns `Degree`
+    alpha1 = angle1[1].Degree
+    alpha2 = angle2[1].Degree
 
   # getting rid of the X-rays that hit the shell below
   if not testXray and
@@ -1894,7 +1889,7 @@ proc traceAxion(res: var Axion,
     if abs(pointDetectorWindow[0].mm) > ChipCenterX or abs(pointDetectorWindow[1].mm) > ChipCenterY:
       return
 
-  let 
+  let
     theta = detectorSetup.theta
     pointDetectorWindowTurned = rotateAroundZ(pointDetectorWindow, theta)
     x = pointDetectorWindowTurned[0]
