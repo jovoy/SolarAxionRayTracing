@@ -509,60 +509,14 @@ proc getIntersectlineIntersectsCircle(point_1, point_2, center: Vec3): Vec3 =
   var lambda1 = (center[2] - point_1[2]) / vector[2]
   result = point_1 + lambda1 * vector
 
-proc lineIntersectsCylinderOnce(point_1: Vec3, point_2: Vec3, centerBegin: Vec3,
-                                centerEnd: Vec3, radius: MilliMeter): bool =
-  ## Also a function to know if the line intersected at least the whole magnet,
-  ## and then only once, because else the axions would have just flown through ##
-  ##
-  ## TODO: can this *please* be merged with the proc below somehow?
-  var
-    alpha_x = arcsin((centerEnd[0] - centerBegin[0]) / abs(centerBegin[2] - centerEnd[2]))
-    alpha_y = arcsin((centerEnd[1] - centerBegin[1]) / abs(centerBegin[2] - centerEnd[2]))
-    offset_x = 0.0
-    offset_y = 0.0
-
-  if abs(centerEnd[0]) <= abs(centerBegin[0]):
-    offset_x = centerEnd[0]
-  else: offset_x = centerBegin[0]
-  if abs(centerEnd[1]) <= abs(centerBegin[1]):
-    offset_y = centerEnd[1]
-  else: offset_y = centerBegin[1]
-
-  p_1 = rotateInY(rotateInX(point_1, alpha_x), alpha_y) - vec3(offset_x, offset_y, 0.0)
-
-  p_2 = rotateInY(rotateInX(point_2, alpha_x), alpha_y) - vec3(offset_x, offset_y, 0.0)
-
-  let
-    vector = p_2 - p_1
-    lambda_dummy = (-1000.0 - p_1[2]) / vector[2]
-    dummy = p_1 + lambda_dummy * vector
-    vector_dummy = p_2 - dummy
-    factor = (vector_dummy[0]*vector_dummy[0] + vector_dummy[1]*vector_dummy[1])
-    p = 2.0 * (dummy[0] * vector_dummy[0] + dummy[1]*vector_dummy[1]) / factor
-    q = (dummy[0]*dummy[0] + dummy[1]*dummy[1] - (radius*radius).float) / factor
-    lambda_1 = -p/2.0 + sqrt(p*p/4.0 - q)
-    lambda_2 = -p/2.0 - sqrt(p*p/4.0 - q)
-    intersect_1 = dummy + lambda_1 * vector_dummy
-    intersect_2 = dummy + lambda_2 * vector_dummy
-    intersect_1_valid = (intersect_1[2] > centerBegin[2]) and
-                        (intersect_1[2] < centerEnd[2])
-    intersect_2_valid = (intersect_2[2] > centerBegin[2]) and
-                        (intersect_2[2] < centerEnd[2])
-
-  if ( (intersect_1_valid and intersect_2_valid) or (not intersect_1_valid and
-      not intersect_2_valid)):
-    return false
-  elif (intersect_1_valid):
-    #intersect = intersect_1
-    return true
-  else:
-    #intersect = intersect_2
-    return true
-
-proc getIntersectLineIntersectsCylinderOnce(
+type
+  VecResult = tuple[vector: Vec3[float], valid: bool]
+proc lineIntersectsCylinder(
   point_1: Vec3, point_2: Vec3,
   centerBegin: Vec3, centerEnd: Vec3, radius: MilliMeter
-     ): Vec3 =
+     ): tuple[inter1: VecResult, inter2: VecResult] =
+  ## Computes the intersections of the ray with the cylinder (magnet bore)
+  ## and returns a tuple of two intersection
 
   var
     alpha_x = arcsin((centerEnd[0] - centerBegin[0]) / abs(centerBegin[2] - centerEnd[2]))
@@ -590,22 +544,52 @@ proc getIntersectLineIntersectsCylinderOnce(
     q = (dummy[0]*dummy[0] + dummy[1]*dummy[1] - (radius*radius).float) / factor
     lambda_1 = -p/2.0 + sqrt(p*p/4.0 - q)
     lambda_2 = -p/2.0 - sqrt(p*p/4.0 - q)
+
+  # get intersections unrotated
   var
     intersect_1 = dummy + lambda_1 * vector_dummy
     intersect_2 = dummy + lambda_2 * vector_dummy
+  # undo "magnet" rotation
+  intersect_1 += vec3(offset_x, offset_y, 0.0)
+  intersect_1 = rotateInY(rotateInX(intersect_1, -alpha_x), -alpha_y)
+  intersect_2 += vec3(offset_x, offset_y, 0.0)
+  intersect_2 = rotateInY(rotateInX(intersect_2, -alpha_x), -alpha_y)
+  # check if intersection was hit
+  let
     intersect_1_valid = (intersect_1[2] > centerBegin[2]) and
                         (intersect_1[2] < centerEnd[2])
     intersect_2_valid = (intersect_2[2] > centerBegin[2]) and
                         (intersect_2[2] < centerEnd[2])
+  result = (inter1: (vector: intersect_1, valid: intersect_1_valid),
+            inter2: (vector: intersect_2, valid: intersect_2_valid))
 
-  intersect_1 += vec3(offset_x, offset_y, 0.0)
-  intersect_1 = rotateInY(rotateInX(intersect_1, -alpha_x), -alpha_y)
 
-  intersect_2 += vec3(offset_x, offset_y, 0.0)
-  intersect_2 = rotateInY(rotateInX(intersect_2, -alpha_x), -alpha_y)
+proc lineIntersectsCylinderOnce(point_1: Vec3, point_2: Vec3, centerBegin: Vec3,
+                                centerEnd: Vec3, radius: MilliMeter): bool =
+  ## Also a function to know if the line intersected at least the whole magnet,
+  ## and then only once, because else the axions would have just flown through ##
+  let (inter1, inter2) = lineIntersectsCylinder(
+    point_1, point_2, centerBegin, centerEnd, radius
+  )
+  if (inter1.valid and inter2.valid) or
+    (not inter1.valid and not inter2.valid):
+    result = false
+  elif inter1.valid:
+    result = true
+  else:
+    result = true
+  ## TODO: is there another case than `elif inter1.valid`? Or why is that not the same
+  ## branch?
 
-  result = if (intersect_1_valid): intersect_1 else: intersect_2
-
+proc getIntersectLineIntersectsCylinderOnce(
+  point_1: Vec3, point_2: Vec3,
+  centerBegin: Vec3, centerEnd: Vec3, radius: MilliMeter
+     ): Vec3[float] =
+  ## Returns the correct vector related to cutting the cylinder (coldbore)
+  let (inter1, inter2) = lineIntersectsCylinder(
+    point_1, point_2, centerBegin, centerEnd, radius
+  )
+  result = if (inter1.valid): inter1.vector else: inter2.vector
 
 proc getPixelValue(intersects: Vec3): Vec3 =
   const sizeViewfield = 48.0 #mm
