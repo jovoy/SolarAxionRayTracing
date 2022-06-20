@@ -701,7 +701,7 @@ proc getPointDetectorWindow(pointMirror2: Vec3, pointAfterMirror2: Vec3,
 
   ## To calculate the point in the detector window because the pipes are turned by 3 degree (angle here in rad)
   ## First switch into new coordinate system  with its origin in the middle of the telescope and z axis turned towards the detector
-  let 
+  let
     pipeRad = pipeAngle.to(Radian)
     pointMirror2Turned = rotateInX(pointMirror2, pipeRad) - vec3(dCBXray.float, 0.0, 0.0)
     pointAfterMirror2Turned = rotateInX(pointAfterMirror2, pipeRad) - vec3(dCBXray.float, 0.0, 0.0)
@@ -1110,15 +1110,15 @@ proc initTelescope(optics: TelescopeKind): Telescope =
       telescope_turned_y: 0.0.°, #the angle by which the telescope is turned in respect to the magnet
       # Measurements of the Telescope mirrors in the following, R1 are the radii of the mirror shells at the entrance of the mirror
       # the radii of the shells
-      allThickness: @[0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2,
+      allThickness: @[0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2,
                       0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2].mapIt(it.mm),
       # the radii of the shells
-      allR1: @[60.7095, 63.006, 65.606, 68.305, 71.105, 74.011, 77.027, 80.157,
+      allR1: @[63.006, 65.606, 68.305, 71.105, 74.011, 77.027, 80.157,
                83.405, 86.775, 90.272, 93.902, 97.668, 101.576, 105.632].mapIt(it.mm),
-      allXsep: @[4.0, 4.171, 4.140, 4.221, 4.190, 4.228, 4.245, 4.288, 4.284,
+      allXsep: @[4.171, 4.140, 4.221, 4.190, 4.228, 4.245, 4.288, 4.284,
                  4.306, 4.324, 4.373, 4.387, 4.403, 4.481].mapIt(it.mm),
       # the angles of the mirror shells coresponding to the radii above
-      allAngles: @[0.0, 0.579, 0.603, 0.628, 0.654, 0.680, 0.708, 0.737, 0.767,
+      allAngles: @[0.579, 0.603, 0.628, 0.654, 0.680, 0.708, 0.737, 0.767,
                    0.798, 0.830, 0.863, 0.898, 0.933, 0.970].mapIt(it.Degree),
       lMirror: 225.0.mm, # Mirror length
       holeInOptics: 0.0.mm, #max 20.9.mm
@@ -1720,11 +1720,8 @@ proc traceAxion(res: var Axion,
       r4 = r3 - 0.5 * xSep * tan(3.0 * beta)
       r5 = r4 - expSetup.telescope.lMirror * sin(3.0 * beta)
 
-  ## XXX: why do we return if we hit layer 0? (this was `r1 == allR1[0]` before) Does that imply
-  ## we're further inside than the inner most layer? Later in the code we always use `hitLayer - 1`,
-  ## but I still don't quite get it.
-  if hitLayer == 0:
-    return
+      ## TODO: verify that `break` here is actually justified
+      # break
 
   ## Why do we check for `lineIntersectsOpaqueTelescopeStructure` here again?
   if testXray and minDist > 100.0.mm and
