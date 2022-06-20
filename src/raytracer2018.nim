@@ -694,6 +694,13 @@ proc getVectoraAfterMirror*(pointXRT, pointCB, pointMirror: Vec3,
     result = pointMirror + 200.0 * vectorAfterMirror
   of "vectorAfter":
     result = vectorAfterMirror
+  else:
+    ## TODO: instead of having string arguments to determine what to do, split into
+    ## separate functions!
+    ##
+    ## While doing that, also change the code to *not* use a Vec3 for the return type
+    ## of the `"angle"` case. We only use the first argument of the returned vector!
+    doAssert false, "Invalid choice of return value!"
 
 proc getPointDetectorWindow(pointMirror2: Vec3, pointAfterMirror2: Vec3,
     distDet, xsepMiddle, dCBXray: MilliMeter,
