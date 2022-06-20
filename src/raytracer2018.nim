@@ -243,9 +243,9 @@ let
 
 let
   ChipXMin     = 0.0.mm
-  ChipXMax     = 66.0.mm #14.0.mm
+  ChipXMax     = 14.0.mm #14.0.mm
   ChipYMin     = 0.0.mm
-  ChipYMax     = 66.0.mm #14.0.mm
+  ChipYMax     = 14.0.mm #14.0.mm
   ChipCenterX  = ChipXMax / 2.0 #7.0.mm
   ChipCenterY  = ChipYMax / 2.0 #7.0.mm
   GoldXMin     = 4.5.mm
@@ -602,7 +602,8 @@ proc abs[T: SomeUnit](x: T): T =
   result = abs(x.float).T
 
 proc findPosXRT*(pointXRT: Vec3, pointCB: Vec3,
-                 r1, r2: MilliMeter, angle: Radian, lMirror, distMirr, uncer, sMin, sMax: MilliMeter): Vec3 =
+                 r1, r2: MilliMeter, angle: Radian, lMirror, distMirr, uncer, sMin, sMax: MilliMeter,
+                 name = ""): Vec3 =
   ## this is to find the position the ray hits the mirror shell of r1. it is after
   ## transforming the ray into a coordinate system, that has the middle of the
   ## beginning of the mirror cones as its origin
@@ -619,6 +620,27 @@ proc findPosXRT*(pointXRT: Vec3, pointCB: Vec3,
                 4.0 * direc[0] * direc[1] * lMirror.float * cos(angle) * (distMirr * r1.mm - point[2].mm * r1.mm -
                 distMirr * r2 + point[2].mm * r2 + point[0].mm * point[1].mm * lMirror.float * cos(angle) +
                 lMirror * r1.mm * cos(angle)).float) * sec(angle))/(2.0 * direc[0] * direc[1] * lMirror.float)
+  # calculate the values to solve for s with the p-q-formular, where p=b/a and q=c/a
+  let
+    k = tan(angle) * tan(angle)
+    a = direc[0] * direc[0] + direc[1] * direc[1] - k * direc[2] * direc[2]
+    b = 2.0 * (point[0] * direc[0] + r1.float * tan(angle) * direc[2] - k * (point[2] - distMirr.float) * direc[2])
+    halfb = b / 2.0
+    c = point[0] * point[0] + point[1] * point[1] - r1.float * r1.float + 2.0 * r1.float * tan(angle) * (point[2] - distMirr.float) - 
+        k * (point[2] - distMirr.float) * (point[2] - distMirr.float)
+
+  # find nearest root that lies in acceptable range
+  var 
+    s : float
+    root1 = (-half_b - sqrt(half_b * half_b - a * c)) / a
+    root2 = (-half_b + sqrt(half_b * half_b - a * c)) / a
+  if point[2] + root1 * direc[2] > distMirr.float and point[2] + root1 * direc[2] < distMirr.float + lMirror.float * cos(angle):
+    s = root1
+  elif point[2] + root2 * direc[2] > distMirr.float and point[2] + root2 * direc[2] < distMirr.float + lMirror.float * cos(angle):
+    s = root2
+  else: 
+    s = 0.0
+  
 
   template calcVal(s: MilliMeter): untyped =
     ## Point + scalar * unit vector essentially. Hence no `mm` for direction.
@@ -639,8 +661,8 @@ proc findPosXRT*(pointXRT: Vec3, pointCB: Vec3,
       # use upper half
       sMinHigh = mid
       mid = (sMaxHigh + mid) / 2.0
-  pointMirror = point + mid.float * direc
-  #echo sValue, " actual: ", mid.float
+  pointMirror = point + s * direc
+  #echo mid.float, " actual: ", s ," point: ", point + root2 * direc, " root2: ", root2, " target ", name
   result = pointMirror
 
 proc getVectoraAfterMirror*(pointXRT, pointCB, pointMirror: Vec3,
@@ -1123,7 +1145,7 @@ proc initTelescope(optics: TelescopeKind): Telescope =
       optics_entrance: @[0.0, -0.0, 0.0].mapIt(it.mm),
       optics_exit: @[0.0, -0.0, 600.0].mapIt(it.mm),
       telescope_turned_x: 0.0.°, #the angle by which the telescope is turned in respect to the magnet
-      telescope_turned_y: -0.05.°, #the angle by which the telescope is turned in respect to the magnet
+      telescope_turned_y: 0.0.°, #the angle by which the telescope is turned in respect to the magnet
       # Measurements of the Telescope mirrors in the following, R1 are the radii of the mirror shells at the entrance of the mirror
       allThickness: @[0.468, 0.475, 0.482, 0.490, 0.497, 0.504, 0.511, 0.519, 0.526, 0.534,
                       0.542, 0.549, 0.557, 0.566, 0.574, 0.583, 0.591, 0.600, 0.609, 0.618,
@@ -1759,7 +1781,7 @@ proc traceAxion(res: var Axion,
     beta3 = 3.0 * beta
     distanceMirrors = cos(beta) * (xSep + expSetup.telescope.lMirror)
     pointMirror1 = findPosXRT(pointEntranceXRT, pointExitCB, r1,
-                              r2, beta, expSetup.telescope.lMirror, 0.0.mm, 0.001.mm, 1.0.mm, 1.1.mm)
+                              r2, beta, expSetup.telescope.lMirror, 0.0.mm, 0.001.mm, 1.0.mm, 1.1.mm, "Mirror 1")
 
 
   let
@@ -1768,7 +1790,7 @@ proc traceAxion(res: var Axion,
     pointAfterMirror1 = pointMirror1 + 200.0 * vectorAfterMirror1
     pointMirror2 = findPosXRT(
       pointAfterMirror1, pointMirror1, r4, r5, beta3,
-      expSetup.telescope.lMirror, distanceMirrors, 0.01.mm, 0.0.mm, 2.5.mm
+      expSetup.telescope.lMirror, distanceMirrors, 0.01.mm, 0.0.mm, 2.5.mm, "Mirror 2"
     )
 
 
@@ -1806,9 +1828,10 @@ proc traceAxion(res: var Axion,
   ## Check if `findPosXRT` did not find a hit on the layer. In that case the two `pointMirror`
   ## variables actually contain the same (at least `z`) data, because the input is returned
   ## unchanged in that case.
+  let z0 = pointExitCB[2]
   let z1 = pointMirror1[2]
   let z2 = pointMirror2[2]
-  if almostEqual(z1, z2):
+  if almostEqual(z1, z2) or almostEqual(z1, z0):
     return
   ############################################# Mirrors end #################################################
   ## now get the points in the focal / detector plane
