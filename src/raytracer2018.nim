@@ -791,8 +791,9 @@ proc plotHeatmap(diagramtitle: string,
                  width: int,
                  year: string,
                  rSigma1: float,
-                 rSigma2: float) =
-  ## this function draws a hdiagram out a given heatmap ##
+                 rSigma2: float,
+                 suffix = "") =
+  ## this function draws a diagram out a given heatmap ##
   var
     xs = newSeq[int](width * width)
     ys = newSeq[int](width * width)
