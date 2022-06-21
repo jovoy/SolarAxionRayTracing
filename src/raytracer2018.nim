@@ -225,6 +225,16 @@ type
     cfReadMagnetConfig,  ## if given uses configuration of magnet from config file
     cfReadDetInstallConfig ## if given uses configuration of detector install. from config file
 
+  FullRaytraceSetup = object
+    centerVecs: CenterVectors
+    expSetup: ExperimentSetup
+    detectorSetup: DetectorSetup
+    energies: seq[keV]
+    emRates: seq[seq[float]]
+    emRatesRadiusCumSum: seq[float]
+    emRateCDFs: seq[seq[float]]
+    flags: set[ConfigFlags]
+
 ################################
 # VARIABLES from rayTracer.h
 ## WARNING: cannot be `const` at the moment, due to Nim compiler bug with distinct types
@@ -842,8 +852,8 @@ proc plotHeatmap(diagramtitle: string,
     #canvasColor(parseHex("8cc7d4")) +
     #theme_transparent() +
     margin(top = 2, left = 3, right = 6) +
-    ggtitle(&"Simulated X-ray signal distribution on the detector chip with a total flux of {flux:.3e} events after 3 months") +
-    ggsave(&"../out/axion_image_{year}.pdf", width = width, height = height)
+    ggtitle(&"Simulated X-ray signal distribution on the detector chip with a total flux of {flux:.3e} events after 3 months {suffix}") +
+    ggsave(&"../out/axion_image_{year}_{suffix}.pdf", width = width, height = height)
 
   ggplot(df, aes("x-position [mm]", "y-position [mm]", fill = "photon flux")) +
     geom_raster() +
@@ -862,7 +872,7 @@ proc plotHeatmap(diagramtitle: string,
     #canvasColor(parseHex("62bed3b0")) +
     theme_transparent() +
     ggtitle("Simulated X-ray signal distribution on the detector chip") +
-    ggsave(&"../out/axion_image_{year}.png")
+    ggsave(&"../out/axion_image_{year}_{suffix}.png")
 
 proc plotSolarModel(df: DataFrame) =
   ## A few plots for the solar model that are mainly for debugging.
@@ -2025,7 +2035,9 @@ proc traceAxionWrapper(axBuf: ptr UncheckedArray[Axion],
                            flags)
 
 proc generateResultPlots(axions: seq[Axion],
-                         windowYear: WindowYearKind) =
+                         windowYear: WindowYearKind,
+                         suffix = ""
+                         ) =
   ## Creates all plots we want based on the raytracing result
   let axionsPass = axions.filterIt(it.passed)
   echo "Passed axions ", axionsPass.len
@@ -2410,13 +2422,12 @@ proc generateResultPlots(axions: seq[Axion],
                                      pointdataX, pointdataY, weights, heatmaptable2.max) # if change number of rows: has to be in the maxVal as well
  # echo "Probability of it originating from an axion if a photon hits at x = 5,3mm and y = 8,4mm (in this model):"
  # echo (heatmaptable3[53][84]) * 100.0  #echo heatmaptable3[x][y]
+  plotHeatmap("Axion Model Fluxfraction", heatmaptable2, 256, $windowYear, rSigma1W, rSigma2W, suffix) #rSigma1, rSigma2)
 
-  plotHeatmap("Axion Model Fluxfraction", heatmaptable2, 256, $windowYear, rSigma1W, rSigma2W) #rSigma1, rSigma2)
-
-proc calculateFluxFractions(setup: ExperimentSetupKind,
-                            detectorSetup: DetectorSetupKind,
-                            stage: StageKind,
-                            flags: set[ConfigFlags]) =
+proc initFullSetup(setup: ExperimentSetupKind,
+                   detectorSetup: DetectorSetupKind,
+                   stage: StageKind,
+                   flags: set[ConfigFlags]): FullRaytraceSetup =
   let expSetup = newExperimentSetup(setup, stage, flags)
   let energies = linspace(0.001, 15.0, 15000).mapIt(it.keV)
 
@@ -2524,6 +2535,19 @@ proc calculateFluxFractions(setup: ExperimentSetupKind,
 
   let centerVecs = expSetup.initCenterVectors()
 
+  result = FullRaytraceSetup(
+    centerVecs: centerVecs,
+    expSetup: expSetup,
+    detectorSetup: detectorSetup,
+    energies: energies,
+    emRates: emRates,
+    emRatesRadiusCumSum: emRatesRadiusCumSum,
+    emRateCDFs: emRateCDFs,
+    flags: flags
+  )
+
+proc calculateFluxFractions(raytraceSetup: FullRaytraceSetup,
+                            generatePlots = true, suffix = ""): seq[Axion] =
   ## In the following we will go over a number of points in the sun, whose location and
   ## energy will be biased by the emission rate and whose track will be through the CAST
   ## experimental setup from 2018 at VT3
@@ -2531,24 +2555,29 @@ proc calculateFluxFractions(setup: ExperimentSetupKind,
   var axBuf = cast[ptr UncheckedArray[Axion]](axions[0].addr)
   echo "start"
   #echo emRatesRadiusSum.len
-  echo emRates.len
+  #echo raytraceSetup.emRates.len
   init(Weave)
   traceAxionWrapper(axBuf, NumberOfPointsSun,
-                    centerVecs,
-                    expSetup,
-                    detectorSetup,
-                    emRates, emRatesRadiusCumSum,
-                    emRateCDFs,
-                    energies,
-                    flags)
+                    raytraceSetup.centerVecs,
+                    raytraceSetup.expSetup,
+                    raytraceSetup.detectorSetup,
+                    raytraceSetup.emRates,
+                    raytraceSetup.emRatesRadiusCumSum,
+                    raytraceSetup.emRateCDFs,
+                    raytraceSetup.energies,
+                    raytraceSetup.flags)
   exit(Weave)
 
-  generateResultPlots(axions, detectorSetup.windowYear)
+  if generatePlots:
+    generateResultPlots(axions, raytraceSetup.detectorSetup.windowYear, suffix)
+  result = axions
 
 proc main(
   ignoreDetWindow = false, ignoreGasAbs = false,
   ignoreConvProb = false, ignoreReflection = false, xrayTest = false,
-  detectorInstall = false, magnet = false
+  detectorInstall = false, magnet = false,
+  angularScanMin = 0.0, angularScanMax = 0.0, numAngularScanPoints = 50,
+  noPlots = false
          ) =
   # check if the `config.toml` file exists, otherwise recreate from the default
   if not fileExists("config.toml"):
@@ -2570,11 +2599,39 @@ proc main(
 
   let (esKind, dkKind, skKind) = parseSetup()
 
-  calculateFluxFractions(esKind,
-                         dkKind,
-                         skKind,
-                         flags) # radiationCharacteristic = "axionRadiation::characteristic::sar"
 
+  if angularScanMin == angularScanMax:
+    let fullSetup = initFullSetup(esKind,
+                                  dkKind,
+                                  skKind,
+                                  flags) # radiationCharacteristic = "axionRadiation::characteristic::sar"
+    discard fullSetup.calculateFluxFractions(generatePlots = not noPlots)
+  else:
+    # perform a scan of the angular rotation of the telescope
+    let angles = linspace(angularScanMin, angularScanMax, numAngularScanPoints)
+    var fullSetup = initFullSetup(esKind,
+                                  dkKind,
+                                  skKind,
+                                  flags) # radiationCharacteristic = "axionRadiation::characteristic::sar"
+    var fluxes = newSeq[float](numAngularScanPoints)
+    for i, angle in angles:
+      let suffix = &"angle_{angle:.2f}"
+      # modify the angle of the telescope
+      var expSetup = fullSetup.expSetup
+      var tel = expSetup.telescope
+      tel.telescope_turned_y = angle.Degree
+      expSetup.telescope = tel
+      fullSetup.expSetup = expSetup
+      let axions = fullSetup.calculateFluxFractions(generatePlots = not noPlots, suffix = suffix)
+      fluxes[i] = axions.filterIt(it.passed).mapIt(it.weights).sum()
+    let maxFlux = fluxes.max
+    fluxes.applyIt(it / maxFlux)
+    let df = toDf(angles, fluxes)
+    echo df.pretty(-1)
+    ggplot(df, aes("angles", "fluxes")) +
+      geom_point() +
+      ggtitle("Behavior of normalized total flux in scan of telescope angle") +
+      ggsave("../out/angular_scan_telescope_y.pdf", width = 800, height = 480)
 
 when isMainModule:
   dispatch main
