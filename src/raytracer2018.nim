@@ -1509,14 +1509,14 @@ proc lineIntersectsOpaqueTelescopeStructures(
             centerHole[0] += 2.0 * (l + (l / abs(l))).float * expSetup.telescope.holeInOptics.float
         if lineIntersectsObject(expSetup.telescope.holeType, pointExitCB, pointEntranceXRT,
                                 centerHole, expSetup.telescope.holeInOptics):
-          result = true
+          result = false
           break
         else:
-          result = false
+          result = true
     # hole max 20.9 mm doesnt really matter because there are no mirrors in the
     # middle and these axions dont reach the window anyways
     elif radialDist < 151.6.mm and radialDist > (151.6 - 20.9).mm:
-      result = false
+      result = true
     elif radialDist > 64.7.mm:
       # iterate all strips of the spider structure
       for i in 0 .. 16:
@@ -1524,7 +1524,7 @@ proc lineIntersectsOpaqueTelescopeStructures(
         # it doesnt reach the window anyways)
         if ((phiFlat >= (-1.145 + 22.5 * i.float) and phiFlat <= (1.145 + 22.5 * i.float))) or
            ((phiFlatSpider >= (-1.145 + 22.5 * i.float) and phiFlatSpider <= (1.145 + 22.5 * i.float))):
-          result = false
+          result = true
           break
   else:
     doAssert false, "The telescope kind " & $expSetup.telescope.kind & " does not have any opaque " &
