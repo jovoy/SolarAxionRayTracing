@@ -2628,9 +2628,14 @@ proc main(
     fluxes.applyIt(it / maxFlux)
     let df = toDf(angles, fluxes)
     echo df.pretty(-1)
+    let dfXMM = readCsv("../resources/xmm_newton_angular_effective_area.csv", header = "#")
+      .filter(f{`effectiveArea` > 0.0})
+      .mutate(f{"angles" ~ idx("angle[arcmin]") / 60.0},
+              f{"effectiveArea" ~ `effectiveArea` / max(`effectiveArea`)})
     ggplot(df, aes("angles", "fluxes")) +
       geom_point() +
-      ggtitle("Behavior of normalized total flux in scan of telescope angle") +
+      geom_line(data = dfXMM, aes = aes("angles", "effectiveArea"), color = "#FF00FF") +
+      ggtitle("Normalized total flux in scan of telescope angle. Solid line: XMM Newton 'theory'") +
       ggsave("../out/angular_scan_telescope_y.pdf", width = 800, height = 480)
 
 when isMainModule:
