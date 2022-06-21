@@ -325,19 +325,27 @@ proc toRad(wyKind: WindowYearKind): float =
   of wyIAXO:
     result = degToRad(20.0) # who knows
 
-proc rotateInX(vector: Vec3, angle: Radian): Vec3 =
+proc translateZ(vec: Vec3[float], distance: MilliMeter): Vec3[float] =
+  result = vec
+  result[2] += distance.float
+
+proc rotateInX(vector: Vec3, angle: Radian, rotateOffset: MilliMeter = 0.0.mm): Vec3 =
   ## Rotation of a vector in x direction aka around the y axis counterclockwise when angle is positive and the y axis points towards observer
   ## Or rotation of the coordinate system the vector is in clockwise
+  let vector = vector.translateZ(-rotateOffset)
   result = vec3(vector[0] * cos(angle) + vector[2] * sin(angle),
                 vector[1],
                 vector[2] * cos(angle) - vector[0] * sin(angle))
+  result = result.translateZ(rotateOffset)
 
-proc rotateInY(vector: Vec3, angle: Radian): Vec3 =
+proc rotateInY(vector: Vec3, angle: Radian, rotateOffset: MilliMeter = 0.0.mm): Vec3 =
   ## Rotation of a vector in y direction aka around the x axis counterclockwise when angle is positive and the x axis points towards observer
   ## Or rotation of the coordinate system the vector is in clockwise
+  let vector = vector.translateZ(-rotateOffset)
   result = vec3(vector[0],
                 vector[1] * cos(angle) - vector[2] * sin(angle),
                 vector[2] * cos(angle) + vector[1] * sin(angle))
+  result = result.translateZ(rotateOffset)
 
 proc rotateAroundZ(vector: Vec3, angle: Radian): Vec3 =
   ## Rotation of a vector around the z axis counterclockwise when angle is positive and the z axis points away from the observer
