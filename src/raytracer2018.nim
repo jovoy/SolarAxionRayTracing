@@ -644,11 +644,11 @@ proc findPosXRT*(pointXRT: Vec3, pointCB: Vec3,
     a = direc[0] * direc[0] + direc[1] * direc[1] - k * direc[2] * direc[2]
     b = 2.0 * (point[0] * direc[0] + r1.float * tan(angle) * direc[2] - k * (point[2] - distMirr.float) * direc[2])
     halfb = b / 2.0
-    c = point[0] * point[0] + point[1] * point[1] - r1.float * r1.float + 2.0 * r1.float * tan(angle) * (point[2] - distMirr.float) - 
+    c = point[0] * point[0] + point[1] * point[1] - r1.float * r1.float + 2.0 * r1.float * tan(angle) * (point[2] - distMirr.float) -
         k * (point[2] - distMirr.float) * (point[2] - distMirr.float)
 
   # find nearest root that lies in acceptable range
-  var 
+  var
     s : float
     root1 = (-half_b - sqrt(half_b * half_b - a * c)) / a
     root2 = (-half_b + sqrt(half_b * half_b - a * c)) / a
@@ -656,9 +656,9 @@ proc findPosXRT*(pointXRT: Vec3, pointCB: Vec3,
     s = root1
   elif point[2] + root2 * direc[2] > distMirr.float and point[2] + root2 * direc[2] < distMirr.float + lMirror.float * cos(angle):
     s = root2
-  else: 
+  else:
     s = 0.0
-  
+
 
   template calcVal(s: MilliMeter): untyped =
     ## Point + scalar * unit vector essentially. Hence no `mm` for direction.
@@ -2175,53 +2175,51 @@ proc generateResultPlots(axions: seq[Axion],
     ggsave(&"../out/deviationDet_ridges_{windowYear}.pdf", height = 600)]#
 
 
-
-
-
   let dfRad = seqsToDf({"Radial component [mm]": pointdataR,
                         "Transmission probability": weights,
                         "x": pointDataX,
                        "y": pointDataY})
 
   #echo dfRad.arrange("Radial component [mm]")
-  ggplot(dfRad, aes("Radial component [mm]", weight = "Transmission probability")) +
-    geom_histogram(binWidth = 0.001) +
-    ggtitle("Radial distribution of the axions") +
-    ggsave(&"../out/radialDistribution_{windowYear}.pdf")
+  if dfRad.len > 0:
+    ggplot(dfRad, aes("Radial component [mm]", weight = "Transmission probability")) +
+      geom_histogram(binWidth = 0.001) +
+      ggtitle("Radial distribution of the axions") +
+      ggsave(&"../out/radialDistribution_{windowYear}.pdf")
 
-  let dfFluxE = seqsToDf({ "Axion energy [keV]": energiesAx.mapIt(it.float),
-                           "Transmission probability": weights })
+  when false:
+    let dfFluxE = seqsToDf({ "Axion energy [keV]": energiesAx.mapIt(it.float),
+                             "Transmission probability": weights })
 
-  #[ggplot(dfFluxE, aes("Axion energy [keV]", weight = "Transmission probability")) +
-    geom_histogram(binWidth = 0.001, lineWidth= some(1.2)) +
-    #backgroundColor(parseHex("8cc7d4")) +
-    #gridLineColor(parseHex("8cc7d4")) +
-    #canvasColor(parseHex("8cc7d4")) +
-    #theme_transparent() +
-    ylab("photon flux") +
-    #ylim(0.0, 0.0001) +
-    xlim(0.0, 15.0) +
-    ggtitle("Simulated photon flux depending on the energy of the axion") +
-    ggsave(&"../out/fluxAfter_{windowYear}.pdf")
+    ggplot(dfFluxE, aes("Axion energy [keV]", weight = "Transmission probability")) +
+      geom_histogram(binWidth = 0.001, lineWidth= some(1.2)) +
+      #backgroundColor(parseHex("8cc7d4")) +
+      #gridLineColor(parseHex("8cc7d4")) +
+      #canvasColor(parseHex("8cc7d4")) +
+      #theme_transparent() +
+      ylab("photon flux") +
+      #ylim(0.0, 0.0001) +
+      xlim(0.0, 15.0) +
+      ggtitle("Simulated photon flux depending on the energy of the axion") +
+      ggsave(&"../out/fluxAfter_{windowYear}.pdf")
 
-  ggplot(dfFluxE, aes("Axion energy [keV]", weight = "Transmission probability")) +
-    geom_histogram(binWidth = 0.001, lineWidth= some(1.2)) +
-    #backgroundColor(parseHex("8cc7d4")) +
-    #gridLineColor(parseHex("8cc7d4")) +
-    #canvasColor(parseHex("8cc7d4")) +
-    #theme_transparent() +
-    ylab("photon flux") +
-    #ylim(0.0, 0.0001) +
-    xlim(0.0, 1.0) +
-    ggtitle("Simulated photon flux depending on the energy of the axion") +
-    ggsave(&"../out/fluxAfterZoomed_{windowYear}.pdf")
+    ggplot(dfFluxE, aes("Axion energy [keV]", weight = "Transmission probability")) +
+      geom_histogram(binWidth = 0.001, lineWidth= some(1.2)) +
+      #backgroundColor(parseHex("8cc7d4")) +
+      #gridLineColor(parseHex("8cc7d4")) +
+      #canvasColor(parseHex("8cc7d4")) +
+      #theme_transparent() +
+      ylab("photon flux") +
+      #ylim(0.0, 0.0001) +
+      xlim(0.0, 1.0) +
+      ggtitle("Simulated photon flux depending on the energy of the axion") +
+      ggsave(&"../out/fluxAfterZoomed_{windowYear}.pdf")
 
-  ggplot(dfFluxE, aes("Axion energy [keV]", weight = "Transmission probability")) +
-    geom_histogram(binWidth = 0.00001, lineWidth= some(1.2)) +
-    theme_transparent() +
-    ggtitle("Simulated photon flux depending on the energy of the axion") +
-    ggsave(&"../out/fluxAfter_{windowYear}.png")]#
-  #[
+    ggplot(dfFluxE, aes("Axion energy [keV]", weight = "Transmission probability")) +
+      geom_histogram(binWidth = 0.00001, lineWidth= some(1.2)) +
+      theme_transparent() +
+      ggtitle("Simulated photon flux depending on the energy of the axion") +
+      ggsave(&"../out/fluxAfter_{windowYear}.png")
 
   let dfXY = seqsToDf({"x": pointDataX,
                        "y": pointDataY,
@@ -2239,22 +2237,23 @@ proc generateResultPlots(axions: seq[Axion],
     ggtitle("R") +
     ggsave(&"../out/R_{windowYear}.pdf")
 
-  let dfMag = seqsToDf({"Transmission probability": transmissionMagnet,
-                       "Angles between path and magnetic field": yawAngles,
-                       "Axion energy[keV]": energiesAx}).arrange("Angles between path and magnetic field")
+  when false:
+    let dfMag = seqsToDf({"Transmission probability": transmissionMagnet,
+                           "Angles between path and magnetic field": yawAngles,
+                           "Axion energy[keV]": energiesAx}).arrange("Angles between path and magnetic field")
 
 
-  ggplot(dfMag, aes("Angles between path and magnetic field", "Transmission probability")) +
-    geom_point(size = some(0.5), alpha = some(0.1)) +
-    ylim(3.1e-24, 3.16e-24) +
-    ggtitle("The probability of the transformation of axions to X-rays in the magnet") +
-    ggsave(&"../out/transMagnet_{windowYear}.pdf")
+    ggplot(dfMag, aes("Angles between path and magnetic field", "Transmission probability")) +
+      geom_point(size = some(0.5), alpha = some(0.1)) +
+      ylim(3.1e-24, 3.16e-24) +
+      ggtitle("The probability of the transformation of axions to X-rays in the magnet") +
+      ggsave(&"../out/transMagnet_{windowYear}.pdf")
 
-  ggplot(dfMag, aes("Axion energy[keV]", "Transmission probability")) +
-    geom_point(size = some(0.5), alpha = some(0.1)) +
-    #ylim(3.1e-24, 3.16e-24) +
-    ggtitle("The probability of the transformation of axions to X-rays in the magnet") +
-    ggsave(&"../out/transMagnetE_{windowYear}.pdf")]#
+    ggplot(dfMag, aes("Axion energy[keV]", "Transmission probability")) +
+      geom_point(size = some(0.5), alpha = some(0.1)) +
+      #ylim(3.1e-24, 3.16e-24) +
+      ggtitle("The probability of the transformation of axions to X-rays in the magnet") +
+      ggsave(&"../out/transMagnetE_{windowYear}.pdf")
 
   ############get the 1 and 2 sigma area ###################
   var pointR = pointdataR
@@ -2349,13 +2348,14 @@ proc generateResultPlots(axions: seq[Axion],
     ggtitle("X and Y") +
     ggsave(&"../out/xy_{windowYear}.pdf")]#
   let dfRadFilter = dfRadSig.filter(f{`x` < (ChipCenterX.float + 0.05)}).filter(f{`x` > (ChipCenterX.float - 0.05)})
-  echo dfRadFilter
-  ggplot(dfRadFilter, aes("y", fill = factor("Sigma"), weight = "Transmission probability")) +
-    geom_histogram(binWidth = 0.001) +
-    xlab("y-position [mm]") +
-    ylab("flux") +
-    ggtitle("Simulated X-ray signal distribution along the y-axis") +
-    ggsave(&"../out/y_{windowYear}.pdf")
+  if dfRadFilter.len > 0:
+    echo dfRadFilter
+    ggplot(dfRadFilter, aes("y", fill = factor("Sigma"), weight = "Transmission probability")) +
+      geom_histogram(binWidth = 0.001) +
+      xlab("y-position [mm]") +
+      ylab("flux") +
+      ggtitle("Simulated X-ray signal distribution along the y-axis") +
+      ggsave(&"../out/y_{windowYear}.pdf")
 
 
   #[let dfRadSigW = seqsToDf({"Radial component [mm]": pointdataRSig,
