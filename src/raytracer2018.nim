@@ -2581,6 +2581,44 @@ proc calculateFluxFractions(raytraceSetup: FullRaytraceSetup,
     generateResultPlots(axions, raytraceSetup.detectorSetup.windowYear, suffix)
   result = axions
 
+proc performAngularScan(angularScanMin, angularScanMax: float, numAngularScanPoints: int,
+                        noPlots: bool,
+                        flags: set[ConfigFlags]) =
+  ## Performs a scan of the telescope efficiency (intended for the XMM Newton optics)
+  ## under different angles.
+  let (esKind, dkKind, skKind) = parseSetup()
+  let angles = linspace(angularScanMin, angularScanMax, numAngularScanPoints)
+  var fullSetup = initFullSetup(esKind,
+                                dkKind,
+                                skKind,
+                                flags) # radiationCharacteristic = "axionRadiation::characteristic::sar"
+  var fluxes = newSeq[float](numAngularScanPoints)
+  for i, angle in angles:
+    let suffix = &"angle_{angle:.2f}"
+    # modify the angle of the telescope
+    var expSetup = fullSetup.expSetup
+    var tel = expSetup.telescope
+    tel.telescope_turned_y = angle.Degree
+    expSetup.telescope = tel
+    fullSetup.expSetup = expSetup
+    let axions = fullSetup.calculateFluxFractions(generatePlots = not noPlots, suffix = suffix)
+    fluxes[i] = axions.filterIt(it.passed).mapIt(it.weights).sum()
+  let maxFlux = fluxes.max
+  fluxes.applyIt(it / maxFlux)
+  var df = toDf({"Angle [deg]" : angles, "relative flux" : fluxes})
+  echo df.pretty(-1)
+  let dfXMM = readCsv("../resources/xmm_newton_angular_effective_area.csv", header = "#")
+    .filter(f{`effectiveArea` > 0.0})
+    .mutate(f{"Angle [deg]" ~ idx("angle[arcmin]") / 60.0},
+            f{"effectiveArea" ~ `effectiveArea` / max(`effectiveArea`)})
+  let dfMcXtrace = readCsv("../resources/McXtrace_angular_xmm.csv")
+  df = bind_rows([("Nim", df), ("McXtrace", dfMcXtrace)], "Type")
+  ggplot(df, aes("Angle [deg]", "relative flux", color = "Type")) +
+    geom_point() +
+    geom_line(data = dfXMM, aes = aes("Angle [deg]", "effectiveArea"), color = "#FF00FF") +
+    ggtitle("Normalized total flux in scan of telescope angle. Solid line: XMM Newton 'theory'") +
+    ggsave("../out/angular_scan_telescope_y.pdf", width = 800, height = 480)
+
 proc main(
   ignoreDetWindow = false, ignoreGasAbs = false,
   ignoreConvProb = false, ignoreReflection = false, xrayTest = false,
@@ -2606,10 +2644,8 @@ proc main(
   if detectorInstall: flags.incl cfReadDetInstallConfig
   echo "Flags: ", flags
 
-  let (esKind, dkKind, skKind) = parseSetup()
-
-
   if angularScanMin == angularScanMax:
+    let (esKind, dkKind, skKind) = parseSetup()
     let fullSetup = initFullSetup(esKind,
                                   dkKind,
                                   skKind,
@@ -2617,35 +2653,7 @@ proc main(
     discard fullSetup.calculateFluxFractions(generatePlots = not noPlots)
   else:
     # perform a scan of the angular rotation of the telescope
-    let angles = linspace(angularScanMin, angularScanMax, numAngularScanPoints)
-    var fullSetup = initFullSetup(esKind,
-                                  dkKind,
-                                  skKind,
-                                  flags) # radiationCharacteristic = "axionRadiation::characteristic::sar"
-    var fluxes = newSeq[float](numAngularScanPoints)
-    for i, angle in angles:
-      let suffix = &"angle_{angle:.2f}"
-      # modify the angle of the telescope
-      var expSetup = fullSetup.expSetup
-      var tel = expSetup.telescope
-      tel.telescope_turned_y = angle.Degree
-      expSetup.telescope = tel
-      fullSetup.expSetup = expSetup
-      let axions = fullSetup.calculateFluxFractions(generatePlots = not noPlots, suffix = suffix)
-      fluxes[i] = axions.filterIt(it.passed).mapIt(it.weights).sum()
-    let maxFlux = fluxes.max
-    fluxes.applyIt(it / maxFlux)
-    let df = toDf(angles, fluxes)
-    echo df.pretty(-1)
-    let dfXMM = readCsv("../resources/xmm_newton_angular_effective_area.csv", header = "#")
-      .filter(f{`effectiveArea` > 0.0})
-      .mutate(f{"angles" ~ idx("angle[arcmin]") / 60.0},
-              f{"effectiveArea" ~ `effectiveArea` / max(`effectiveArea`)})
-    ggplot(df, aes("angles", "fluxes")) +
-      geom_point() +
-      geom_line(data = dfXMM, aes = aes("angles", "effectiveArea"), color = "#FF00FF") +
-      ggtitle("Normalized total flux in scan of telescope angle. Solid line: XMM Newton 'theory'") +
-      ggsave("../out/angular_scan_telescope_y.pdf", width = 800, height = 480)
+    performAngularScan(angularScanMin, angularScanMax, numAngularScanPoints, noPlots, flags)
 
 when isMainModule:
   dispatch main
