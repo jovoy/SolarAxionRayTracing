@@ -1,6 +1,6 @@
 import streams, strutils, math, tables, sequtils, strformat, hashes, polynumeric, macros, strscans, os, ggplotnim
 
-import numericalnim 
+import numericalnim
 
 import seqmath except linspace
 import arraymancer except readCsv, linspace
@@ -154,7 +154,7 @@ proc parseDensityTab(ds: FileStream, temp: int,
       break
   # finalize densityOpacity by creating spline and adding to result
   result.interp = newCubicSpline(result.energies,
-                                  result.opacities)
+                                 result.opacities)
 
 proc parseOpacityNew(ds: FileStream,
                          fname: string,
@@ -276,7 +276,7 @@ proc fNew(w: float, y: float): float =
   # int_a^infty dx f(x) = int_0^1 f(a + (1 - t) / t) / t^2
   # in our case a = 0
   # so express by wrapping `outer` in a new proc
-  let fnToInt = proc(t: float, optional: NumContext[float]): float =
+  let fnToInt = proc(t: float, optional: NumContext[float, float]): float =
     #echo t
     if t != 0:
       result = outer(x = (1 - t) / t, w = w, y = y) / (t * t)
@@ -322,7 +322,7 @@ proc f(w: float, y: float): float =
   result = integral
 
 proc bfield(r:float): float = #r in sun radius percentage
-  let 
+  let
     radius_cz = 0.712 # start of convective zone = end of radiative zone
     size_tach = 0.02 # size of convective/radiative transistion region
     radius_outer = 0.96 # upper layers of the Sun
@@ -343,9 +343,9 @@ proc bfield(r:float): float = #r in sun radius percentage
     var z = pow((r - radius_outer)/size_outer, 2.0)
     if z < 1.0: bfield = bfield_outer_T*(1.0 - z)
     else: bfield = 0.0
-  
+
   result = bfield/(1.0e6 * 1.4440271 * 1.0e-3 * sqrt(4.0 * PI)) # in keV^2
-    
+
 
 
 proc omegaPlasmonSq(alpha:float, ne: float, me: float): float = #Routine to return the plasma freqeuency squared (in keV^2) of the zone around the distance r from the centre of the Sun.
@@ -394,12 +394,12 @@ proc primakoff(temp, energy, gagamma, ks2, alpha, ne, me: float, n_Z2: float, n_
     z = energy / temp
     om2 = energy * energy
     x = om2/omPlSq
-  
+
   ## from Raffelt 2006 dont know if this is the newest
   if x < 1.0 or energy == 0.0:
     result = 0.0
   else:
-    let 
+    let
       phase_factor = 2.0 / (sqrt(1.0 - 1.0 / x) * (exp(z) - 1.0))
       n_dens = ne + n_Z1 * 7.645e-24 + 4.0 * n_Z2 * 7.645e-24# ne + n_Z2 * pow(197.327053e-10,3.0)  #;avg_degeneracy_factor(r)*
       s = 2.0*energy*sqrt(om2 - omPlSq)
@@ -415,7 +415,7 @@ proc primakoff(temp, energy, gagamma, ks2, alpha, ne, me: float, n_Z2: float, n_
           (exp(energy/temp) - 1.0)]##[]#
 
 proc longPlasmon(energy: float, ne: float, me: float, alpha: float, bfieldR: float, temp: float, opacity: float, gagamma: float): float = #https://arxiv.org/pdf/2101.08789.pdf
-  let 
+  let
     omPlSq = omegaPlasmonSq(alpha, ne, me)
     prefactor = gagamma * gagamma * 1e-12
     om2 = energy * energy
@@ -427,25 +427,25 @@ proc longPlasmon(energy: float, ne: float, me: float, alpha: float, bfieldR: flo
     fwhm = sqrt(om2 + xi2) - sqrt(om2 - xi2) # FWHM of Lorentz/Cauchy peak
   #### if (gsl_pow_2(om2 - om_pl_sq) > 100.0 * om2*gammaL*gammaL) { return 0; } //just integrate around resonance
   if abs(energy - sqrt(omPlSq)) > 18.0*fwhm: return 0 # Just integrate around resonance
-  let 
+  let
     average_bfield_sq = bfieldR*bfieldR/3.0
     fraction = energy*xi2 / ( pow(om2 - omPlSq, 2.0) + xi2*xi2 )
   result = prefactor * average_bfield_sq * fraction / (exp(z) - 1.0)
 
 proc transPlasmon(energy: float, ne: float, me: float, alpha: float, bfieldR: float, temp: float, opacity: float, gagamma: float): float =
-  let 
+  let
     geom_factor = 1.0 # factor accounting for observers position (1.0 = angular average)
     photon_polarization = 2.0
     omPlSq = omegaPlasmonSq(alpha, ne, me)
   if omPlSq > energy*energy: return 0 # energy can't be lower than plasma frequency
-  let 
+  let
     u = energy/temp
     gamma = (1.0 - exp(-u))*opacity
     deltaPsq = energy*energy * pow(sqrt(1.0-omPlSq/(energy*energy))-1.0, 2.0)  # transfered momentum squared
     #deltaPsq = pow(0.5*omPlSq/energy, 2.0) #transfered momentum squared
     average_b_field_sq = pow(bfieldR, 2.0) / 3.0
     deltaTsq = gagamma*gagamma * 1e-12 * average_b_field_sq / 4.0
-  result = geom_factor * photon_polarization * gamma * deltaTsq / ( (deltaPsq+pow(0.5*gamma, 2.0)) * (exp(u) - 1.0) ) 
+  result = geom_factor * photon_polarization * gamma * deltaTsq / ( (deltaPsq+pow(0.5*gamma, 2.0)) * (exp(u) - 1.0) )
 
 proc iron(ganuclei: float, temp: float, energy: float, rho: float): float = #https://iopscience.iop.org/article/10.1088/1475-7516/2009/12/002/pdf
   let
@@ -460,7 +460,7 @@ proc iron(ganuclei: float, temp: float, energy: float, rho: float): float = #htt
     n_a = n * w_1 * gamma_frac / tau_gamma  #in no units #/ 5.60958616722e29 * 4.135665538536e-18
   #echo w_1, " ", 4.0 * exp(-u)/(2.0 + 4.0 * exp(-u))
   result = n_a * exp(- pow(energy - e_gamma, 2.0) / (2.0 * sigma * sigma)) * rho * sqrt(2.0 * PI) * PI/ (sigma * energy * energy) #because of the way the flux is portrait
-  
+
 
 proc getFluxFraction(energies: seq[float], df: DataFrame,
                      n_es, temperatures: seq[int],
@@ -544,7 +544,7 @@ proc getFluxFractionR(energies: seq[float], df: DataFrame,
   var radii: seq[float]
   var E: seq[float]
   for e in energies:
-    var 
+    var
       iEindexx = ((e - 1.0)).toInt
       diff_flux = 0.0
       diff_fluxR = 0.0
@@ -576,7 +576,7 @@ proc getFluxFractionR(energies: seq[float], df: DataFrame,
       r_last = r_perc
 
     diff_fluxs.add diffFluxR * factor
-    
+
     E.add e
     #diff_flux = diff_flux * factor
     #diff_fluxs.add(diff_flux)
@@ -604,7 +604,7 @@ proc main*(): Tensor[float] =
   let energies = linspace(1.0, 15000.0, nElems)
 
   let nRadius = df["Rho"].len
-  
+
   ## now let's plot radius against temperature colored by density
   ggplot(df, aes("Radius", "Temp", color = "Rho")) +
     geom_line() +
@@ -631,10 +631,10 @@ proc main*(): Tensor[float] =
   let noElement = @[3, 4, 5, 9, 15, 17, 19, 21, 22, 23, 27]
   const
     alpha = 1.0 / 137.0
-    g_ae = 2e-15 # Redondo 2013: 0.511e-10  #1e-11 #
-    gagamma = 2e-12 #the latter for DFSZ  #1e-9 #5e-10 #
+    g_ae = 1e-13 # Redondo 2013: 0.511e-10  #1e-11 #
+    gagamma = 1e-12 #the latter for DFSZ  #1e-9 #5e-10 #
     m_a = 0.0853 #eV
-    ganuclei = 1e-9 #1.475e-8 * m_a #KSVZ model #no units  #1e-7
+    ganuclei = 1e-15 #1.475e-8 * m_a #KSVZ model #no units  #1e-7
     m_e_keV = 510.998 #keV
     e_charge = sqrt(4.0 * PI * alpha)#1.0
     kB = 1.380649e-23
@@ -773,7 +773,7 @@ proc main*(): Tensor[float] =
     ops = newSeqOfCap[float](100_000)
 
   echo "Walking all radii again..."
-  
+
   for R in 0 ..< nRadius:
     #echo "Radius ", R
     n_eInt = n_es[R]
@@ -799,18 +799,18 @@ proc main*(): Tensor[float] =
         absCoef = 0.0
         table = 1.0
       let
-        energy_keV = iE * 0.001 #w 
+        energy_keV = iE * 0.001 #w
         w = energy_keV / temp_keVTable #toFloat(dfMesh["u"][iE.int])
-        iEindex = (iE - 1.0).toInt 
-      
+        iEindex = (iE - 1.0).toInt
+
       #let n_bar_keV = n_Z[R][1] * 7.645e-24 + n_Z[R][2] * 7.645e-24 + alphaR[R] * metallicity(r)) * density(r)/((1.0E+9*eV2g)*atomic_mass_unit
-      let 
+      let
         debye_scale_squared = (4.0 * PI * alpha / temp_keV) *
                                 (n_e_keV + n_Z[R][1] * 7.645e-24 +
                                  4.0 * n_Z[R][2] * 7.645e-24 )
         debye_scale = sqrt(debye_scale_squared)
         y = debye_scale / (sqrt( 2.0 * m_e_keV * temp_keV))
-      
+
       if w >= 20.0 or w <= 0.0732: #because the tables dont go beyond that, apparently because the axion production beyond that is irrelevant #except for He, maybe find a better solution
         for (Z_str, Z) in iterEnum(ElementKind):
           # TODO: avoid looping over unneeded elements here
@@ -853,13 +853,13 @@ proc main*(): Tensor[float] =
         absCoefs[R, iEindex] = absCoef
       ## Now it's left to calculate the emission rates
       ## making the same approximation as for n_e calculation
-      
+
       ##ion density weighted by charge^2 from Raffelt
       let nZZ2_raffelt_keV = (rho[R] / amu) * 7.683e-24 #seems to be correct
       let ffterm = freefreeEmrate(alpha, g_ae, energy_keV, n_e_keV, m_e_keV, temp_keV, nZZ2_raffelt_keV, w, y)
       ## includes contribution from ff, fb and bb processes and a part of the Comption contribution ## keV³ / keV² = keV :
 
-      let 
+      let
         term1 = term1(g_ae, energy_keV, (absCoefs[R, iEindex]), e_charge, m_e_keV, temp_keV)
         term2 = term2(alpha, g_ae, energy_keV, n_e_keV, m_e_keV, temp_keV)# completes the Compton contribution #keV
         term3 = bremsEmrate(alpha, g_ae, energy_keV, n_e_keV, m_e_keV, temp_keV, w, y) # contribution from ee-bremsstahlung
@@ -882,13 +882,13 @@ proc main*(): Tensor[float] =
       let total_emrate_s = total_emrate / (6.58e-19) # in 1/sec
       emratesS[R, iEindex] = total_emrate
       emratesInS[R, iEindex] = total_emrate_s
-      
+
       radiiFlux += iron57 * 0.001
       #if w <= 0.0732 :
         #echo transPlas
       # if want to have absorbtion coefficient of a radius and energy: R = (r (in % of sunR) - 0.0015) / 0.0005
 
-      
+
     totalRadiiFlux.add(radiiFlux)
     radii.add(radius)
     #echo R, " ", omegaPlasmonSq(alpha, n_e_keV, m_e_keV)
@@ -935,7 +935,7 @@ proc main*(): Tensor[float] =
   diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, transPlasmons, "TP Flux")
   diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, iron57s, "57Fe Flux")
   echo diffFluxDf
-  let 
+  let
     ironflux = getFluxFractionR(energies, df, n_es, temperatures, iron57s, "57Fe Flux")
   echo ironflux
   let
@@ -973,7 +973,7 @@ proc main*(): Tensor[float] =
     let dfDiffflux = seqsToDf({ "Axion energy [eV]": energieslong,
                                 "Fluxfraction [keV⁻¹y⁻¹m⁻²]": fluxes,
                                 "type": kinds })]#
-  
+
   ggplot(difffluxDf, aes("Energy", "diffFlux", color = "type")) +
     geom_line() + #size = some(0.5)
     xlab("Axion energy [eV]") +
@@ -991,7 +991,7 @@ proc main*(): Tensor[float] =
   result = emratesS
 
 when isMainModule:
-  
+
   let solarModel = main()
   echo "writing to csv"
   solarModel.to_csv("solar_model_tensor15.csv")
