@@ -11,3 +11,46 @@ Here is for example the flux of a DFSZ axion with 57Fe and plasmon contributions
 And here the same for a KSVZ axion:
 #+ATTR_HTML: :style margin-left: auto; margin-right: auto;
 [[https://github.com/jovoy/AxionElectronLimit/blob/master/out/BabyIAXO/KSVZFlux.png?raw=true]]
+
+** Resources
+
+The solar model used for the calculations is the AGSS09 model:
+- https://www.imperial.ac.uk/astrophysics/research/the-sun/data/
+- https://wwwmpa.mpa-garching.mpg.de/~aldos/solar_main.html (contains
+  multiple & has the data files). The file for the solar model is also
+  found in [[ReadSolarModel/resources/AGSS09_solar_model.dat]])
+
+
+The calculations for the differential flux further use the Opacity
+Project (OP) in particular version 3.3:
+
+http://cdsweb.u-strasbg.fr/topbase/TheOP.html
+*Warning*: The server is _extremely_ slow! Use something like =aria2c=
+or similar to download using multiple connections in parallel.
+
+They need to be downloaded manually and placed somewhere accessible
+(currently the path is hard coded to be relative to the
+=readOpacityFile= binary, but this will be changed soon).
+
+For version 2.0 a second host is:
+https://code.osu.edu/wiag/opacities.osc.edu/-/tree/master/OPserver/OPCD_2.0
+
+
+After downloading and extracting the =.tar= archive of the OPCD data,
+you also need to extract the files in the =mono= subdirectory:
+#+begin_src sh
+for f in *.xz; do gzip -d $f; done
+#+end_src
+
+Finally, the =fm01.mesh= file needs to be modified slightly. The first
+line:
+#+begin_src
+  1.0553E-04  10000
+#+end_src
+must be modified to:
+#+begin_src csv
+  u
+  1.0553E-04
+#+end_src
+
+After that and fixing the paths in =readOpacityFile= it should run.
