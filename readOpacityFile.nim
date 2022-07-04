@@ -741,24 +741,21 @@ proc main*(): Tensor[float] =
     let temp_keVFloat = tempFloat[R] * 8.617e-8
     temp_keV = temp_keVFloat
     var temp_K = pow(10.0, (temp * 0.025))
-    for iE in energies:
+    let
+      debye_scale_squared = (4.0 * PI * alpha / temp_keV) *
+                              (n_e_keV + n_Z[R][1] * 7.645e-24 +
+                               4.0 * n_Z[R][2] * 7.645e-24 )
+      debye_scale = sqrt(debye_scale_squared)
+      y = debye_scale / (sqrt( 2.0 * m_e_keV * temp_keV))
+    for (iEindex, energy_keV) in pairs(energies):
       var
         sum = 0.0
         absCoef = 0.0
         table = 1.0
       let
-        energy_keV = iE * 0.001 #w
         w = energy_keV / temp_keVTable #toFloat(dfMesh["u"][iE.int])
-        iEindex = (iE - 1.0).toInt
 
       #let n_bar_keV = n_Z[R][1] * 7.645e-24 + n_Z[R][2] * 7.645e-24 + alphaR[R] * metallicity(r)) * density(r)/((1.0E+9*eV2g)*atomic_mass_unit
-      let
-        debye_scale_squared = (4.0 * PI * alpha / temp_keV) *
-                                (n_e_keV + n_Z[R][1] * 7.645e-24 +
-                                 4.0 * n_Z[R][2] * 7.645e-24 )
-        debye_scale = sqrt(debye_scale_squared)
-        y = debye_scale / (sqrt( 2.0 * m_e_keV * temp_keV))
-
       if w >= 20.0 or w <= 0.0732: #because the tables dont go beyond that, apparently because the axion production beyond that is irrelevant #except for He, maybe find a better solution
         for (Z_str, Z) in iterEnum(ElementKind):
           # TODO: avoid looping over unneeded elements here
@@ -768,25 +765,11 @@ proc main*(): Tensor[float] =
         absCoefs[R, iEindex] = sum * 1.97327e-8 * 0.528e-8 * 0.528e-8 *
                                (1.0 - exp(-energy_keV / temp_keV))
       else:
+        table = spline.eval(w)
         for (Z_str, Z) in iterEnum(ElementKind):
           # TODO: avoid looping over unneeded elements here
           if Z in noElement:
             continue
-          table = spline.eval(w)
-          if iEindex == 100 :
-            zs.add(Z)
-            rs.add((R.float * 0.0005 + 0.0015))
-            nZs.add(n_Z[R][Z])
-
-          if Z == 1 and (iEindex == 12 or
-                         iEindex == 68 or
-                         iEindex == 140 or
-                         iEindex == 239 or
-                         iEindex == 599): #and (iEindex == 12 or iEindex == 68) :
-            rs2.add((R.float * 0.0005 + 0.0015))
-            engs.add(energy_keV)
-            #ops.add(opElNew[(Z, temperature, n_eInt)].densityOp.interp.eval(energy_keV))
-          #let opacityL = opElNew[(Z, temperature, n_eInt)].densityOp.interp.eval(energy_keV)
           ## TODO: can this whole loop not done be smarter?
           ## TODO: also the table of table isn't the best idea, esp. since the temp access is not
           ## necessary here. Temp is constant for all Z
@@ -794,7 +777,7 @@ proc main*(): Tensor[float] =
 
           # opacities in atomic unit for lenth squared: 0.528 x10-8cm * 0.528 x10-8cm = a0² # 1 m = 1/1.239841336215e-9 1/keV and a0 = 0.528 x10-10m
           if Z > 2:
-            sum +=  n_Z[R][Z] * opacity
+            sum += n_Z[R][Z] * opacity
 
         absCoef = sum * 1.97327e-8 * 0.528e-8 * 0.528e-8 * (1.0 - exp(-energy_keV / temp_keV)) # is in keV
 
