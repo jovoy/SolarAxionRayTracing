@@ -720,6 +720,7 @@ proc main*(): Tensor[float] =
     ops = newSeqOfCap[float](100_000)
 
   echo "Walking all radii again..."
+  let energyDiff = (energies.max - energies.min) / energies.len.float
 
   for R in 0 ..< nRadius:
     #echo "Radius ", R
@@ -830,7 +831,7 @@ proc main*(): Tensor[float] =
       emratesS[R, iEindex] = total_emrate
       emratesInS[R, iEindex] = total_emrate_s
 
-      radiiFlux += iron57 * 0.001
+      radiiFlux += totalEmRates * energyDiff #iron57 * 0.001
       #if w <= 0.0732 :
         #echo transPlas
       # if want to have absorbtion coefficient of a radius and energy: R = (r (in % of sunR) - 0.0015) / 0.0005
