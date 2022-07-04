@@ -548,7 +548,7 @@ proc main*(): Tensor[float] =
   const solarModel = "./ReadSolarModel/resources/AGSS09_solar_model_stripped.dat"
   var df = readSolarModel(solarModel)
   let nElems = 15000 # TODO: clarify exact number
-  let energies = linspace(1.0, 15000.0, nElems)
+  let energies = linspace(1e-3, 15.0, nElems)
 
   let nRadius = df["Rho"].len
 
