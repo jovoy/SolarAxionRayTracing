@@ -709,9 +709,9 @@ proc main*(): Tensor[float] =
     ironOpE: seq[float]
     n_e_keV: float
     temp_keV: float
-    totalRadiiFlux: seq[float]
+    totalRadiiFlux = newSeq[float](nRadius)
     radiiFlux: float
-    radii: seq[float]
+    radii = newSeq[float](nRadius)
     zs = newSeqOfCap[int](100_000)
     rs = newSeqOfCap[float](100_000)
     rs2 = newSeqOfCap[float](100_000)
@@ -836,8 +836,8 @@ proc main*(): Tensor[float] =
       # if want to have absorbtion coefficient of a radius and energy: R = (r (in % of sunR) - 0.0015) / 0.0005
 
 
-    totalRadiiFlux.add(radiiFlux)
-    radii.add(radius)
+    totalRadiiFlux[R] = radiiFlux
+    radii[R] = radius
     #echo R, " ", omegaPlasmonSq(alpha, n_e_keV, m_e_keV)
 
   #echo longPlasmons[0]
