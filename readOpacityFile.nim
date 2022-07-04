@@ -153,8 +153,8 @@ proc parseDensityTab(ds: FileStream, temp: int,
     if kind == ofkOriginal and idx == tableCount:
       break
   # finalize densityOpacity by creating spline and adding to result
-  result.interp = newCubicSpline(result.energies,
-                                 result.opacities)
+  result.interp = newLinear1D(result.energies,
+                              result.opacities)
 
 proc parseOpacityNew(ds: FileStream,
                          fname: string,
@@ -235,7 +235,7 @@ const meshFile = "./OPCD_3.3/mono/fm01.mesh"
 ## check `tools/diff_files.nim` for proof.
 let dfMesh = readMeshFile(meshFile)
 
-let spline = newCubicSpline(dfMesh, lineNumbers)
+let spline = newLinear1D(dfMesh, lineNumbers)
 
 template inner_integral(t: float, y: float): float =
   (1.0/2.0) * ( ((y * y) / (t * t + y * y)) + ln( t * t + y * y ) )
