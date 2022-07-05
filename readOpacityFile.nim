@@ -97,15 +97,21 @@ macro iterEnum(en: typed): untyped =
       continue
     result.add nnkPar.newTree(newLit(el[0].toStrLit.strVal), el[1])
 
-proc parseTableLine(energy, opacity: var float, line: string) {.inline.} =
+proc parseTableLine(energy, opacity: var float, ms: MSlice) {.inline.} =
   ## parses the energy and opacity float values from `line` into `energy`
-  ## (1st col) and `opacity` (2nd col) using `scanf`
-  if line.scanf("$s$f$s$f", energy, opacity):
-    discard
-  elif line.scanf("$s$f", opacity):
-    discard
-  else:
-    raise newException(ValueError, "Parsing opacity table in line " & $line & " failed!")
+  ## (1st col) and `opacity` (2nd col) using `cligen.parseFloat` and `mslices`
+  var
+    i = 0 # manual counter for processed numbers
+    x1, x2: int
+  for el in mslices(ms, sep = ' '):
+    if el.len == 0: continue # ignore empty slice
+    if i == 0: opacity = parseFloat(el)
+    elif i == 1:
+      energy = parseFloat(el)
+      swap(energy, opacity) # swap both because if energy present it's the first column
+    else:
+      raise newException(ValueError, "Parsing opacity table in line " & $ms & " failed!")
+    inc i
 
 proc parseTableHeader(line: string, hKind: HeaderLine): OpTableHeader =
   ## parses a line of the header of the monochromatic opacity file
@@ -126,7 +132,8 @@ proc convertLogUToE(logU, temp: float): float =
   ## converts a given energy in `logU` to a temperature in `eV`
   result = exp(logU) * pow(10.0, (temp * 0.025)) * 8.617e-8
 
-proc parseDensityTab(ds: FileStream, temp: int,
+proc parseDensityTab(mf: var MSlice,
+                     temp: int,
                      kind: OpacityFileKind,
                      tableCount = 1000): DensityOpacity =
   # now parse the table according to table count
@@ -136,45 +143,49 @@ proc parseDensityTab(ds: FileStream, temp: int,
     buf = newString(200)
     energy: float
     opac: float
-    idx = 0
-  while not ds.atEnd:
-    discard ds.readLine(buf)
-    parseTableLine(energy, opac, buf)
+    lineCnt = 0
+    ms: MSlice
+  while mf.len > 0:
+    discard mf.nextSlice(ms)
+    parseTableLine(energy, opac, ms)
     case kind
     of ofkOriginal:
       if tableCount == 10000:
         # set energy manually to `j`, since we simply have 1 eV steps
-        energy = float idx + 1
+        energy = float lineCnt + 1
+      # else the input file contains the energy
     of ofkNew:
       energy = convertLogUToE(energy, temp.float)
     result.energies.add energy
     result.opacities.add opac
-    inc idx
-    if kind == ofkOriginal and idx == tableCount:
+    inc lineCnt
+    if kind == ofkOriginal and lineCnt == tableCount:
       break
   # finalize densityOpacity by creating spline and adding to result
   result.interp = newLinear1D(result.energies,
                               result.opacities)
 
-proc parseOpacityNew(ds: FileStream,
-                         fname: string,
-                         kind: static OpacityFileKind): OpacityFile =
+proc parseOpacityNew(mfile: MFile,
+                     fname: string,
+                     kind: static OpacityFileKind): OpacityFile =
   var buf = newString(200)
-  discard ds.readLine(buf)
-  proc removeSuffix(s, suffix: string): string =
-    result = s
-    result.removeSuffix(suffix)
-  let fnameSeq = fname.removeSuffix(".dat").split("_")
-  let elStr = fnameSeq[2]
-  let temp = parseInt(fnameSeq[3])
-  result = OpacityFile(fname: fname,
-                       kind: kind,
-                       element: parseEnum[ElementKind]("e" & elStr),
-                       temp: temp,
-                       density: parseInt(fnameSeq[4]))
-  result.densityOp = ds.parseDensityTab(temp = temp, kind = kind)
+  doAssert false, "Currently unsupported."
+  when false:
+    discard ds.readLine(buf)
+    proc removeSuffix(s, suffix: string): string =
+      result = s
+      result.removeSuffix(suffix)
+    let fnameSeq = fname.removeSuffix(".dat").split("_")
+    let elStr = fnameSeq[2]
+    let temp = parseInt(fnameSeq[3])
+    result = OpacityFile(fname: fname,
+                         kind: kind,
+                         element: parseEnum[ElementKind]("e" & elStr),
+                         temp: temp,
+                         density: parseInt(fnameSeq[4]))
+    result.densityOp = ds.parseDensityTab(temp = temp, kind = kind)
 
-proc parseOpacityOriginal(ds: FileStream,
+proc parseOpacityOriginal(mfile: MFile,
                           fname: string,
                           kind: static OpacityFileKind): OpacityFile =
   let temp = parseInt(fname[5 .. ^1])
@@ -182,36 +193,32 @@ proc parseOpacityOriginal(ds: FileStream,
                        kind: kind,
                        element: ElementKind(fname[2 .. 3].parseInt),
                        temp: temp) #pow(10.0, parseFloat(fname[5 .. ^1]) / 40.0))
-  var idx = 0
-  var buf = newString(200)
-  while not ds.atEnd:
-    if idx == 0:
-      # skip file header
-      discard ds.readLine(buf)
-      inc idx
-      continue
+  echo "Parsing file : ", fname
+  var ms: MSlice
+  var ds = mfile.toMSlice()
+  var first = true
+  while ds.len > 0:
+    if first:
+      # skip file header, drop the slice
+      discard ds.nextSlice(ms)
+      first = false
     # read table header, 3 lines
-    discard ds.readLine(buf)
-    inc idx
-    let h1 = parseTableHeader(buf, H1)
-    discard ds.readLine(buf)
-    let h2 = parseTableHeader(buf, H2)
-    inc idx
-    discard ds.readLine(buf)
-    var tableCount = buf.strip.parseInt
+    discard ds.nextSlice(ms)
+    let h1 = parseTableHeader($ms, H1) # copy to nim string irrelevant for perf
+    discard ds.nextSlice(ms)         # due to multiple orders of magnitude more
+    let h2 = parseTableHeader($ms, H2) # data than header
+    discard ds.nextSlice(ms)
+    var tableCount = ($ms).strip.parseInt # inefficient, but rare
     tableCount = if tableCount == 0: 10000 else: tableCount
-    inc idx
     result.densityTab[h1.density] = ds.parseDensityTab(temp, kind, tableCount)
-    inc idx
 
 proc parseOpacityFile(path: string, kind: OpacityFileKind): OpacityFile =
   ## we parse the monochromatic opacity file using strscans
   ## - first we drop the first line as the file header. Information in this?
   ## - then read table header (3 lines)
   ## - then num lines
-  let ds = newFileStream(path)
-  #echo path
-  if ds.isNil:
+  let ds = mopen(path)
+  if ds.mem.isNil:
     raise newException(IOError, "Could not open file " & $path)
   let fname = path.extractFilename
   case kind
@@ -220,7 +227,7 @@ proc parseOpacityFile(path: string, kind: OpacityFileKind): OpacityFile =
                                      kind = ofkOriginal)
   of ofkNew:
     result = ds.parseOpacityNew(fname = fname,
-                                    kind = ofkNew)
+                                kind = ofkNew)
   ds.close()
 
 proc readMeshFile(fname: string): seq[float] =
