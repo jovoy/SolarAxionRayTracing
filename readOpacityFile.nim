@@ -918,7 +918,7 @@ proc main*(): Tensor[float] =
     ylab("Flux [keV⁻¹ y⁻¹ m⁻²]") +
     #ylim(0, 2.5e24) +
     #xlim(0.0, 1000.0) +
-    xlim(0.0, 15000.0) +
+    xlim(0.0, 15.0) +
     #scale_y_log10() + #
     scale_y_continuous() +
     #scale_x_log10() +
