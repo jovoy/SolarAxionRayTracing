@@ -497,9 +497,8 @@ proc getFluxFractionR(energies: seq[float], df: DataFrame,
   var diff_fluxs: seq[float]
   var radii: seq[float]
   var E: seq[float]
-  for e in energies:
+  for (idx, e) in pairs(energies):
     var
-      iEindexx = ((e - 1.0)).toInt
       diff_flux = 0.0
       diff_fluxR = 0.0
       r_last = 0.0
@@ -519,10 +518,10 @@ proc getFluxFractionR(energies: seq[float], df: DataFrame,
         # sources of electric fields, neglecting both recoil effects and collective motions.
         ## TODO: what the heck is this? `k` is nowhere to be seen
         let k = sqrt((e_keV * e_keV) - ((4.0 * PI * alpha * n_e_keV) / m_e_keV))
-        diff_flux = emratesS[r, iEindexx] * (r_perc - r_last) * r_perc * r_perc *
+        diff_flux = emratesS[r, idx] * (r_perc - r_last) * r_perc * r_perc *
                      e_keV * e_keV * 0.5 / (PI * PI) #k instead of e
       else :
-        diff_flux = emratesS[r, iEindexx] * (r_perc - r_last) * r_perc * r_perc *
+        diff_flux = emratesS[r, idx] * (r_perc - r_last) * r_perc * r_perc *
                      e_keV * e_keV * 0.5 / (PI * PI)
       summm = summm + (r_perc - r_last)
       sum += (r_perc - r_last)
