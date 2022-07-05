@@ -1,14 +1,14 @@
-import streams, strutils, math, tables, sequtils, strformat, hashes, polynumeric, macros, strscans, os, ggplotnim
-
-import numericalnim
+import std / [strutils, math, tables, sequtils, strformat, hashes, macros, os, strscans]
+import pkg / [polynumeric, strscans, ggplotnim, numericalnim, glm]
 
 import seqmath except linspace
 import arraymancer except readCsv, linspace
-import glm
-import json except `{}`
+import json except `{}` # to not get into trouble with datamancer `f{}`
 
+# for OPCD data file parsing
+import cligen/[osUt, mfile, mslice]
 
-
+# local import
 import readSolarModel
 
 type
