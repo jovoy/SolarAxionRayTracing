@@ -730,7 +730,8 @@ proc main*(): Tensor[float] =
   let energyDiff = (energies.max - energies.min) / energies.len.float
 
   for R in 0 ..< nRadius:
-    #echo "Radius ", R
+    if R mod 10 == 0:
+      echo &"Radius {R} of {nRadius}, {(R.float / nRadius.float) * 100:.2f} % done."
     n_eInt = n_es[R]
     radiiFlux = 0.0
     temperature = temperatures[R]
