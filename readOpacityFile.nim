@@ -536,7 +536,7 @@ proc getFluxFractionR(energies: seq[float], df: DataFrame,
 
     #result = diff_fluxs
   result = seqsToDf({"diffFlux" : diffFluxs, "Energy" : E })
-  result["type"] = constantColumn(typ, result.len)
+  result["type"] = typ
 
 #proc getFluxFraction(energies: seq[float], df: DataFrame,
 #                     n_es, temperatures: seq[int],
