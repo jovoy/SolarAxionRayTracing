@@ -1,5 +1,5 @@
 import std / [strutils, math, tables, sequtils, strformat, hashes, macros, os, strscans]
-import pkg / [polynumeric, strscans, ggplotnim, numericalnim, glm]
+import pkg / [polynumeric, ggplotnim, numericalnim, glm]
 
 import seqmath except linspace
 import arraymancer except readCsv, linspace
