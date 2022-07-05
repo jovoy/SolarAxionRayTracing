@@ -677,12 +677,11 @@ proc main*(): Tensor[float] =
 
 
   var densities: HashSet[int]
-  var opElements: Table[ElementKind, Table[int, OpacityFile]]
-  #var opElNew: Table[ZTempDensity, OpacityFile]
-
-
+  var opElements = newTable[int, TableRef[ElementKind, OpacityFile]]()
   echo "Walking all temps..."
   for temp in toSet(temperatures):
+    if temp notin opElements:
+      opElements[temp] = newTable[ElementKind, OpacityFile]() #initTable[int, OpacityFile]()
     for (Z_str, Z) in iterEnum(ElementKind):
       let testF = &"./OPCD_3.3/mono/fm{Z:02}.{temp}"
       if existsFile(testF):
@@ -690,9 +689,7 @@ proc main*(): Tensor[float] =
         for k in keys(opFile.densityTab):
           densities.incl k
         let zKind = ElementKind(Z)
-        if zKind notin opElements:
-          opElements[zKind] = initTable[int, OpacityFile]()
-        opElements[zKind][temp] = opFile
+        opElements[temp][zKind] = opFile
       #for ne in toSet(n_es):
       #  let opFile = &"./OPCD_3.3/OP/opacity_table_{Z_str[1 .. ^1]}_{temp}_{ne}.dat"
       #  if existsFile(opFile):
@@ -773,15 +770,12 @@ proc main*(): Tensor[float] =
                                (1.0 - exp(-energy_keV / temp_keV))
       else:
         table = spline.eval(w)
+        let tempTab = opElements[temperature]
         for (Z_str, Z) in iterEnum(ElementKind):
           # TODO: avoid looping over unneeded elements here
           if Z in noElement:
             continue
-          ## TODO: can this whole loop not done be smarter?
-          ## TODO: also the table of table isn't the best idea, esp. since the temp access is not
-          ## necessary here. Temp is constant for all Z
-          let opacity = opElements[ElementKind(Z)][temperature].densityTab[n_eInt].interp.eval(table)
-
+          let opacity = tempTab[ElementKind(Z)].densityTab[n_eInt].interp.eval(table)
           # opacities in atomic unit for lenth squared: 0.528 x10-8cm * 0.528 x10-8cm = a0² # 1 m = 1/1.239841336215e-9 1/keV and a0 = 0.528 x10-10m
           if Z > 2:
             sum += n_Z[R][Z] * opacity
