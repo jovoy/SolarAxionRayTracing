@@ -496,8 +496,7 @@ proc getFluxFractionR(energies: seq[float], df: DataFrame,
                (3.1709791983765E-8 * 1.0e-4) # for units of 1/(keV y m²)
   var diff_fluxs: seq[float]
   var radii: seq[float]
-  var E: seq[float]
-  for (idx, e) in pairs(energies):
+  for (idx, e_keV) in pairs(energies):
     var
       diff_flux = 0.0
       diff_fluxR = 0.0
@@ -508,7 +507,6 @@ proc getFluxFractionR(energies: seq[float], df: DataFrame,
       let
         n_e_keV = pow(10.0, (n_es[r].toFloat * 0.25)) * 7.683e-24 # was 1/cm³ #correct conversion
         t_keV = pow(10.0, (temperatures[r].toFloat * 0.025)) * 8.617e-8 # was K # correct conversion
-        e_keV = e * 0.001
         r_mm = (r.float * 0.0005 + 0.0015) * r_sun
         r_perc = (r.float * 0.0005 + 0.0015)
       if e_keV > 0.4:
@@ -530,12 +528,11 @@ proc getFluxFractionR(energies: seq[float], df: DataFrame,
 
     diff_fluxs.add diffFluxR * factor
 
-    E.add e
     #diff_flux = diff_flux * factor
     #diff_fluxs.add(diff_flux)
 
     #result = diff_fluxs
-  result = seqsToDf({"diffFlux" : diffFluxs, "Energy" : E })
+  result = seqsToDf({"diffFlux" : diffFluxs, "Energy" : energies })
   result["type"] = typ
 
 #proc getFluxFraction(energies: seq[float], df: DataFrame,
