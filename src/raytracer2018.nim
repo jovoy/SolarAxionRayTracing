@@ -253,9 +253,9 @@ let
 
 let
   ChipXMin     = 0.0.mm
-  ChipXMax     = 14.0.mm #14.0.mm
+  ChipXMax     = 100.0.mm #14.0.mm
   ChipYMin     = 0.0.mm
-  ChipYMax     = 14.0.mm #14.0.mm
+  ChipYMax     = 100.0.mm #14.0.mm
   ChipCenterX  = ChipXMax / 2.0 #7.0.mm
   ChipCenterY  = ChipYMax / 2.0 #7.0.mm
   GoldXMin     = 4.5.mm
@@ -642,7 +642,7 @@ proc findPosXRT*(pointXRT: Vec3, pointCB: Vec3,
   let
     k = tan(angle) * tan(angle)
     a = direc[0] * direc[0] + direc[1] * direc[1] - k * direc[2] * direc[2]
-    b = 2.0 * (point[0] * direc[0] + r1.float * tan(angle) * direc[2] - k * (point[2] - distMirr.float) * direc[2])
+    b = 2.0 * (point[0] * direc[0] + point[1] * direc[1] + r1.float * tan(angle) * direc[2] - k * (point[2] - distMirr.float) * direc[2])
     halfb = b / 2.0
     c = point[0] * point[0] + point[1] * point[1] - r1.float * r1.float + 2.0 * r1.float * tan(angle) * (point[2] - distMirr.float) -
         k * (point[2] - distMirr.float) * (point[2] - distMirr.float)
@@ -680,7 +680,7 @@ proc findPosXRT*(pointXRT: Vec3, pointCB: Vec3,
       sMinHigh = mid
       mid = (sMaxHigh + mid) / 2.0
   pointMirror = point + s * direc
-  #echo mid.float, " actual: ", s ," point: ", point + root2 * direc, " root2: ", root2, " target ", name
+  #echo mid.float, " actual: ", s ," point: ", point + s * direc, " target ", name
   result = pointMirror
 
 proc getVectoraAfterMirror*(pointXRT, pointCB, pointMirror: Vec3,
@@ -1646,7 +1646,6 @@ proc traceAxion(res: var Axion,
   #)
   ## Throw away all the axions, that don't make it through the piping system and therefore exit the system at some point ##
 
-
   let intersectsEntranceCB = lineIntersectsCircle(rayOrigin,
       pointExitCBMagneticField, centerVecs.entranceCB, expSetup.magnet.radiusCB)
   var intersectsCB = false
@@ -1704,7 +1703,7 @@ proc traceAxion(res: var Axion,
                               centerVecs.exitPipeVT3XRT, expSetup.pipes.coldBoreToVT3.radius):
     return
 
-  let pointExitPipeVT3XRT = pointExitCB +
+  var pointExitPipeVT3XRT = pointExitCB +
     ((centerVecs.exitPipeVT3XRT[2] - pointExitCB[2]) / (pointExitPipeCBVT3 - pointExitCB)[2]) *
     (pointExitPipeCBVT3 - pointExitCB)
 
@@ -1716,12 +1715,20 @@ proc traceAxion(res: var Axion,
   let
     turnedX = expSetup.telescope.telescope_turned_x.to(Radian)
     turnedY = expSetup.telescope.telescope_turned_y.to(Radian)
-  vectorXRT = rotateInY(rotateInX(vectorXRT, turnedX), turnedY)
+    ## Need length of telescope to rotate around the center
+    lengthTelescope = (expSetup.telescope.lMirror + 0.5 * expSetup.telescope.allXSep[0]) * cos(expSetup.telescope.allAngles[0].to(Radian)) +
+                      (expSetup.telescope.lMirror + 0.5 * expSetup.telescope.allXSep[0]) * cos(3.0 * expSetup.telescope.allAngles[0].to(Radian))
+
+
 
   pointExitCB[2] -= centerVecs.exitPipeVT3XRT[2]
-  pointExitCB = rotateInY(rotateInX(pointExitCB, turnedX), turnedY) -
+  pointExitCB = rotateInY(rotateInX(pointExitCB, turnedX, lengthTelescope / 2), turnedY, lengthTelescope / 2) -
                 vec3(expSetup.telescope.optics_entrance[0].float, expSetup.telescope.optics_entrance[1].float, 0.0)
 
+  pointExitPipeVT3XRT[2] -= centerVecs.exitPipeVT3XRT[2]
+  pointExitPipeVT3XRT = rotateInY(rotateInX(pointExitPipeVT3XRT, turnedX, lengthTelescope / 2), turnedY, lengthTelescope / 2) -
+                vec3(expSetup.telescope.optics_entrance[0].float, expSetup.telescope.optics_entrance[1].float, 0.0)
+  vectorXRT = pointExitPipeVT3XRT - pointExitCB
   let
     factor = (0.0 - pointExitCB[2]) / vectorXRT[2]
     pointEntranceXRT = pointExitCB + factor * vectorXRT
@@ -1735,9 +1742,11 @@ proc traceAxion(res: var Axion,
 
   ## Check if any of the opaque structures of the telescopes are hit (graphite block for LLNL,
   ## spider structure for XMM, ...)
+
   if expSetup.lineIntersectsOpaqueTelescopeStructures(
     radialDist, vec3(0.0), vectorXRT, pointExitCB, pointEntranceXRT
   ):
+    #echo "hit spider"
     return
 
   ## Calculate the way of the axion through the telescope by manually reflecting the ray on the two mirror layers and then ending up before the detector ##
@@ -1752,8 +1761,6 @@ proc traceAxion(res: var Axion,
     beta = 0.0.Radian ## in degree
     xSep = 0.0.mm
     hitLayer: int # the integer of the layer that was hit
-    lengthTelescope = (expSetup.telescope.lMirror + 0.5 * xSep) * cos(expSetup.telescope.allAngles[0].to(Radian)) +
-                      (expSetup.telescope.lMirror + 0.5 * xSep) * cos(3.0 * expSetup.telescope.allAngles[0].to(Radian))
     centerEndXRT = vec3(0.0)
   centerEndXRT[0] = 0.0 #lengthTelescope.float * tan(expSetup.telescope_turned.to(Radian)) thats not corrrect but the thing is already turned
   centerEndXRT[2] = lengthTelescope.float
@@ -1789,18 +1796,19 @@ proc traceAxion(res: var Axion,
       # break
 
   ## Why do we check for `lineIntersectsOpaqueTelescopeStructure` here again?
-  if testXray and minDist > 100.0.mm and
-     expSetup.lineIntersectsOpaqueTelescopeStructures(
-       radialDist, centerEndXRT, vectorXRT, pointExitCB, pointEntranceXRT,
-       onlyInnerPart = true
-     ):
-    return
+  when false:
+    if testXray and minDist > 100.0.mm and
+      expSetup.lineIntersectsOpaqueTelescopeStructures(
+        radialDist, centerEndXRT, vectorXRT, pointExitCB, pointEntranceXRT,
+        onlyInnerPart = true
+      ):
+      return
 
   let
     beta3 = 3.0 * beta
     distanceMirrors = cos(beta) * (xSep + expSetup.telescope.lMirror)
     pointMirror1 = findPosXRT(pointEntranceXRT, pointExitCB, r1,
-                              r2, beta, expSetup.telescope.lMirror, 0.0.mm, 0.001.mm, 1.0.mm, 1.1.mm, "Mirror 1")
+                              r2, beta, expSetup.telescope.lMirror, 0.0.mm, 0.001.mm, 1.0.mm, 2.0.mm, "Mirror 1")
 
 
   let
@@ -1809,7 +1817,7 @@ proc traceAxion(res: var Axion,
     pointAfterMirror1 = pointMirror1 + 200.0 * vectorAfterMirror1
     pointMirror2 = findPosXRT(
       pointAfterMirror1, pointMirror1, r4, r5, beta3,
-      expSetup.telescope.lMirror, distanceMirrors, 0.01.mm, 0.0.mm, 2.5.mm, "Mirror 2"
+      expSetup.telescope.lMirror, distanceMirrors, 0.01.mm, 0.0.mm, 4.0.mm, "Mirror 2"
     )
 
 
@@ -1850,8 +1858,9 @@ proc traceAxion(res: var Axion,
   let z0 = pointExitCB[2]
   let z1 = pointMirror1[2]
   let z2 = pointMirror2[2]
-  if almostEqual(z1, z2) or almostEqual(z1, z0):
-    return
+  when true:
+    if almostEqual(z1, z2) or almostEqual(z1, z0):
+      return
   ############################################# Mirrors end #################################################
   ## now get the points in the focal / detector plane
 
@@ -1924,9 +1933,7 @@ proc traceAxion(res: var Axion,
     energyAx, hitLayer, res.transmissionMagnet, p, ya, alpha1, alpha2, flags
   )
 
-  if testXray != false:
-    if cfXrayTest notin flags:
-      weight = res.transmissionMagnet
+  if testXray and minDist > 100.0.mm:
     n = (distDet - pointExitCB[2].mm) / (pointEntranceXRT - pointExitCB)[2].mm
     pointDetectorWindow = pointExitCB + n.float * (pointEntranceXRT - pointExitCB)
   pointDetectorWindow[0] -= expSetup.detectorInstall.lateralShift.float
@@ -2189,7 +2196,7 @@ proc generateResultPlots(axions: seq[Axion],
 
   when false:
     let dfFluxE = seqsToDf({ "Axion energy [keV]": energiesAx.mapIt(it.float),
-                             "Transmission probability": weights })
+                            "Transmission probability": weights })
 
     ggplot(dfFluxE, aes("Axion energy [keV]", weight = "Transmission probability")) +
       geom_histogram(binWidth = 0.001, lineWidth= some(1.2)) +
@@ -2219,28 +2226,28 @@ proc generateResultPlots(axions: seq[Axion],
       geom_histogram(binWidth = 0.00001, lineWidth= some(1.2)) +
       theme_transparent() +
       ggtitle("Simulated photon flux depending on the energy of the axion") +
-      ggsave(&"../out/fluxAfter_{windowYear}.png")
+      ggsave(&"../out/fluxAfter_{windowYear}.png")  
 
-  let dfXY = seqsToDf({"x": pointDataX,
-                       "y": pointDataY,
-                       "Transmission probability": weights})
-    .mutate(f{"R" ~ sqrt(`x` * `x` + `y` * `y`)})
+    let dfXY = seqsToDf({"x": pointDataX,
+                        "y": pointDataY,
+                        "Transmission probability": weights})
+      .mutate(f{"R" ~ sqrt(`x` * `x` + `y` * `y`)})
 
 
-  ggplot(dfXY, aes("x", weight = "Transmission probability")) +
-    geom_histogram(binWidth = 0.001) +
-    ggtitle("X and Y") +
-    ggsave(&"../out/x_{windowYear}.pdf")
+    ggplot(dfXY, aes("x", weight = "Transmission probability")) +
+      geom_histogram(binWidth = 0.001) +
+      ggtitle("X and Y") +
+      ggsave(&"../out/x_{windowYear}.pdf")
 
-  ggplot(dfXY, aes("R", weight = "Transmission probability")) +
-    geom_histogram(binWidth = 0.001) +
-    ggtitle("R") +
-    ggsave(&"../out/R_{windowYear}.pdf")
+    ggplot(dfXY, aes("R", weight = "Transmission probability")) +
+      geom_histogram(binWidth = 0.001) +
+      ggtitle("R") +
+      ggsave(&"../out/R_{windowYear}.pdf")
 
   when false:
     let dfMag = seqsToDf({"Transmission probability": transmissionMagnet,
-                           "Angles between path and magnetic field": yawAngles,
-                           "Axion energy[keV]": energiesAx}).arrange("Angles between path and magnetic field")
+                        "Angles between path and magnetic field": yawAngles,
+                        "Axion energy[keV]": energiesAx}).arrange("Angles between path and magnetic field")
 
 
     ggplot(dfMag, aes("Angles between path and magnetic field", "Transmission probability")) +
