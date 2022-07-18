@@ -1,5 +1,5 @@
 # stdlib
-import std / [math, strutils, algorithm, random, sequtils, os, strformat, tables, sugar, strscans, options]
+import std / [math, strutils, algorithm, random, sequtils, os, strformat, tables, options]
 
 import ../axionMass/axionMassforMagnet
 
