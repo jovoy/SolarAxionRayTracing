@@ -545,7 +545,7 @@ proc hash(x: ElementKind): Hash =
   result = h !& int(x)
   result = !$result
 
-proc main*(): Tensor[float] =
+proc main*(): DataFrame =
 
   ## First lets access the solar model and calculate some necessary values
   const solarModel = "./ReadSolarModel/resources/AGSS09_solar_model_stripped.dat"
@@ -817,6 +817,9 @@ proc main*(): Tensor[float] =
         #echo transPlas
       # if want to have absorbtion coefficient of a radius and energy: R = (r (in % of sunR) - 0.0015) / 0.0005
 
+    ## Add the current radius, energy & emission rates to the resulting DF
+    result.add toDf({ "Radius" : radius, "Energy [keV]" : energies,
+                      "emRates" : emratesS[R, _].squeeze })
 
     totalRadiiFlux[R] = radiiFlux
     radii[R] = radius
@@ -842,8 +845,7 @@ proc main*(): Tensor[float] =
   #  geom_point() +
   #  ggtitle("Radius versus opacity for different energies") +
   #  ggsave("out/radius_op_energies.pdf")
-  let dfRadii = seqsToDf({"Radius": radii,
-                        "Flux": totalRadiiFlux})
+  let dfRadii = seqsToDf({"Radius": radii, "Flux": totalRadiiFlux})
   echo dfRadii
 
   ggplot(dfRadii, aes("Radius", "Flux")) +
@@ -917,13 +919,10 @@ proc main*(): Tensor[float] =
     margin(right = 6.5) +
     ggsave("out/diffFlux.pdf", width = 800, height = 480)
 
-  result = emratesS
-
 when isMainModule:
 
   let solarModel = main()
-  echo "writing to csv"
-  solarModel.to_csv("solar_model_tensor15.csv")
+  solarModel.writeCsv("solar_model_dataframe.csv")
 
   when false:
     ## TODO: better approach to store the full "solar model" as a CSV from a DF
