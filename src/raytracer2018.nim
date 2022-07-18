@@ -2469,9 +2469,8 @@ proc initFullSetup(setup: ExperimentSetupKind,
     diffRadiusSum = 0.0
 
   template toCdf(x: untyped): untyped =
-    let baseline = x[0]
     let integral = x[^1]
-    x.mapIt( (it - baseline) / (integral - baseline) )
+    x.mapIt( it / integral )
 
   for iRad, radius in radii:
     # emRates is seq of radii of energies
