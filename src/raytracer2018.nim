@@ -463,7 +463,7 @@ genGetRandomFromSolar(getRandomEnergyFromSolarModel,
                       energies, seq[keV],
                       keV):
   let energy = energies[idx]
-  result = energy
+  result = max(0.03.keV, energy)
 
 genGetRandomFromSolar(getRandomEmissionRateFromSolarModel,
                       emissionRates, seq[seq[float]],
