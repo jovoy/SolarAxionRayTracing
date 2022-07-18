@@ -230,9 +230,10 @@ type
     expSetup: ExperimentSetup
     detectorSetup: DetectorSetup
     energies: seq[keV]
-    emRates: seq[seq[float]]
-    emRatesRadiusCumSum: seq[float]
-    emRateCDFs: seq[seq[float]]
+    fluxRadiusCDF: seq[float]     ## CDF of the integrated flux per radius
+                                  ## (indices correspond to radii)
+    diffFluxCDFs: seq[seq[float]] ## CDF of each radius' differential flux per energy
+                                  ## (indices correspond to radii & energies)
     flags: set[ConfigFlags]
 
 ################################
@@ -417,18 +418,18 @@ proc getRandomPointOnDisk(center: Vec3, radius: MilliMeter): Vec3 =
 
 
 proc getRandomPointFromSolarModel(center: Vec3, radius: MilliMeter,
-                                  emRateCumSum: seq[float]): Vec3 =
+                                  fluxRadiusCDF: seq[float]): Vec3 =
   ## This function gives the coordinates of a random point in the sun, biased
   ## by the emissionrates (which depend on the radius and the energy) ##
   ##
-  ## `emRateCumSum` is the normalized (to 1.0) cumulative sum of the emission
-  ## rates over all energies at each radius
+  ## `fluxRadiusCDF` is the normalized (to 1.0) cumulative sum of the total flux per
+  ## radius of all radii of the solar model.
   let
     angle1 = 360 * rand(1.0)
     angle2 = 180 * rand(1.0)
     ## random number from 0 to 1 corresponding to possible solar radii.
     randEmRate = rand(1.0)
-    rIdx = emRateCumSum.lowerBound(randEmRate)
+    rIdx = fluxRadiusCDF.lowerBound(randEmRate)
     r = (0.0015 + (rIdx).float * 0.0005) * radius
   let x = cos(degToRad(angle1)) * sin(degToRad(angle2)) * r
   let y = sin(degToRad(angle1)) * sin(degToRad(angle2)) * r
@@ -442,7 +443,7 @@ template genGetRandomFromSolar(name, arg, typ, retTyp, body: untyped): untyped =
   ## This only works if the energies to from are evenly distributed
   proc `name`(vectorInSun, center: Vec3, radius: MilliMeter,
               arg: typ,
-              emRateCDFs: seq[seq[float]],
+              diffFluxCDFs: seq[seq[float]],
               ): retTyp =
     var
       rad = (vectorInSun - center).length.mm
@@ -453,7 +454,7 @@ template genGetRandomFromSolar(name, arg, typ, retTyp, body: untyped): untyped =
       iRad = int(ceil(indexRad))
     else: iRad = int(floor(indexRad))
     # get the normalized (to 1) CDF for this radius
-    let cdfEmRate = emRateCDFs[iRad]
+    let cdfEmRate = diffFluxCDFs[iRad]
     # sample an index based on this CDF
     let idx {.inject.} = cdfEmRate.lowerBound(rand(1.0))
     body
@@ -1576,9 +1577,8 @@ proc traceAxion(res: var Axion,
                 centerVecs: CenterVectors,
                 expSetup: ExperimentSetup,
                 detectorSetup: DetectorSetup,
-                emRates: seq[seq[float]],
-                emRatesRadiusCumSum: seq[float],
-                emRateCDFs: seq[seq[float]],
+                fluxRadiusCDF: seq[float],
+                diffFluxCDFs: seq[seq[float]],
                 energies: seq[keV],
                 flags: set[ConfigFlags]
                ) =
@@ -1591,7 +1591,7 @@ proc traceAxion(res: var Axion,
   if not testXray:
     # Get a random point in the sun, biased by the emission rate, which is higher
     # at smalller radii, so this will give more points in the center of the sun
-    rayOrigin = getRandomPointFromSolarModel(centerVecs.sun, RadiusSun, emRatesRadiusCumSum)
+    rayOrigin = getRandomPointFromSolarModel(centerVecs.sun, RadiusSun, fluxRadiusCDF)
     # Get a random point at the end of the coldbore of the magnet to take all
     # axions into account that make it to this point no matter where they enter the magnet
     pointExitCBMagneticField = getRandomPointOnDisk(
@@ -1600,7 +1600,7 @@ proc traceAxion(res: var Axion,
     )
     # Get a random energy for the axion biased by the emission rate ##
     energyAx = getRandomEnergyFromSolarModel(
-      rayOrigin, centerVecs.sun, RadiusSun, energies, emRateCDFs
+      rayOrigin, centerVecs.sun, RadiusSun, energies, diffFluxCDFs
     )
   else:
     ## XXX: CLEAN THIS UP! likely just remove dead code & create procs for the "complicated parts" that
@@ -2031,22 +2031,21 @@ proc traceAxionWrapper(axBuf: ptr UncheckedArray[Axion],
                        centerVecs: CenterVectors,
                        expSetup: ExperimentSetup,
                        detectorSetup: DetectorSetup,
-                       emRates: seq[seq[float]],
-                       emRatesRadiusCumSum: seq[float],
-                       emRateCDFs: seq[seq[float]],
+                       fluxRadiusCDF: seq[float],
+                       diffFluxCDFs: seq[seq[float]],
                        energies: seq[keV],
                        flags: set[ConfigFlags]
                        ) =
   echo "Starting weave!"
   parallelFor iSun in 0 ..< bufLen:
-    captures: { axBuf, centerVecs, expSetup, emRates, emRatesRadiusCumSum, emRateCDFs,
+    captures: { axBuf, centerVecs, expSetup, fluxRadiusCDF, diffFluxCDFs,
                 detectorSetup,
                 energies,
                 flags }
     axBuf[iSun].traceAxion(centerVecs,
                            expSetup,
                            detectorSetup,
-                           emRates, emRatesRadiusCumSum, emRateCDFs,
+                           fluxRadiusCDF, diffFluxCDFs,
                            energies,
                            flags)
 
@@ -2445,23 +2444,35 @@ proc initFullSetup(setup: ExperimentSetupKind,
                    stage: StageKind,
                    flags: set[ConfigFlags]): FullRaytraceSetup =
   let expSetup = newExperimentSetup(setup, stage, flags)
-  let energies = linspace(0.001, 15.0, 15000).mapIt(it.keV)
 
   ## TODO: make the code use tensor for the emission rates!
   let resources = parseResourcesPath()
   var emRatesDf = readCsv(resources / parseSolarModelFile())
-    .rename(f{"Radius" <- "dimension_1"}, f{"Energy" <- "dimension_2"}, f{"Flux" <- "value"})
 
-  let emRatesTensor = emRatesDf["Flux", float]
-    .reshape([emRatesDf.filter(fn {`Radius` == 0}).len, emRatesDf.filter(
-        fn {`Energy` == 0}).len])
+  # get all radii and energies from DF so that we don't need to compute them manually (risking to
+  # messing something up!)
+  # sort both just to make sure they really *are* in ascending order
+  let radii = emRatesDf["Radius"]
+    .unique()
+    .toTensor(float)
+    .toSeq1D
+    .sorted(SortOrder.Ascending)
+  let energies = emRatesDf["Energy [keV]"]
+    .unique()
+    .toTensor(float)
+    .toSeq1D
+    .mapIt(it.keV)
+    .sorted(SortOrder.Ascending)
+  var emRates = newSeq[seq[float]]()
+  ## group the "solar model" DF by the radius & append the emission rates for all energies
+  ## to the `emRates`
+  for tup, subDf in groups(emRatesDf.group_by("Radius")):
+    doAssert subDf["Energy [keV]", float].toSeq1D.mapIt(it.keV) == energies
+    emRates.add subDf["emRates", float].toSeq1D
 
-  let emRates = emRatesTensor
-    .toRawSeq
-    .reshape2D([emRatesTensor.shape[1], emRatesTensor.shape[0]])
   var
-    emRatesRadiusCumSum: seq[float] = newSeq[float](emRates.len)
-    emRateCDFs: seq[seq[float]] = newSeq[seq[float]](emRates.len)
+    fluxRadiusCumSum: seq[float] = newSeq[float](radii.len)
+    diffFluxCDFs: seq[seq[float]] = newSeq[seq[float]](radii.len)
     diffRadiusSum = 0.0
 
   template toCdf(x: untyped): untyped =
@@ -2469,53 +2480,36 @@ proc initFullSetup(setup: ExperimentSetupKind,
     let integral = x[^1]
     x.mapIt( (it - baseline) / (integral - baseline) )
 
-  for iRad in 0 ..< emRates.len:
+  for iRad, radius in radii:
     # emRates is seq of radii of energies
-    var diffFlux = emRates[iRad]
+    let emRate = emRates[iRad]
+    var diffFlux = newSeq[float](emRate.len)
     var diffSum = 0.0
     var radiusCumSum = newSeq[float](energies.len)
-    for iEnergy in 0 ..< diffFlux.len:
-      diffFlux[iEnergy] = diffFlux[iEnergy] * pow(energies[iEnergy].float, 2.0) * pow(iRad.float * 0.0005 + 0.0015, 2.0)
+    for iEnergy, energy in energies:
+      diffFlux[iEnergy] = emRate[iEnergy] * (energy.float*energy.float) * radius*radius
       diffSum += diffFlux[iEnergy]
       radiusCumSum[iEnergy] = diffSum
+
+    when false:
+      # sanity checks for calc of differential flux & emission rate
+      let df = toDf({ "diffFlux" : diffFlux, "energy" : energies.mapIt(it.float),
+                      "emRate" : emRates[iRad] })
+      ggplot(df, aes("energy", "diffFlux")) +
+        geom_line() +
+        scale_y_continuous() +
+        ggsave("/tmp/diff_flux_vs_energy.pdf")
+      ggplot(df, aes("energy", "emRate")) +
+        geom_line() +
+        scale_y_continuous() +
+        ggsave("/tmp/emRate_vs_energy.pdf")
     diffRadiusSum += diffSum
-    emRatesRadiusCumSum[iRad] = diffRadiusSum
-    emRateCDFs[iRad] = radiusCumSum.toCdf()
-  emRatesRadiusCumSum = emRatesRadiusCumSum.toCdf()
-
-  when false:
-    echo emRates[0].len, " ", emRates[0].len
-    doAssert emRates[0].len == 15000
-    var
-      emRatesRadiusCumSum = emRates.mapIt(it.sum).cumSum() #zip(toSeq(0 ..< emRates.len), emRates).mapIt(it[1].sum * pow(it[0].float * 0.0005 + 0.0015, 2.0)).cumSum()
-      emratesRadiusSum = emRates.mapIt(it.sum)
-      emratesEnergySum: seq[float]
-
-    # normalize to one
-    emRatesRadiusCumSum.applyIt(it / emRatesRadiusCumSum[^1])
-    for e in 1..15000:
-      var emratesE = 0.0
-      for r in 0..1967:
-        emratesE += emRates[r][e-1] * (r.float * 0.0005 + 0.0015) * (r.float * 0.0005 + 0.0015)
-        #echo e.float * 0.001, " ", (r.float * 0.0005 + 0.0015), " ", (r.float * 0.0005 + 0.0015) * (r.float * 0.0005 + 0.0015) * e.float * e.float * 0.000001
-      emratesEnergySum.add(emratesE * e.float * e.float * 0.000001)
-    #echo emratesEnergySum
-
-    ggplot(seqsToDf({"Energies" : linspace(0.001, 15.0, 15000), "emrates" : emratesEnergySum}),
-        aes("Energies", "emrates")) +
-    geom_line() +
-    xlim(0.0, 15.0) +
-    ggsave("../out/energy_emrates.pdf")
-
-    ## Compute all normalized CDFs of the emission rates for each radius
-    var emRateCDFs = newSeq[seq[float]]()
-    for iRad, f in emRates:
-      var cdf = f.cumSum() #toSeq(0 ..< energies.len).mapIt(f[it] * (energies[it].to(eV).float * energies[it].to(eV).float) / (2 * Pi * Pi)).cumSum()
-      cdf.applyIt(it / cdf[^1])
-      emRateCDFs.add cdf
+    fluxRadiusCumSum[iRad] = diffRadiusSum
+    diffFluxCDFs[iRad] = radiusCumSum.toCdf()
+  let fluxRadiusCDF = fluxRadiusCumSum.toCdf()
 
   ## sample from random point and plot
-  when false:
+  when false: # this is a sort of sanity check to check the sampling of 100_000 elements
     var es = newSeq[float]()
     var ems = newSeq[float]()
     var rs = newSeq[float]()
@@ -2526,10 +2520,10 @@ proc initFullSetup(setup: ExperimentSetupKind,
       let pos = getRandomPointFromSolarModel(centerSun, RadiusSun, emratesRadiusCumSum)
       let r = (pos - centerSun).length()
       let energyAx = getRandomEnergyFromSolarModel(
-        pos, centerSun, RadiusSun, energies, emrates, emRateCDFs, "energy"
+        pos, centerSun, RadiusSun, energies, emrates, diffFluxCDFs, "energy"
       )
       let em = getRandomEnergyFromSolarModel(
-        pos, centerSun, RadiusSun, energies, emrates, emRateCDFs, "emissionRate"
+        pos, centerSun, RadiusSun, energies, emrates, diffFluxCDFs, "emissionRate"
       )
       ts.add arccos(pos[2] / r)
       ps.add arctan(pos[1] / pos[0])
@@ -2556,9 +2550,8 @@ proc initFullSetup(setup: ExperimentSetupKind,
     expSetup: expSetup,
     detectorSetup: detectorSetup,
     energies: energies,
-    emRates: emRates,
-    emRatesRadiusCumSum: emRatesRadiusCumSum,
-    emRateCDFs: emRateCDFs,
+    fluxRadiusCDF: fluxRadiusCDF,
+    diffFluxCDFs: diffFluxCDFs,
     flags: flags
   )
 
@@ -2570,16 +2563,13 @@ proc calculateFluxFractions(raytraceSetup: FullRaytraceSetup,
   var axions = newSeq[Axion](NumberOfPointsSun)
   var axBuf = cast[ptr UncheckedArray[Axion]](axions[0].addr)
   echo "start"
-  #echo emRatesRadiusSum.len
-  #echo raytraceSetup.emRates.len
   init(Weave)
   traceAxionWrapper(axBuf, NumberOfPointsSun,
                     raytraceSetup.centerVecs,
                     raytraceSetup.expSetup,
                     raytraceSetup.detectorSetup,
-                    raytraceSetup.emRates,
-                    raytraceSetup.emRatesRadiusCumSum,
-                    raytraceSetup.emRateCDFs,
+                    raytraceSetup.fluxRadiusCDF,
+                    raytraceSetup.diffFluxCDFs,
                     raytraceSetup.energies,
                     raytraceSetup.flags)
   exit(Weave)
