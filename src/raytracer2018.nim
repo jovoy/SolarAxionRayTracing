@@ -620,25 +620,15 @@ proc getPixelValue(intersects: Vec3): Vec3 =
 proc abs[T: SomeUnit](x: T): T =
   result = abs(x.float).T
 
-proc findPosXRT*(pointXRT: Vec3, pointCB: Vec3,
-                 r1, r2: MilliMeter, angle: Radian, lMirror, distMirr, uncer, sMin, sMax: MilliMeter,
+proc findPosCone*(pointXRT: Vec3, pointCB: Vec3,
+                 r1: MilliMeter, angle: Radian, lMirror: MilliMeter, distMirr: MilliMeter,
                  name = ""): Vec3 =
   ## this is to find the position the ray hits the mirror shell of r1. it is after
   ## transforming the ray into a coordinate system, that has the middle of the
   ## beginning of the mirror cones as its origin
-  var
+  let 
     point = pointCB
-    term: MilliMeter
-    sMinHigh = sMin
-    sMaxHigh = sMax
-    pointMirror = vec3(0.0)
-  let direc = pointXRT - pointCB
-  var sValue = ((-direc[1] * point[0].mm * lMirror - direc[0] * point[1].mm * lMirror + direc[2].mm * r1.mm * sec(angle) -
-                direc[2].mm * r2 * sec(angle)).float - sqrt(pow((-direc[2].mm * r1.mm + direc[2].mm * r2 +
-                direc[1] * point[0].mm * lMirror * cos(angle) + direc[0] * point[1].mm * lMirror * cos(angle)).float, 2.0) -
-                4.0 * direc[0] * direc[1] * lMirror.float * cos(angle) * (distMirr * r1.mm - point[2].mm * r1.mm -
-                distMirr * r2 + point[2].mm * r2 + point[0].mm * point[1].mm * lMirror.float * cos(angle) +
-                lMirror * r1.mm * cos(angle)).float) * sec(angle))/(2.0 * direc[0] * direc[1] * lMirror.float)
+    direc = pointXRT - pointCB
   # calculate the values to solve for s with the p-q-formular, where p=b/a and q=c/a
   let
     k = tan(angle) * tan(angle)
@@ -660,32 +650,11 @@ proc findPosXRT*(pointXRT: Vec3, pointCB: Vec3,
   else:
     s = 0.0
 
-
-  template calcVal(s: MilliMeter): untyped =
-    ## Point + scalar * unit vector essentially. Hence no `mm` for direction.
-    ## TODO: this should be handled differently...
-    let res = sqrt((point[0].mm + s * direc[0]) * (point[0].mm + s * direc[0]) +
-        (point[1].mm + s * direc[1]) * (point[1].mm + s * direc[1])) -
-      ((r2 - r1) * (point[2].mm + s * direc[2] - distMirr) / (cos(angle) * lMirror))
-    res
-  var mid = (sMaxHigh + sMinHigh) / 2.0
-  while abs(r1 - term) > 2.0 * uncer:
-    if abs((sMinHigh - sMaxHigh)) < 1e-8.mm: break
-    term = calcVal(mid)
-    if abs(r1 - calcVal((sMinHigh + mid) / 2.0)) < abs(r1 - calcVal((sMaxHigh + mid) / 2.0)):
-      # use lower half
-      sMaxHigh = mid
-      mid = (sMinHigh + mid) / 2.0
-    else:
-      # use upper half
-      sMinHigh = mid
-      mid = (sMaxHigh + mid) / 2.0
-  pointMirror = point + s * direc
-  #echo mid.float, " actual: ", s ," point: ", point + s * direc, " target ", name
-  result = pointMirror
+  result = point + s * direc
 
 proc findPosParabolic*(pointXRT: Vec3, pointCB: Vec3,
-                 r3: MilliMeter, angle: Radian, lMirror): Vec3 =
+                 r3: MilliMeter, angle: Radian, lMirror, distMirr,
+                 name = ""): Vec3 =
   ## this is to find the position the ray hits the mirror shell of r1. it is after
   ## transforming the ray into a coordinate system, that has the middle of the
   ## beginning of the mirror cones as its origin
@@ -715,7 +684,8 @@ proc findPosParabolic*(pointXRT: Vec3, pointCB: Vec3,
   result = point + s * direc
 
 proc findPosHyperbolic*(pointXRT: Vec3, pointCB: Vec3,
-                 r3: MilliMeter, angle: Radian, lMirror): Vec3 =
+                 r3: MilliMeter, angle: Radian, lMirror, distMirr,
+                 name = ""): Vec3 =
   ## this is to find the position the ray hits the mirror shell of r1. it is after
   ## transforming the ray into a coordinate system, that has the middle of the
   ## beginning of the mirror cones as its origin
@@ -1620,15 +1590,12 @@ proc lineHitsNickel(expSetup: ExperimentSetup, α1: Degree, r1: MilliMeter,
     let compVal = (r1 - (tel.allR1[hL] + tel.allThickness[hL])) /
        (tel.lMirror - pointMirror1[2].mm)
     when verbose:
-      let pointLowerMirror = findPosXRT(
+      let pointLowerMirror = findPosCone(
         pointAfterMirror1, pointMirror1,
         tel.allR1[hL] + tel.allThickness[hL],
-        tel.allR1[hL] -
-          tel.lMirror * sin(tel.allAngles[hL].to(Radian)) +
-          tel.allThickness[hL],
         tel.allAngles[hL].to(Radian),
         tel.lMirror,
-        0.0.mm, 0.01.mm, 0.0.mm, 2.5.mm
+        0.0.mm
       )
       echo "hit Nickel"
       echo pointLowerMirror, " ", pointMirror1, " ", pointMirror2, " ", angle1[1], " ", angle2[1], " ", h
@@ -1868,17 +1835,17 @@ proc traceAxion(res: var Axion,
   let
     beta3 = 3.0 * beta
     distanceMirrors = cos(beta) * (xSep + expSetup.telescope.lMirror)
-    pointMirror1 = findPosXRT(pointEntranceXRT, pointExitCB, r1,
-                              r2, beta, expSetup.telescope.lMirror, 0.0.mm, 0.001.mm, 1.0.mm, 2.0.mm, "Mirror 1")
+    pointMirror1 = findPosCone(pointEntranceXRT, pointExitCB, r1,
+                               beta, expSetup.telescope.lMirror, 0.0.mm, "Mirror 1")
 
 
   let
     vectorAfterMirror1 = getVectoraAfterMirror(pointEntranceXRT,
         pointExitCB, pointMirror1, beta, "vectorAfter")
     pointAfterMirror1 = pointMirror1 + 200.0 * vectorAfterMirror1
-    pointMirror2 = findPosXRT(
-      pointAfterMirror1, pointMirror1, r4, r5, beta3,
-      expSetup.telescope.lMirror, distanceMirrors, 0.01.mm, 0.0.mm, 4.0.mm, "Mirror 2"
+    pointMirror2 = findPosCone(
+      pointAfterMirror1, pointMirror1, r4, beta3,
+      expSetup.telescope.lMirror, distanceMirrors, "Mirror 2"
     )
 
 
@@ -1913,7 +1880,7 @@ proc traceAxion(res: var Axion,
   if res.hitNickel:
     return
 
-  ## Check if `findPosXRT` did not find a hit on the layer. In that case the two `pointMirror`
+  ## Check if `findPosCone` did not find a hit on the layer. In that case the two `pointMirror`
   ## variables actually contain the same (at least `z`) data, because the input is returned
   ## unchanged in that case.
   let z0 = pointExitCB[2]
