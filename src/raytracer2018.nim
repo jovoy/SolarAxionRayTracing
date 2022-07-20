@@ -652,7 +652,7 @@ proc findPosCone*(pointXRT: Vec3, pointCB: Vec3,
   result = point + s * direc
 
 proc findPosParabolic*(pointXRT: Vec3, pointCB: Vec3,
-                 r3: MilliMeter, angle: Radian, lMirror, distMirr,
+                 r1: MilliMeter, angle: Radian, lMirror, distMirr,
                  name = ""): Vec3 =
   ## this is to find the position the ray hits the mirror shell of r1. it is after
   ## transforming the ray into a coordinate system, that has the middle of the
@@ -660,6 +660,7 @@ proc findPosParabolic*(pointXRT: Vec3, pointCB: Vec3,
   let 
     point = pointCB
     direc = pointXRT - pointCB
+    r3 = - tan(angle) * lMirror + sqrt(tan(angle) * lMirror * tan(angle) * lMirror  + r1 * r1)
   # calculate the values to solve for s with the p-q-formular, where p=b/a and q=c/a
   let
     e = 2.0 * r3 * tan(angle) 
@@ -1223,6 +1224,33 @@ proc initTelescope(optics: TelescopeKind): Telescope =
                    0.548, 0.556, 0.564, 0.573, 0.581, 0.59, 0.598, 0.607, 0.616, 0.625, 0.634,
                    0.643, 0.652, 0.661].mapIt(it.Degree),
       lMirror: 300.0.mm, # Mirror length
+      holeInOptics: 0.2.mm, #max 20.9.mm
+      numberOfHoles: 1,
+      holeType: htNone, #the type or shape of the hole in the middle of the optics
+      reflectivity: optics.initReflectivity()
+    )
+  of tkAbrixas:
+    result = Telescope(
+      kind: tkAbrixas, #TODO: focal length of 1600.mm has to be put in setup?
+      optics_entrance: @[0.0, -0.0, 0.0].mapIt(it.mm), #TODO: is shifted 
+      optics_exit: @[0.0, -0.0, 600.0].mapIt(it.mm), #TODO: is shifted 
+      telescope_turned_x: 0.0.°, #the angle by which the telescope is turned in respect to the magnet
+      telescope_turned_y: 0.0.°, #the angle by which the telescope is turned in respect to the magnet
+      # Measurements of the Telescope mirrors in the following, R1 are the radii of the mirror shells at the entrance of the mirror
+      allThickness: @[0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.25, 0.25, 0.25,
+                      0.25, 0.25, 0.25, 0.25, 0.3, 0.3, 0.3, 0.3, 0.3, 0.35,
+                      0.35, 0.35, 0.35, 0.35, 0.4, 0.4, 0.4].mapIt(it.mm),
+      # the radii of the shells closest to the magnet, now correct
+      allR1: @[38.325, 39.553, 40.781, 42.009, 43.236, 44.492, 45.777, 47.144, 48.545,
+               49.981, 51.451, 52.957, 54.499, 56.079, 57.747, 59.457, 61.209, 63.003,
+               64.840, 66.773, 68.753, 70.781, 72.859, 74.987, 77.217, 79.502, 81.843].mapIt(it.mm),
+      allXsep: @[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0].mapIt(it.mm),
+      # the angles of the mirror shells coresponding to the radii above, now correct
+      allAngles: @[0.3335, 0.3443, 0.3550, 0.3657, 0.3765, 0.3874, 0.3987, 0.4102, 0.4225, 0.4350, 0.4479,
+                   0.4610, 0.4745, 0.4883, 0.5024, 0.5174, 0.5327, 0.5484, 0.5644, 0.5809, 0.5982, 0.6159,
+                   0.6340, 0.6526, 0.6716, 0.6916, 0.7120].mapIt(it.Degree),
+      lMirror: 150.0.mm, # Mirror length
       holeInOptics: 0.2.mm, #max 20.9.mm
       numberOfHoles: 1,
       holeType: htNone, #the type or shape of the hole in the middle of the optics
