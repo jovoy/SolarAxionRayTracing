@@ -683,6 +683,67 @@ proc findPosXRT*(pointXRT: Vec3, pointCB: Vec3,
   #echo mid.float, " actual: ", s ," point: ", point + s * direc, " target ", name
   result = pointMirror
 
+proc findPosParabolic*(pointXRT: Vec3, pointCB: Vec3,
+                 r3: MilliMeter, angle: Radian, lMirror): Vec3 =
+  ## this is to find the position the ray hits the mirror shell of r1. it is after
+  ## transforming the ray into a coordinate system, that has the middle of the
+  ## beginning of the mirror cones as its origin
+  let 
+    point = pointCB
+    direc = pointXRT - pointCB
+  # calculate the values to solve for s with the p-q-formular, where p=b/a and q=c/a
+  let
+    e = 2.0 * r3 * tan(angle) 
+    a = direc[0] * direc[0] + direc[1] * direc[1]
+    b = 2.0 * (point[0] * direc[0] + point[1] * direc[1]) + e * direc[2]
+    halfb = b / 2.0
+    c = point[0] * point[0] + point[1] * point[1] - r3 * r3 - e * lMirror + e * point[2]
+
+  # find nearest root that lies in acceptable range
+  var
+    s : float
+    root1 = (-half_b - sqrt(half_b * half_b - a * c)) / a
+    root2 = (-half_b + sqrt(half_b * half_b - a * c)) / a
+  if point[2] + root1 * direc[2] > distMirr.float and point[2] + root1 * direc[2] < distMirr.float + lMirror.float * cos(angle):
+    s = root1
+  elif point[2] + root2 * direc[2] > distMirr.float and point[2] + root2 * direc[2] < distMirr.float + lMirror.float * cos(angle):
+    s = root2
+  else:
+    s = 0.0
+
+  result = point + s * direc
+
+proc findPosHyperbolic*(pointXRT: Vec3, pointCB: Vec3,
+                 r3: MilliMeter, angle: Radian, lMirror): Vec3 =
+  ## this is to find the position the ray hits the mirror shell of r1. it is after
+  ## transforming the ray into a coordinate system, that has the middle of the
+  ## beginning of the mirror cones as its origin
+  let 
+    point = pointCB
+    direc = pointXRT - pointCB
+  # calculate the values to solve for s with the p-q-formular, where p=b/a and q=c/a
+  let
+    f = r3 / tan(4.0 * angle / 3.0) #focal length
+    e = 2.0 * r3 * tan(angle) * (1.0 + 1.0 / (f + r3 * cot(2.0 * angle / 3.0)))
+    a = direc[0] * direc[0] + direc[1] * direc[1]
+    b = 2.0 * (point[0] * direc[0] + point[1] * direc[1]) + e * direc[2]
+    halfb = b / 2.0
+    c = point[0] * point[0] + point[1] * point[1] - r3 * r3 - e * lMirror + e * point[2]
+
+  # find nearest root that lies in acceptable range
+  var
+    s : float
+    root1 = (-half_b - sqrt(half_b * half_b - a * c)) / a
+    root2 = (-half_b + sqrt(half_b * half_b - a * c)) / a
+  if point[2] + root1 * direc[2] > distMirr.float and point[2] + root1 * direc[2] < distMirr.float + lMirror.float * cos(angle):
+    s = root1
+  elif point[2] + root2 * direc[2] > distMirr.float and point[2] + root2 * direc[2] < distMirr.float + lMirror.float * cos(angle):
+    s = root2
+  else:
+    s = 0.0
+
+  result = point + s * direc
+
 proc getVectoraAfterMirror*(pointXRT, pointCB, pointMirror: Vec3,
                             angle: float, pointOrAngle: string): Vec3 =
   ## this is to find the vector after the reflection on the respective mirror
