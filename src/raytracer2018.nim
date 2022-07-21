@@ -653,7 +653,7 @@ proc findPosCone*(pointXRT: Vec3, pointCB: Vec3,
   result = point + s * direc
 
 proc findPosParabolic*(pointXRT: Vec3, pointCB: Vec3,
-                 r1: MilliMeter, angle: Radian, lMirror, distMirr,
+                 r1: MilliMeter, angle: Radian, lMirror: MilliMeter, distMirr: MilliMeter,
                  name = ""): Vec3 =
   ## this is to find the position the ray hits the mirror shell of r1. it is after
   ## transforming the ray into a coordinate system, that has the middle of the
@@ -666,9 +666,9 @@ proc findPosParabolic*(pointXRT: Vec3, pointCB: Vec3,
   let
     e = 2.0 * r3 * tan(angle) 
     a = direc[0] * direc[0] + direc[1] * direc[1]
-    b = 2.0 * (point[0] * direc[0] + point[1] * direc[1]) + e * direc[2]
+    b = 2.0 * (point[0] * direc[0] + point[1] * direc[1]) + e.float * direc[2]
     halfb = b / 2.0
-    c = point[0] * point[0] + point[1] * point[1] - r3 * r3 - e * lMirror + e * point[2]
+    c = point[0] * point[0] + point[1] * point[1] - r3.float * r3.float - e.float * lMirror.float + e.float * point[2]
 
   # find nearest root that lies in acceptable range
   var
@@ -685,7 +685,7 @@ proc findPosParabolic*(pointXRT: Vec3, pointCB: Vec3,
   result = point + s * direc
 
 proc findPosHyperbolic*(pointXRT: Vec3, pointCB: Vec3,
-                 r3: MilliMeter, angle: Radian, lMirror, distMirr,
+                 r1: MilliMeter, angle: Radian, lMirror: MilliMeter, distMirr: MilliMeter,
                  name = ""): Vec3 =
   ## this is to find the position the ray hits the mirror shell of r1. it is after
   ## transforming the ray into a coordinate system, that has the middle of the
@@ -693,14 +693,16 @@ proc findPosHyperbolic*(pointXRT: Vec3, pointCB: Vec3,
   let 
     point = pointCB
     direc = pointXRT - pointCB
+    r3 = - tan(angle/3.0) * lMirror + sqrt(tan(angle/3.0) * lMirror * tan(angle/3.0) * lMirror  + r1 * r1)
+  echo r1, " r3 ", r3
   # calculate the values to solve for s with the p-q-formular, where p=b/a and q=c/a
   let
     f = r3 / tan(4.0 * angle / 3.0) #focal length
-    e = 2.0 * r3 * tan(angle) * (1.0 + 1.0 / (f + r3 * cot(2.0 * angle / 3.0)))
+    e = 2.0 * r3.float * tan(angle) * (1.0 + 1.0 / (f.float + r3.float * cot(2.0 * angle / 3.0)))
     a = direc[0] * direc[0] + direc[1] * direc[1]
     b = 2.0 * (point[0] * direc[0] + point[1] * direc[1]) + e * direc[2]
     halfb = b / 2.0
-    c = point[0] * point[0] + point[1] * point[1] - r3 * r3 - e * lMirror + e * point[2]
+    c = point[0] * point[0] + point[1] * point[1] - r3.float * r3.float - e * lMirror.float + e * point[2]
 
   # find nearest root that lies in acceptable range
   var
@@ -1142,7 +1144,29 @@ proc initReflectivity(optics: TelescopeKind): Reflectivity =
       (energies.min, energies.max)
     )
     result.reflectivity = spl
-  of tkCustomBabyIAXO, tkAbrixas:
+  of tkAbrixas:
+    result = Reflectivity(
+      kind: rkSingleCoating
+    )
+    # read reflectivities from H5 file
+    let resources = parseResourcesPath()
+    let h5fname = resources / parseGoldReflectivityFile()
+
+    var h5f = H5open(h5fname, "r")
+    let energies = h5f["/Energy", float]
+    let angles = h5f["/Angles", float]
+    var reflectivities = newSeq[Interpolator2DType[float]]()
+    let reflDset = h5f[("Reflectivity").dset_str]
+    let data = reflDset[float].toTensor.reshape(reflDset.shape)
+    discard h5f.close()
+
+    let spl = newBilinearSpline(
+      data,
+      (angles.min, angles.max),
+      (energies.min, energies.max)
+    )
+    result.reflectivity = spl
+  of tkCustomBabyIAXO:
     doAssert false, "Reflectivities are not yet implemented for the " &
       "tkCustomBabyIAXO and tkAbrixas optics."
   else:
@@ -1233,8 +1257,8 @@ proc initTelescope(optics: TelescopeKind): Telescope =
   of tkAbrixas:
     result = Telescope(
       kind: tkAbrixas, #TODO: focal length of 1600.mm has to be put in setup?
-      optics_entrance: @[0.0, -0.0, 0.0].mapIt(it.mm), #TODO: is shifted 
-      optics_exit: @[0.0, -0.0, 600.0].mapIt(it.mm), #TODO: is shifted 
+      optics_entrance: @[-60.0, -0.0, 0.0].mapIt(it.mm), #TODO: estimated value from radii
+      optics_exit: @[-60.0, -0.0, 600.0].mapIt(it.mm), #TODO: estimated value from radii
       telescope_turned_x: 0.0.°, #the angle by which the telescope is turned in respect to the magnet
       telescope_turned_y: 0.0.°, #the angle by which the telescope is turned in respect to the magnet
       # Measurements of the Telescope mirrors in the following, R1 are the radii of the mirror shells at the entrance of the mirror
@@ -1242,9 +1266,9 @@ proc initTelescope(optics: TelescopeKind): Telescope =
                       0.25, 0.25, 0.25, 0.25, 0.3, 0.3, 0.3, 0.3, 0.3, 0.35,
                       0.35, 0.35, 0.35, 0.35, 0.4, 0.4, 0.4].mapIt(it.mm),
       # the radii of the shells closest to the magnet, now correct
-      allR1: @[38.325, 39.553, 40.781, 42.009, 43.236, 44.492, 45.777, 47.144, 48.545,
-               49.981, 51.451, 52.957, 54.499, 56.079, 57.747, 59.457, 61.209, 63.003,
-               64.840, 66.773, 68.753, 70.781, 72.859, 74.987, 77.217, 79.502, 81.843].mapIt(it.mm),
+      allR1: @[38.125, 39.353, 40.581, 41.809, 43.036, 44.292, 45.577, 46.894, 48.295,
+               49.731, 51.201, 52.707, 54.249, 55.829, 57.447, 59.157, 60.909, 62.703,
+               64.540, 66.423, 68.403, 70.431, 72.509, 74.637, 76.817, 79.102, 81.443].mapIt(it.mm),
       allXsep: @[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
                  0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0].mapIt(it.mm),
       # the angles of the mirror shells coresponding to the radii above, now correct
@@ -1297,7 +1321,7 @@ proc initDetectorInstallation(setup: ExperimentSetupKind,
   case setup
   of esCAST:
     result = DetectorInstallation(
-      distanceDetectorXRT: 1485.0.mm, #1300.0 # is from llnl XRT https://iopscience.iop.org/article/10.1088/1475-7516/2015/12/008/pdf #1600.0 # was the Telescope of 2014 (MPE XRT) also: Aperatur changed #ok
+      distanceDetectorXRT: 1600.0.mm, #for Abrixas #1485.0.mm, #1300.0 # is from llnl XRT https://iopscience.iop.org/article/10.1088/1475-7516/2015/12/008/pdf #1600.0 # was the Telescope of 2014 (MPE XRT) also: Aperatur changed #ok
       distanceWindowFocalPlane: 0.0.mm, # #no change, because don't know
 
       lateralShift: 0.0.mm, #lateral ofset of the detector in repect to the beamline
@@ -1316,7 +1340,7 @@ proc getOpticForSetup(setup: ExperimentSetupKind): TelescopeKind =
   ## XXX: replace this by user input & config file selection. Only fall back if
   ## neither provided!
   case setup
-  of esCAST: result = tkLLNL
+  of esCAST: result = tkAbrixas #tkLLNL
   of esBabyIAXO: result = tkXMM # tkCustomBabyIAXO
 
 proc newExperimentSetup*(setup: ExperimentSetupKind,
@@ -1595,6 +1619,9 @@ proc lineIntersectsOpaqueTelescopeStructures(
            ((phiFlatSpider >= (-1.145 + 22.5 * i.float) and phiFlatSpider <= (1.145 + 22.5 * i.float))):
           result = true
           break
+  of tkAbrixas:
+    # TODO: I think there is none in the field of view because it's in one of the six spider strip sections?
+    if radialDist > 400.0.mm: return
   else:
     doAssert false, "The telescope kind " & $expSetup.telescope.kind & " does not have any opaque " &
       "structures implemented yet."
@@ -1850,7 +1877,7 @@ proc traceAxion(res: var Axion,
 
       ## TODO: verify that `break` here is actually justified
       # break
-
+  
   ## Why do we check for `lineIntersectsOpaqueTelescopeStructure` here again?
   when false:
     if testXray and minDist > 100.0.mm and
@@ -1863,14 +1890,26 @@ proc traceAxion(res: var Axion,
   let
     beta3 = 3.0 * beta
     distanceMirrors = cos(beta) * (xSep + expSetup.telescope.lMirror)
+  var pointMirror1 = vec3(0.0)
+  case expSetup.telescope.kind
+  of tkAbrixas:
+    pointMirror1 = findPosParabolic(pointEntranceXRT, pointExitCB, r1,
+                                beta, expSetup.telescope.lMirror, 0.0.mm, "Mirror 1")
+  else:
     pointMirror1 = findPosCone(pointEntranceXRT, pointExitCB, r1,
-                               beta, expSetup.telescope.lMirror, 0.0.mm, "Mirror 1")
+                                beta, expSetup.telescope.lMirror, 0.0.mm, "Mirror 1")
 
 
   let
     vectorAfterMirror1 = getVectoraAfterMirror(pointEntranceXRT,
         pointExitCB, pointMirror1, beta, "vectorAfter")
     pointAfterMirror1 = pointMirror1 + 200.0 * vectorAfterMirror1
+  var pointMirror2 = vec3(0.0)
+  case expSetup.telescope.kind
+  of tkAbrixas:
+    pointMirror1 = findPosHyperbolic(pointAfterMirror1, pointMirror1, r1, beta3,
+      expSetup.telescope.lMirror, distanceMirrors, "Mirror 2")
+  else:
     pointMirror2 = findPosCone(
       pointAfterMirror1, pointMirror1, r4, beta3,
       expSetup.telescope.lMirror, distanceMirrors, "Mirror 2"
