@@ -746,15 +746,12 @@ proc calcNormalVec(pointMirror: Vec3, angle: float, r1: MilliMeter, lMirror: Mil
 
 
 proc getVectoraAfterMirror*(pointXRT, pointCB, pointMirror: Vec3,
-                            angle: float, pointOrAngle: string): Vec3 =
+                            angle: float, r1: MilliMeter, lMirror: MilliMeter,
+                            mirrorShape = " ", pointOrAngle: string): Vec3 =
   ## this is to find the vector after the reflection on the respective mirror
   ##
   ## TODO: clarify wheether this returns angles in rad or in degree!
-  var normalVec = vec3(0.0)
-  normalVec[0] = pointMirror[0]
-  normalVec[1] = pointMirror[1]
-  normalVec[2] = tan(angle) * sqrt(pointMirror[0] * pointMirror[0] +
-      pointMirror[1] * pointMirror[1])
+  var normalVec = calcNormalVec(pointMirror, angle, r1, lMirror, mirrorShape)
   let vectorBeforeMirror = normalize(pointXRT - pointCB)
   # this is the vector product of the normal vector on pointMirror pointing
   # in the direction of the radius of the cylinder and the vector of the ray
@@ -1917,58 +1914,50 @@ proc traceAxion(res: var Axion,
   let
     beta3 = 3.0 * beta
     distanceMirrors = cos(beta) * (xSep + expSetup.telescope.lMirror)
-  var pointMirror1 = vec3(0.0)
+  var 
+    pointMirror1 = vec3(0.0)
+    vectorAfterMirror1 = vec3(0.0)
+    pointAfterMirror1 = vec3(0.0)
+    pointMirror2 = vec3(0.0)
+    vectorAfterMirrors = vec3(0.0)
+    pointAfterMirror2 = vec3(0.0)
+    angle1 = vec3(0.0)
+    angle2 = vec3(0.0)
   case expSetup.telescope.kind
   of tkAbrixas:
     pointMirror1 = findPosParabolic(pointEntranceXRT, pointExitCB, r1,
-                                beta, expSetup.telescope.lMirror, 0.0.mm, "Mirror 1")   
+                                beta, expSetup.telescope.lMirror, 0.0.mm, "Mirror 1")  
+    vectorAfterMirror1 = getVectoraAfterMirror(pointEntranceXRT,
+        pointExitCB, pointMirror1, beta, r1, expSetup.telescope.lMirror, "parabolic", "vectorAfter") 
+    pointAfterMirror1 = pointMirror1 + 200.0 * vectorAfterMirror1
+    pointMirror2 = findPosHyperbolic(pointAfterMirror1, pointMirror1, r1, beta3,
+      expSetup.telescope.lMirror, distanceMirrors, "Mirror 2") 
+    vectorAfterMirrors = getVectoraAfterMirror(
+      pointAfterMirror1, pointMirror1, pointMirror2, beta3, r1, expSetup.telescope.lMirror, "parabolic", "vectorAfter")
+    pointAfterMirror2 = pointMirror2 + 200.0 * vectorAfterMirrors
+    angle1 = getVectoraAfterMirror(
+      pointEntranceXRT,
+      pointExitCB, pointMirror1, beta, r1, expSetup.telescope.lMirror, "parabolic", "angle")
+    angle2 = getVectoraAfterMirror(
+      pointAfterMirror1, pointMirror1, pointMirror2, beta3, r1, expSetup.telescope.lMirror, "parabolic", "angle")
   else:
     pointMirror1 = findPosCone(pointEntranceXRT, pointExitCB, r1,
                                 beta, expSetup.telescope.lMirror, 0.0.mm, "Mirror 1")
-
-
-  let
     vectorAfterMirror1 = getVectoraAfterMirror(pointEntranceXRT,
-        pointExitCB, pointMirror1, beta, "vectorAfter")
+        pointExitCB, pointMirror1, beta, r1, expSetup.telescope.lMirror, "cone", "vectorAfter")
     pointAfterMirror1 = pointMirror1 + 200.0 * vectorAfterMirror1
-  var pointMirror2 = vec3(0.0)
-  case expSetup.telescope.kind
-  of tkAbrixas:
-    pointMirror2 = findPosHyperbolic(pointAfterMirror1, pointMirror1, r1, beta3,
-      expSetup.telescope.lMirror, distanceMirrors, "Mirror 2") 
-    #echo pointMirror2, " cone shaped: ", findPosCone(pointAfterMirror1, pointMirror1, r4, beta3,expSetup.telescope.lMirror, distanceMirrors, "Mirror 2")
-  else:
-    pointMirror2 = findPosCone(
-      pointAfterMirror1, pointMirror1, r4, beta3,
-      expSetup.telescope.lMirror, distanceMirrors, "Mirror 2"
-    )
-
-  let 
-    nCone1 = calcNormalVec(pointMirror1, beta, r1, expSetup.telescope.lMirror, mirrorShape = "cone")
-    nPara1 = calcNormalVec(pointMirror1, beta, r1, expSetup.telescope.lMirror, mirrorShape = "parabolic")
-    nCone2 = calcNormalVec(pointMirror2, beta3, r1, expSetup.telescope.lMirror, mirrorShape = "cone")
-    nHyper2 = calcNormalVec(pointMirror2, beta3, r1, expSetup.telescope.lMirror, mirrorShape = "hyperbolic")
-  
-  echo "Cone 1: ", nCone1, " Parabolic 1: ", nPara1
-  echo "Cone 2: ", nCone2, " Hyperbolic 2: ", nHyper2
-  #echo r1, " ", allR1[hitLayer - 1], " ", r2, " ", allR1[hitLayer - 1] - expSetup.telescope.lMirror * sin(expSetup.allAngles[hitLayer - 1].to(Radian))
-
-
-  if pointMirror2[0] == 0.0 and pointMirror2[1] == 0.0 and pointMirror2[2] ==
-      0.0: return ## with more uncertainty, 10% of the 0.1% we loose here can be recovered, but it gets more uncertain
-  let
+    pointMirror2 = findPosCone(pointAfterMirror1, pointMirror1, r4, beta3,
+      expSetup.telescope.lMirror, distanceMirrors, "Mirror 2")
     vectorAfterMirrors = getVectoraAfterMirror(
-      pointAfterMirror1, pointMirror1, pointMirror2, beta3, "vectorAfter"
-    )
+      pointAfterMirror1, pointMirror1, pointMirror2, beta3, r1, expSetup.telescope.lMirror, "cone", "vectorAfter")
     pointAfterMirror2 = pointMirror2 + 200.0 * vectorAfterMirrors
-  let
     angle1 = getVectoraAfterMirror(
       pointEntranceXRT,
-      pointExitCB, pointMirror1, beta, "angle"
-    )
+      pointExitCB, pointMirror1, beta, r1, expSetup.telescope.lMirror, "cone", "angle")
     angle2 = getVectoraAfterMirror(
-      pointAfterMirror1, pointMirror1, pointMirror2, beta3, "angle"
-    )
+      pointAfterMirror1, pointMirror1, pointMirror2, beta3, r1, expSetup.telescope.lMirror, "cone", "angle")
+
+  let
     # `getVectoraAfterMirror` with `"angle"` argument returns `Degree`
     alpha1 = angle1[1].Degree
     alpha2 = angle2[1].Degree
