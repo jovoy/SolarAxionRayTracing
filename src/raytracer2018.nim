@@ -747,43 +747,40 @@ proc calcNormalVec(pointMirror: Vec3, angle: float, r1: MilliMeter, lMirror: Mil
 
 proc getVectoraAfterMirror*(pointXRT, pointCB, pointMirror: Vec3,
                             angle: float, r1: MilliMeter, lMirror: MilliMeter,
-                            mirrorShape = " ", pointOrAngle: string): Vec3 =
+                            mirrorShape = " "): Vec3 =
   ## this is to find the vector after the reflection on the respective mirror
   ##
   ## TODO: clarify wheether this returns angles in rad or in degree!
-  var normalVec = calcNormalVec(pointMirror, angle, r1, lMirror, mirrorShape)
-  let vectorBeforeMirror = normalize(pointXRT - pointCB)
+  let 
+    normalVec = calcNormalVec(pointMirror, angle, r1, lMirror, mirrorShape)
+    vectorBeforeMirror = normalize(pointXRT - pointCB)
   # this is the vector product of the normal vector on pointMirror pointing
   # in the direction of the radius of the cylinder and the vector of the ray
-  let vectorAxis = normalize(normalVec.cross vectorBeforeMirror)
-  let alphaMirror = arcsin(abs(normalVec.dot(vectorBeforeMirror) /
+  let 
+    vectorAxis = normalize(normalVec.cross vectorBeforeMirror)
+    alphaMirror = arcsin(abs(normalVec.dot(vectorBeforeMirror) /
                                normalVec.length))
-  let vecBeforeAxis = cross(vectorBeforeMirror, vectorAxis)
-  let vectorAfterMirror = vectorBeforeMirror * cos(2.0 * alphaMirror) -
+    vecBeforeAxis = cross(vectorBeforeMirror, vectorAxis)
+    vectorAfterMirror = vectorBeforeMirror * cos(2.0 * alphaMirror) -
       vecBeforeAxis * sin(2.0 * alphaMirror)
+  result = vectorAfterMirror
 
-  let alphaTest = arccos(abs(vectorAfterMirror.dot(vectorBeforeMirror) /
-      (vectorAfterMirror.length * vectorBeforeMirror.length))
-  )
-  var alphaVec = vec3(0.0)
-  alphaVec[0] = radToDeg(alphaTest) / 2.0
-  alphaVec[1] = radToDeg(alphaMirror)
-  case pointOrAngle
-  of "angle":
-    result = alphaVec
-  of "pointMirror":
-    result = pointMirror
-  of "pointAfter":
-    result = pointMirror + 200.0 * vectorAfterMirror
-  of "vectorAfter":
-    result = vectorAfterMirror
-  else:
-    ## TODO: instead of having string arguments to determine what to do, split into
-    ## separate functions!
-    ##
-    ## While doing that, also change the code to *not* use a Vec3 for the return type
-    ## of the `"angle"` case. We only use the first argument of the returned vector!
-    doAssert false, "Invalid choice of return value!"
+proc getMirrorAngle*(pointXRT, pointCB, pointMirror: Vec3,
+                            angle: float, r1: MilliMeter, lMirror: MilliMeter,
+                            mirrorShape = " "): float64 =
+  ## this is to find the vector after the reflection on the respective mirror
+  ##
+  ## TODO: clarify wheether this returns angles in rad or in degree!
+  let 
+    normalVec = calcNormalVec(pointMirror, angle, r1, lMirror, mirrorShape)
+    vectorBeforeMirror = normalize(pointXRT - pointCB)
+  # this is the vector product of the normal vector on pointMirror pointing
+  # in the direction of the radius of the cylinder and the vector of the ray
+  let 
+    vectorAxis = normalize(normalVec.cross vectorBeforeMirror)
+    alphaMirror = arcsin(abs(normalVec.dot(vectorBeforeMirror) /
+                               normalVec.length))
+  result = radToDeg(alphaMirror)
 
 proc getPointDetectorWindow(pointMirror2: Vec3, pointAfterMirror2: Vec3,
     distDet, xsepMiddle, dCBXray: MilliMeter,
@@ -1677,7 +1674,7 @@ proc lineHitsNickel(expSetup: ExperimentSetup, α1: Degree, r1: MilliMeter,
         0.0.mm
       )
       echo "hit Nickel"
-      echo pointLowerMirror, " ", pointMirror1, " ", pointMirror2, " ", angle1[1], " ", angle2[1], " ", h
+      echo pointLowerMirror, " ", pointMirror1, " ", pointMirror2, " ", angle1, " ", angle2, " ", h
     result = tanα > compVal
 
 proc traceAxion(res: var Axion,
@@ -1921,46 +1918,46 @@ proc traceAxion(res: var Axion,
     pointMirror2 = vec3(0.0)
     vectorAfterMirrors = vec3(0.0)
     pointAfterMirror2 = vec3(0.0)
-    angle1 = vec3(0.0)
-    angle2 = vec3(0.0)
+    angle1: float
+    angle2: float
   case expSetup.telescope.kind
   of tkAbrixas:
     pointMirror1 = findPosParabolic(pointEntranceXRT, pointExitCB, r1,
                                 beta, expSetup.telescope.lMirror, 0.0.mm, "Mirror 1")  
     vectorAfterMirror1 = getVectoraAfterMirror(pointEntranceXRT,
-        pointExitCB, pointMirror1, beta, r1, expSetup.telescope.lMirror, "parabolic", "vectorAfter") 
+        pointExitCB, pointMirror1, beta, r1, expSetup.telescope.lMirror, "parabolic") 
     pointAfterMirror1 = pointMirror1 + 200.0 * vectorAfterMirror1
     pointMirror2 = findPosHyperbolic(pointAfterMirror1, pointMirror1, r1, beta3,
       expSetup.telescope.lMirror, distanceMirrors, "Mirror 2") 
     vectorAfterMirrors = getVectoraAfterMirror(
-      pointAfterMirror1, pointMirror1, pointMirror2, beta3, r1, expSetup.telescope.lMirror, "parabolic", "vectorAfter")
+      pointAfterMirror1, pointMirror1, pointMirror2, beta3, r1, expSetup.telescope.lMirror, "parabolic")
     pointAfterMirror2 = pointMirror2 + 200.0 * vectorAfterMirrors
-    angle1 = getVectoraAfterMirror(
+    angle1 = getMirrorAngle(
       pointEntranceXRT,
-      pointExitCB, pointMirror1, beta, r1, expSetup.telescope.lMirror, "parabolic", "angle")
-    angle2 = getVectoraAfterMirror(
-      pointAfterMirror1, pointMirror1, pointMirror2, beta3, r1, expSetup.telescope.lMirror, "parabolic", "angle")
+      pointExitCB, pointMirror1, beta, r1, expSetup.telescope.lMirror, "parabolic")
+    angle2 = getMirrorAngle(
+      pointAfterMirror1, pointMirror1, pointMirror2, beta3, r1, expSetup.telescope.lMirror, "parabolic")
   else:
     pointMirror1 = findPosCone(pointEntranceXRT, pointExitCB, r1,
                                 beta, expSetup.telescope.lMirror, 0.0.mm, "Mirror 1")
     vectorAfterMirror1 = getVectoraAfterMirror(pointEntranceXRT,
-        pointExitCB, pointMirror1, beta, r1, expSetup.telescope.lMirror, "cone", "vectorAfter")
+        pointExitCB, pointMirror1, beta, r1, expSetup.telescope.lMirror, "cone")
     pointAfterMirror1 = pointMirror1 + 200.0 * vectorAfterMirror1
     pointMirror2 = findPosCone(pointAfterMirror1, pointMirror1, r4, beta3,
       expSetup.telescope.lMirror, distanceMirrors, "Mirror 2")
     vectorAfterMirrors = getVectoraAfterMirror(
-      pointAfterMirror1, pointMirror1, pointMirror2, beta3, r1, expSetup.telescope.lMirror, "cone", "vectorAfter")
+      pointAfterMirror1, pointMirror1, pointMirror2, beta3, r1, expSetup.telescope.lMirror, "cone")
     pointAfterMirror2 = pointMirror2 + 200.0 * vectorAfterMirrors
-    angle1 = getVectoraAfterMirror(
+    angle1 = getMirrorAngle(
       pointEntranceXRT,
-      pointExitCB, pointMirror1, beta, r1, expSetup.telescope.lMirror, "cone", "angle")
-    angle2 = getVectoraAfterMirror(
-      pointAfterMirror1, pointMirror1, pointMirror2, beta3, r1, expSetup.telescope.lMirror, "cone", "angle")
+      pointExitCB, pointMirror1, beta, r1, expSetup.telescope.lMirror, "cone")
+    angle2 = getMirrorAngle(
+      pointAfterMirror1, pointMirror1, pointMirror2, beta3, r1, expSetup.telescope.lMirror, "cone")
 
   let
     # `getVectoraAfterMirror` with `"angle"` argument returns `Degree`
-    alpha1 = angle1[1].Degree
-    alpha2 = angle2[1].Degree
+    alpha1 = angle1.Degree
+    alpha2 = angle2.Degree
 
   # getting rid of the X-rays that hit the shell below
   res.hitNickel = expSetup.lineHitsNickel(
