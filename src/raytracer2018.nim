@@ -1251,13 +1251,13 @@ proc initTelescope(optics: TelescopeKind): Telescope =
                       0.838, 0.850, 0.862, 0.874, 0.887, 0.900, 0.913, 0.927, 0.941, 0.955,
                       0.968, 0.983, 0.997, 1.011, 1.026, 1.041, 1.055, 1.070].mapIt(it.mm),
       # the radii of the shells closest to the magnet, now correct
-      allR1: @[153.126, 155.419, 157.731, 160.065, 162.428, 164.812, 167.225, 169.66, 172.124,
-               174.608, 177.123, 179.658, 182.224, 184.971, 187.749, 190.556, 193.394, 196.263,
-               199.161, 202.09, 205.05, 208.09, 211.16, 214.261, 217.392, 220.553, 223.755,
-               226.987, 230.249, 233.552, 236.885, 240.248, 243.652, 247.298, 250.984, 254.711,
-               258.478, 262.276, 266.114, 269.992, 273.911, 277.87, 281.869, 285.92, 290.01,
-               294.292, 298.676, 303.109, 307.584, 312.108, 316.674, 321.289, 325.955, 330.672,
-               335.439, 340.246, 345.104, 350.013].mapIt(it.mm),
+      allR1: @[153.118, 155.4105, 157.7235, 160.0565, 162.42, 164.803, 167.217, 169.651, 172.115,
+               174.5995, 177.1145, 179.6495, 182.2145, 184.9615, 187.739, 190.5465, 193.3845, 196.253,
+               199.1515, 202.0805, 205.0395, 208.0795, 211.1495, 214.25, 217.381, 220.542, 223.7435,
+               226.9755, 230.2375, 233.54, 236.873, 240.236, 243.6395, 247.2855, 250.9715, 254.6985,
+               258.4655, 262.2625, 266.1005, 269.9785, 273.897, 277.856, 281.8555, 285.9055, 289.9955,
+               294.178, 298.661, 303.0945, 307.5685, 312.093, 316.658, 321.2735, 325.939, 330.6555,
+               335.4225, 340.23, 345.0875, 349.996].mapIt(it.mm),
       allXsep: @[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
                  0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
                  0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
@@ -1887,7 +1887,7 @@ proc traceAxion(res: var Axion,
     if dist > 0.0.mm and dist < minDist:
       minDist = dist
       hitLayer = j # j-th layer currently hit layer
-      # now get/compute the radii for the hit layer
+      # now get/compute the radii for the hit layer. Only r1 is used for the true Wolter type.
       r1 = allR1[j]
       beta = expSetup.telescope.allAngles[j].to(Radian)
       xSep = expSetup.telescope.allXsep[j]
@@ -1921,7 +1921,7 @@ proc traceAxion(res: var Axion,
     angle1: float
     angle2: float
   case expSetup.telescope.kind
-  of tkAbrixas:
+  of tkAbrixas, tkXMM:
     pointMirror1 = findPosParabolic(pointEntranceXRT, pointExitCB, r1,
                                 beta, expSetup.telescope.lMirror, 0.0.mm, "Mirror 1")  
     vectorAfterMirror1 = getVectoraAfterMirror(pointEntranceXRT,
