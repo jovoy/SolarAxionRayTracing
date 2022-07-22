@@ -248,15 +248,15 @@ let
 
   RoomTemp = 293.15.K
   mAxion = 0.0853#0.26978249412621896 #eV, corresponds to set p and T gas valus #0.4 #eV for example
-  g_aγ = 2e-12.GeV⁻¹
+  g_aγ = 1e-12.GeV⁻¹
 
 ## Chipregions#####
 
 let
   ChipXMin     = 0.0.mm
-  ChipXMax     = 100.0.mm #14.0.mm
+  ChipXMax     = 14.0.mm #100.0.mm #14.0.mm
   ChipYMin     = 0.0.mm
-  ChipYMax     = 100.0.mm #14.0.mm
+  ChipYMax     = 14.0.mm #100.0.mm #14.0.mm
   ChipCenterX  = ChipXMax / 2.0 #7.0.mm
   ChipCenterY  = ChipYMax / 2.0 #7.0.mm
   GoldXMin     = 4.5.mm
@@ -694,7 +694,7 @@ proc findPosHyperbolic*(pointXRT: Vec3, pointCB: Vec3,
     point = pointCB
     direc = pointXRT - pointCB
     r3 = - tan(angle/3.0) * lMirror + sqrt(tan(angle/3.0) * lMirror * tan(angle/3.0) * lMirror  + r1 * r1)
-  echo r1, " r3 ", r3
+  #echo r1, " r3 ", r3
   # calculate the values to solve for s with the p-q-formular, where p=b/a and q=c/a
   let
     f = r3 / tan(4.0 * angle / 3.0) #focal length
@@ -717,6 +717,33 @@ proc findPosHyperbolic*(pointXRT: Vec3, pointCB: Vec3,
     s = 0.0
 
   result = point + s * direc
+
+proc calcNormalVec(pointMirror: Vec3, angle: float, r1: MilliMeter, lMirror: MilliMeter, mirrorShape = " "): Vec3=
+  var normalVec = vec3(0.0)
+  normalVec[0] = pointMirror[0]
+  normalVec[1] = pointMirror[1]
+  case mirrorShape
+  of "cone":
+    normalVec[2] = tan(angle) * sqrt(pointMirror[0] * pointMirror[0] +
+      pointMirror[1] * pointMirror[1])
+  of "parabolic":
+    # calculating the parabolic normal vector by geting the tangent from the parabol and turning that by 90 deg
+    let
+      r3 = - tan(angle) * lMirror + sqrt(tan(angle) * lMirror * tan(angle) * lMirror  + r1 * r1)
+      m = 1.0 / (r3.float * tan(angle) / sqrt(r3.float * r3.float + r3.float * 2.0 * tan(angle) * (lMirror.float - pointMirror[2])))
+      n = sqrt(pointMirror[0] * pointMirror[0] + pointMirror[1] * pointMirror[1]) - m * pointMirror[2]
+    normalVec[2] = pointMirror[2] - (- n / m)
+  of "hyperbolic":
+    let
+      r3 = - tan(angle/3.0) * lMirror + sqrt(tan(angle/3.0) * lMirror * tan(angle/3.0) * lMirror  + r1 * r1)
+      f = r3 / tan(4.0 * angle / 3.0) #focal length
+      m = 1.0 / (r3.float * tan(angle) * (1.0 + 1.0 / (f.float + r3.float * cot(2.0 * angle / 3.0))) / 
+          sqrt(r3.float * r3.float + r3.float * 2.0 * tan(angle) * (lMirror.float - pointMirror[2]) * 
+          (1.0 + 1.0 / (f.float + r3.float * cot(2.0 * angle / 3.0)))))
+      n = sqrt(pointMirror[0] * pointMirror[0] + pointMirror[1] * pointMirror[1]) - m * pointMirror[2]
+    normalVec[2] = pointMirror[2] - (- n / m)
+  result = normalVec
+
 
 proc getVectoraAfterMirror*(pointXRT, pointCB, pointMirror: Vec3,
                             angle: float, pointOrAngle: string): Vec3 =
@@ -1080,7 +1107,7 @@ proc initPipes(setup: ExperimentSetupKind): Pipes =
                           radius: 39.64.mm), #30.0 # smallest aperture between end of CB and VT3
       vt3ToXRT: Pipe(length: 150.0.mm, # from drawings #198.2 #mm from XRT drawing #ok
                      radius: 35.0.mm), #25.0 # from drawing #35.0 #m irrelevant, large enough to not loose anything # needs to be mm #ok
-      pipesTurned: 2.75.°, #degree # this is the angle by which the pipes before the detector were turned in comparison to the telescope
+      pipesTurned: 0.0.°, #for Abrixas #2.75.°, #degree # this is the angle by which the pipes before the detector were turned in comparison to the telescope
       distanceCBAxisXRTAxis: 0.0.mm #62.1#58.44 # from XRT drawing #there is no difference in the axis even though the picture gets transfered 62,1mm down, but in the detector center
     )
   of esBabyIAXO:
@@ -1257,8 +1284,8 @@ proc initTelescope(optics: TelescopeKind): Telescope =
   of tkAbrixas:
     result = Telescope(
       kind: tkAbrixas, #TODO: focal length of 1600.mm has to be put in setup?
-      optics_entrance: @[-60.0, -0.0, 0.0].mapIt(it.mm), #TODO: estimated value from radii
-      optics_exit: @[-60.0, -0.0, 600.0].mapIt(it.mm), #TODO: estimated value from radii
+      optics_entrance: @[0.0, -60.0, 0.0].mapIt(it.mm), #TODO: estimated value from radii
+      optics_exit: @[0.0, -60.0, 600.0].mapIt(it.mm), #TODO: estimated value from radii
       telescope_turned_x: 0.0.°, #the angle by which the telescope is turned in respect to the magnet
       telescope_turned_y: 0.0.°, #the angle by which the telescope is turned in respect to the magnet
       # Measurements of the Telescope mirrors in the following, R1 are the radii of the mirror shells at the entrance of the mirror
@@ -1321,7 +1348,7 @@ proc initDetectorInstallation(setup: ExperimentSetupKind,
   case setup
   of esCAST:
     result = DetectorInstallation(
-      distanceDetectorXRT: 1600.0.mm, #for Abrixas #1485.0.mm, #1300.0 # is from llnl XRT https://iopscience.iop.org/article/10.1088/1475-7516/2015/12/008/pdf #1600.0 # was the Telescope of 2014 (MPE XRT) also: Aperatur changed #ok
+      distanceDetectorXRT: 1585.0.mm, #for Abrixas #1485.0.mm, #1300.0 # is from llnl XRT https://iopscience.iop.org/article/10.1088/1475-7516/2015/12/008/pdf #1600.0 # was the Telescope of 2014 (MPE XRT) also: Aperatur changed #ok
       distanceWindowFocalPlane: 0.0.mm, # #no change, because don't know
 
       lateralShift: 0.0.mm, #lateral ofset of the detector in repect to the beamline
@@ -1894,7 +1921,7 @@ proc traceAxion(res: var Axion,
   case expSetup.telescope.kind
   of tkAbrixas:
     pointMirror1 = findPosParabolic(pointEntranceXRT, pointExitCB, r1,
-                                beta, expSetup.telescope.lMirror, 0.0.mm, "Mirror 1")
+                                beta, expSetup.telescope.lMirror, 0.0.mm, "Mirror 1")   
   else:
     pointMirror1 = findPosCone(pointEntranceXRT, pointExitCB, r1,
                                 beta, expSetup.telescope.lMirror, 0.0.mm, "Mirror 1")
@@ -1907,15 +1934,23 @@ proc traceAxion(res: var Axion,
   var pointMirror2 = vec3(0.0)
   case expSetup.telescope.kind
   of tkAbrixas:
-    pointMirror1 = findPosHyperbolic(pointAfterMirror1, pointMirror1, r1, beta3,
-      expSetup.telescope.lMirror, distanceMirrors, "Mirror 2")
+    pointMirror2 = findPosHyperbolic(pointAfterMirror1, pointMirror1, r1, beta3,
+      expSetup.telescope.lMirror, distanceMirrors, "Mirror 2") 
+    #echo pointMirror2, " cone shaped: ", findPosCone(pointAfterMirror1, pointMirror1, r4, beta3,expSetup.telescope.lMirror, distanceMirrors, "Mirror 2")
   else:
     pointMirror2 = findPosCone(
       pointAfterMirror1, pointMirror1, r4, beta3,
       expSetup.telescope.lMirror, distanceMirrors, "Mirror 2"
     )
 
-
+  let 
+    nCone1 = calcNormalVec(pointMirror1, beta, r1, expSetup.telescope.lMirror, mirrorShape = "cone")
+    nPara1 = calcNormalVec(pointMirror1, beta, r1, expSetup.telescope.lMirror, mirrorShape = "parabolic")
+    nCone2 = calcNormalVec(pointMirror2, beta3, r1, expSetup.telescope.lMirror, mirrorShape = "cone")
+    nHyper2 = calcNormalVec(pointMirror2, beta3, r1, expSetup.telescope.lMirror, mirrorShape = "hyperbolic")
+  
+  echo "Cone 1: ", nCone1, " Parabolic 1: ", nPara1
+  echo "Cone 2: ", nCone2, " Hyperbolic 2: ", nHyper2
   #echo r1, " ", allR1[hitLayer - 1], " ", r2, " ", allR1[hitLayer - 1] - expSetup.telescope.lMirror * sin(expSetup.allAngles[hitLayer - 1].to(Radian))
 
 
@@ -1971,7 +2006,7 @@ proc traceAxion(res: var Axion,
     distDet = distanceMirrors - 0.5 * expSetup.telescope.allXsep[8] * cos(beta) +
         expSetup.detectorInstall.distanceDetectorXRT -
         expSetup.detectorInstall.distanceWindowFocalPlane # distance of the detector from the entrance of the optics
-    d = - expSetup.telescope.optics_entrance[0]
+    d = - expSetup.telescope.optics_entrance[0] #only for LLNL because of the turned pipe
   pointDetectorWindow = getPointDetectorWindow(
     pointMirror2,
     pointAfterMirror2,
@@ -2035,7 +2070,7 @@ proc traceAxion(res: var Axion,
   pointDetectorWindow[1] -= expSetup.detectorInstall.transversalShift.float
   if weight != 0:
     res.passedTillWindow = true
-
+  
   ##Detector window:##
   if cfIgnoreDetWindow notin flags and sqrt(
       pointDetectorWindow[0].mm * pointDetectorWindow[0].mm +
