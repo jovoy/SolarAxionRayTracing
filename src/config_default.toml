@@ -1,6 +1,7 @@
 [Resources] # contains relevant resources that need to be read
 # the file storing the telescope efficiency of the LLNL telescope
-resourcePath = "../resources"
+resourcePath   = "../resources"
+outputPath     = "../out"
 llnlEfficiency = "llnl_xray_telescope_cast_effective_area_parallel_light_DTU_thesis.csv"
 goldFilePrefix = "henke_download/"
 solarModelFile = "solar_model_dataframe.csv"
