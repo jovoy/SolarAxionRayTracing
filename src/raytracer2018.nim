@@ -1369,7 +1369,7 @@ proc initDetectorInstallation(optics: TelescopeKind,
   case optics
   of tkLLNL:
     result = DetectorInstallation(
-      distanceDetectorXRT: 1485.mm, # for deetctor center llnl XRT https://iopscience.iop.org/article/10.1088/1475-7516/2015/12/008/pdf
+      distanceDetectorXRT: 1485.mm, # for detector center llnl XRT https://iopscience.iop.org/article/10.1088/1475-7516/2015/12/008/pdf
       distanceWindowFocalPlane: 0.0.mm, # #no change, because don't know
       lateralShift: 0.0.mm, #lateral ofset of the detector in repect to the beamline
       transversalShift: 0.0.mm #transversal ofset of the detector in repect to the beamline #0.0.mm #
@@ -1953,8 +1953,8 @@ proc traceAxion(res: var Axion,
       beta, expSetup.telescope.lMirror, 0.0.mm, "Mirror 1"
     )
     vectorAfterMirror1 = getVectoraAfterMirror(
-      pointEntranceXRT,
-      pointExitCB, pointMirror1, beta, r1, expSetup.telescope.lMirror, msParabolic
+      pointEntranceXRT, pointExitCB, pointMirror1, beta, r1,
+      expSetup.telescope.lMirror, msParabolic
     )
     pointAfterMirror1 = pointMirror1 + 200.0 * vectorAfterMirror1
     pointMirror2 = findPosHyperbolic(
