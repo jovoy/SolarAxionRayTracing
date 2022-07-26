@@ -971,45 +971,48 @@ proc plotSolarModel(df: DataFrame) =
 ## NOTE: In principle it's a bit inefficient to re-parse the same config.toml file multiple times, but
 ## in the context of the whole ray tracing it doesn't matter. Makes the code a bit simpler.
 const sourceDir = currentSourcePath().parentDir
+
+var ConfigPath = sourceDir / "../config"
+var ConfigFile = ConfigPath / "config.toml"
 proc parseResourcesPath(): string =
   ## parses the config.toml file containing the path to `resources` directory
-  let config = parseToml.parseFile(sourceDir / "config.toml")
+  let config = parseToml.parseFile(ConfigFile)
   result = config["Resources"]["resourcePath"].getStr
 
 proc parseOutputPath(): string =
   ## parses the config.toml file containing the path to `output` directory for all plots & CSV files
-  let config = parseToml.parseFile(sourceDir / "config.toml")
+  let config = parseToml.parseFile(ConfigFile)
   result = config["Resources"]["outputPath"].getStr
 
 proc parseLlnlTelescopeFile(): string =
   ## parses the config.toml file containing the LLNL telescope efficiency filename
-  let config = parseToml.parseFile(sourceDir / "config.toml")
+  let config = parseToml.parseFile(ConfigFile)
   result = config["Resources"]["llnlEfficiency"].getStr
 
 proc parseLlnlReflectivityFile(): string =
   ## parses the config.toml file containing the LLNL reflectivity filename
-  let config = parseToml.parseFile(sourceDir / "config.toml")
+  let config = parseToml.parseFile(ConfigFile)
   result = config["Resources"]["llnlReflFile"].getStr
 
 proc parseGoldReflectivityFile(): string =
   ## parses the config.toml file containing the gold reflectivity filename as a H5 file
-  let config = parseToml.parseFile(sourceDir / "config.toml")
+  let config = parseToml.parseFile(ConfigFile)
   result = config["Resources"]["goldReflFile"].getStr
 
 proc parseGoldFilePrefix(): string =
   ## parses the config.toml file containing the path to the gold reflectivity files
   ## as text data files directly from henke.gov
-  let config = parseToml.parseFile(sourceDir / "config.toml")
+  let config = parseToml.parseFile(ConfigFile)
   result = config["Resources"]["goldFilePrefix"].getStr
 
 proc parseSolarModelFile(): string =
   ## parses the config.toml file containing the solar model filename
-  let config = parseToml.parseFile(sourceDir / "config.toml")
+  let config = parseToml.parseFile(ConfigFile)
   result = config["Resources"]["solarModelFile"].getStr
 
 proc parseSetup(): (ExperimentSetupKind, DetectorSetupKind, StageKind, TelescopeKind) =
   ## parses the config.toml file containing the setup to compute the raytracing for
-  let config = parseToml.parseFile(sourceDir / "config.toml")
+  let config = parseToml.parseFile(ConfigFile)
   result[0] = config["Setup"]["experimentSetup"].getStr.parseEnum[:ExperimentSetupKind]()
   result[1] = config["Setup"]["detectorSetup"].getStr.parseEnum[:DetectorSetupKind]()
   result[2] = config["Setup"]["stageSetup"].getStr.parseEnum[:StageKind]()
@@ -1022,7 +1025,7 @@ proc maybeParseMagnetConfig(flags: set[ConfigFlags]): Option[Magnet] =
   ##
   ## Returns `some[Magnet]` if parsing took place or `none[Magnet]` if
   ## we should use the experiment specific magnet.
-  let cfg = parseToml.parseFile(sourceDir / "config.toml")["Magnet"]
+  let cfg = parseToml.parseFile(ConfigFile)["Magnet"]
   if cfReadMagnetConfig in flags or cfg["useConfig"].getBool:
     result = some(
       Magnet(B:              cfg["B"].getFloat.T,
@@ -1043,7 +1046,7 @@ proc maybeParseTestXraySource(flags: set[ConfigFlags]): Option[TestXraySource] =
   ##
   ## Returns `some[TestXraySource]` if parsing took place or `none[TestXraySource]` if
   ## we should use the experiment specific magnet.
-  let cfg = parseToml.parseFile(sourceDir / "config.toml")["TestXraySource"]
+  let cfg = parseToml.parseFile(ConfigFile)["TestXraySource"]
   if cfXrayTest in flags or cfg["useConfig"].getBool:
     result = some(
       TestXraySource(
@@ -1067,7 +1070,7 @@ proc maybeParseDetectorInstallation(flags: set[ConfigFlags]): Option[DetectorIns
   ##
   ## Returns `some[DetectorInstallation]` if parsing took place or `none[DetectorInstallation]` if
   ## we should use the experiment specific magnet.
-  let cfg = parseToml.parseFile(sourceDir / "config.toml")["DetectorInstallation"]
+  let cfg = parseToml.parseFile(ConfigFile)["DetectorInstallation"]
   if cfReadDetInstallConfig in flags or cfg["useConfig"].getBool:
     result = some(
       DetectorInstallation(
@@ -2784,12 +2787,22 @@ proc main(
   ignoreConvProb = false, ignoreReflection = false, xrayTest = false,
   detectorInstall = false, magnet = false,
   angularScanMin = 0.0, angularScanMax = 0.0, numAngularScanPoints = 50,
-  noPlots = false
+  noPlots = false,
+  config = "", # hand a custom path to a config file
+  configPath = "" # Hand a custom path to search in for a config file
          ) =
   # check if the `config.toml` file exists, otherwise recreate from the default
-  if not fileExists("config.toml"):
-    let cdata = readFile(sourceDir / "config_default.toml")
-    writeFile("config.toml", cdata)
+
+  if configPath.len > 0:
+    ConfigPath = configPath
+    ConfigFile = ConfigPath / "config.toml"
+  if config.len > 0:
+    ConfigFile = config
+  elif not fileExists(ConfigFile):
+    # if neither a file given, nor a `config.toml` exists, copy over the `config_default.toml`
+    # to the ConfigPath
+    let cdata = readFile(ConfigPath / "config_default.toml")
+    writeFile(ConfigPath / "config.toml", cdata)
 
   var coldboreBlockedLength: float64
   coldboreBlockedLength = 0.0
