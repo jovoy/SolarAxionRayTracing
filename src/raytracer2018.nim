@@ -626,7 +626,7 @@ proc findPosCone*(pointXRT: Vec3, pointCB: Vec3,
   ## this is to find the position the ray hits the mirror shell of r1. it is after
   ## transforming the ray into a coordinate system, that has the middle of the
   ## beginning of the mirror cones as its origin
-  let 
+  let
     point = pointCB
     direc = pointXRT - pointCB
   # calculate the values to solve for s with the p-q-formular, where p=b/a and q=c/a
@@ -658,13 +658,13 @@ proc findPosParabolic*(pointXRT: Vec3, pointCB: Vec3,
   ## this is to find the position the ray hits the mirror shell of r1. it is after
   ## transforming the ray into a coordinate system, that has the middle of the
   ## beginning of the mirror cones as its origin
-  let 
+  let
     point = pointCB
     direc = pointXRT - pointCB
     r3 = - tan(angle) * lMirror + sqrt(tan(angle) * lMirror * tan(angle) * lMirror  + r1 * r1)
   # calculate the values to solve for s with the p-q-formular, where p=b/a and q=c/a
   let
-    e = 2.0 * r3 * tan(angle) 
+    e = 2.0 * r3 * tan(angle)
     a = direc[0] * direc[0] + direc[1] * direc[1]
     b = 2.0 * (point[0] * direc[0] + point[1] * direc[1]) + e.float * direc[2]
     halfb = b / 2.0
@@ -685,12 +685,13 @@ proc findPosParabolic*(pointXRT: Vec3, pointCB: Vec3,
   result = point + s * direc
 
 proc findPosHyperbolic*(pointXRT: Vec3, pointCB: Vec3,
-                 r1: MilliMeter, angle: Radian, lMirror: MilliMeter, distMirr: MilliMeter,
-                 name = ""): Vec3 =
+                        r1: MilliMeter, angle: Radian,
+                        lMirror: MilliMeter, distMirr: MilliMeter,
+                        name = ""): Vec3 =
   ## this is to find the position the ray hits the mirror shell of r1. it is after
   ## transforming the ray into a coordinate system, that has the middle of the
   ## beginning of the mirror cones as its origin
-  let 
+  let
     point = pointCB
     direc = pointXRT - pointCB
     r3 = - tan(angle/3.0) * lMirror + sqrt(tan(angle/3.0) * lMirror * tan(angle/3.0) * lMirror  + r1 * r1)
@@ -737,8 +738,8 @@ proc calcNormalVec(pointMirror: Vec3, angle: float, r1: MilliMeter, lMirror: Mil
     let
       r3 = - tan(angle/3.0) * lMirror + sqrt(tan(angle/3.0) * lMirror * tan(angle/3.0) * lMirror  + r1 * r1)
       f = r3 / tan(4.0 * angle / 3.0) #focal length
-      m = 1.0 / (r3.float * tan(angle) * (1.0 + 1.0 / (f.float + r3.float * cot(2.0 * angle / 3.0))) / 
-          sqrt(r3.float * r3.float + r3.float * 2.0 * tan(angle) * (lMirror.float - pointMirror[2]) * 
+      m = 1.0 / (r3.float * tan(angle) * (1.0 + 1.0 / (f.float + r3.float * cot(2.0 * angle / 3.0))) /
+          sqrt(r3.float * r3.float + r3.float * 2.0 * tan(angle) * (lMirror.float - pointMirror[2]) *
           (1.0 + 1.0 / (f.float + r3.float * cot(2.0 * angle / 3.0)))))
       n = sqrt(pointMirror[0] * pointMirror[0] + pointMirror[1] * pointMirror[1]) - m * pointMirror[2]
     normalVec[2] = pointMirror[2] - (- n / m)
@@ -751,12 +752,12 @@ proc getVectoraAfterMirror*(pointXRT, pointCB, pointMirror: Vec3,
   ## this is to find the vector after the reflection on the respective mirror
   ##
   ## TODO: clarify wheether this returns angles in rad or in degree!
-  let 
+  let
     normalVec = calcNormalVec(pointMirror, angle, r1, lMirror, mirrorShape)
     vectorBeforeMirror = normalize(pointXRT - pointCB)
   # this is the vector product of the normal vector on pointMirror pointing
   # in the direction of the radius of the cylinder and the vector of the ray
-  let 
+  let
     vectorAxis = normalize(normalVec.cross vectorBeforeMirror)
     alphaMirror = arcsin(abs(normalVec.dot(vectorBeforeMirror) /
                                normalVec.length))
@@ -771,12 +772,12 @@ proc getMirrorAngle*(pointXRT, pointCB, pointMirror: Vec3,
   ## this is to find the vector after the reflection on the respective mirror
   ##
   ## TODO: clarify wheether this returns angles in rad or in degree!
-  let 
+  let
     normalVec = calcNormalVec(pointMirror, angle, r1, lMirror, mirrorShape)
     vectorBeforeMirror = normalize(pointXRT - pointCB)
   # this is the vector product of the normal vector on pointMirror pointing
   # in the direction of the radius of the cylinder and the vector of the ray
-  let 
+  let
     vectorAxis = normalize(normalVec.cross vectorBeforeMirror)
     alphaMirror = arcsin(abs(normalVec.dot(vectorBeforeMirror) /
                                normalVec.length))
@@ -1923,7 +1924,7 @@ proc traceAxion(res: var Axion,
   let
     beta3 = 3.0 * beta
     distanceMirrors = cos(beta) * (xSep + expSetup.telescope.lMirror)
-  var 
+  var
     pointMirror1 = vec3(0.0)
     vectorAfterMirror1 = vec3(0.0)
     pointAfterMirror1 = vec3(0.0)
