@@ -927,7 +927,7 @@ proc plotHeatmap(diagramtitle: string,
     #theme_transparent() +
     margin(top = 2, left = 3, right = 6) +
     ggtitle(&"Simulated X-ray signal distribution on the detector chip with a total flux of {flux:.3e} events after 3 months {suffix}") +
-    ggsave(outpath / &"axion_image_{year}_{suffix}.pdf", width = width, height = height)
+    ggsave(outpath / &"axion_image_{year}{suffix}.pdf", width = width, height = height)
 
   ggplot(df, aes("x-position [mm]", "y-position [mm]", fill = "photon flux")) +
     geom_raster() +
@@ -946,7 +946,7 @@ proc plotHeatmap(diagramtitle: string,
     #canvasColor(parseHex("62bed3b0")) +
     theme_transparent() +
     ggtitle("Simulated X-ray signal distribution on the detector chip") +
-    ggsave(outpath / &"axion_image_{year}_{suffix}.png")
+    ggsave(outpath / &"axion_image_{year}{suffix}.png")
 
 proc plotSolarModel(df: DataFrame) =
   ## A few plots for the solar model that are mainly for debugging.
