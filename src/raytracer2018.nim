@@ -905,6 +905,10 @@ proc plotHeatmap(diagramtitle: string,
   customViridis.colors[0] = 0 shl 24 # transparent
   echo df
   #echo df.filter(f{`z` > 0.0})
+
+  ## Write the heatmap as a CSV file using the same name schema
+  df.writeCsv(outpath / &"axion_image_{year}{suffix}.csv")
+
   ggplot(df, aes("x-position [mm]", "y-position [mm]", fill = "photon flux")) +
     geom_raster() +
     scale_x_continuous() + scale_y_continuous() + scale_fill_continuous("photon flux") +
