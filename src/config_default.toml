@@ -11,6 +11,7 @@ goldReflFile   = "gold_0.25microns_reflectivities.h5"
 experimentSetup = "BabyIAXO"   # [BabyIAXO, CAST]
 detectorSetup   = "InGridIAXO" # [InGrid2017, InGrid2018, InGridIAXO]
 stageSetup      = "vacuum"     # [vacuum, gas]
+telescopeSetup  = "XMM"        # [LLNL, Abrixas, CustomBabyIAXO, XMM]
 
 [Magnet] # allows to adjust any property of the magnet
 useConfig = false        # sets whether to read these values here. Can be overriden here or using flag `--magnet`
