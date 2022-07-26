@@ -1,5 +1,5 @@
 import std / [strutils, math, tables, sequtils, strformat, hashes, macros, os, strscans]
-import pkg / [polynumeric, ggplotnim, numericalnim, glm]
+import pkg / [polynumeric, ggplotnim, numericalnim, glm, parsetoml]
 
 import seqmath except linspace
 import arraymancer except readCsv, linspace
@@ -70,7 +70,52 @@ type
       density: int
       densityOp: DensityOpacity
 
+  OpacityInterpolator = object
+
+
   ZTempDensity = tuple[Z: int, temp: int, density: int]
+
+#for R in Radii:
+#  for E in Energies:
+#    for Z in Zs:
+#      let temperature = readTemperatureFromSolarModel()
+#      let density =
+#
+#
+#for Z in Zs:
+#  let opacity = interp.eval( temperature, density, energy )
+
+## NOTE: In principle it's a bit inefficient to re-parse the same config.toml file multiple times, but
+## in the context of the whole ray tracing it doesn't matter. Makes the code a bit simpler.
+const sourceDir = currentSourcePath().parentDir
+
+var ConfigPath = sourceDir / "../config"
+var ConfigFile = ConfigPath / "config.toml"
+
+proc parseResourcesPath(): string =
+  ## parses the config.toml file containing the path to `resources` directory
+  let config = parseToml.parseFile(ConfigFile)
+  result = config["Resources"]["resourcePath"].getStr
+
+proc parseOutputPath(): string =
+  ## parses the config.toml file containing the path to `output` directory
+  let config = parseToml.parseFile(ConfigFile)
+  result = config["Resources"]["outputPath"].getStr
+
+proc parseSolarModelInputFile(): string =
+  ## parses the config.toml file containing the name of the raw solar model input
+  let config = parseToml.parseFile(ConfigFile)
+  result = config["Resources"]["rawSolarModel"].getStr
+
+proc parseSolarModelOutputFile(): string =
+  ## parses the config.toml file containing the name of the generated solar model DF file
+  let config = parseToml.parseFile(ConfigFile)
+  result = config["ReadOpacityFile"]["solarModelFile"].getStr
+
+proc parseOpcdPath(): string =
+  ## parses the config.toml file containing the path to the OPCD data files
+  let config = parseToml.parseFile(ConfigFile)
+  result = config["ReadOpacityFile"]["opcdPath"].getStr
 
 const atomicMass =
   [1.0078, 4.0026, 3.0160, 12.0000, 13.0033, 14.0030, 15.0001, 15.9949, 16.9991,
@@ -230,19 +275,24 @@ proc parseOpacityFile(path: string, kind: OpacityFileKind): OpacityFile =
                                 kind = ofkNew)
   ds.close()
 
-proc readMeshFile(fname: string): seq[float] =
+proc readMeshDataFile(fname: string): seq[float] =
+  ## Returns the `u` column of the given mesh file
   var df = readCsv(fname, sep = ' ')
   doAssert df.len == 10001
   result = df["u"].toTensor(float).toRawSeq
 
-
-let lineNumbers = linspace(0.0, 10000.0, 10001)
-const meshFile = "./OPCD_3.3/mono/fm01.mesh"
-## NOTE: all the `fm??.mesh` files are identical!
-## check `tools/diff_files.nim` for proof.
-let dfMesh = readMeshFile(meshFile)
-
-let spline = newLinear1D(dfMesh, lineNumbers)
+proc readMeshFile(opcdPath: string): InterpolatorType[float] =
+  ## Reads the mesh file and returns an interpolator
+  let lineNumbers = linspace(0.0, 10000.0, 10001)
+  ## NOTE: all the `fm??.mesh` files are identical!
+  ## check `tools/diff_files.nim` for proof.
+  let meshFile = opcdPath / "OPCD_3.3/mono/fm01.mesh"
+  let uMeshSeq = try:
+                   readMeshDataFile(meshFile)
+                 except IOError, OSError:
+                   raise newException(IOError, "Could not read mesh file `fm01.mesh` " &
+                     "at path: " & meshFile)
+  result = newLinear1D(uMeshSeq, lineNumbers)
 
 template inner_integral(t: float, y: float): float =
   (1.0/2.0) * ( ((y * y) / (t * t + y * y)) + ln( t * t + y * y ) )
@@ -545,21 +595,27 @@ proc hash(x: ElementKind): Hash =
   result = h !& int(x)
   result = !$result
 
-proc main*(): DataFrame =
+proc calculateOpacities(solarModel, outpath: string): DataFrame =
+  var df = try:
+             readSolarModel(solarModel)
+           except IOError, OSError:
+             raise newException(IOError, "Failed to read solar model at path: " & $solarModel)
 
-  ## First lets access the solar model and calculate some necessary values
-  const solarModel = "./ReadSolarModel/resources/AGSS09_solar_model_stripped.dat"
-  var df = readSolarModel(solarModel)
+  let opcdPath = parseOpcdPath()
+  # generate the spline for the mesh file
+  let spline = readMeshFile(opcdPath)
+
   let nElems = 1500 # TODO: clarify exact number
   let energies = linspace(1e-3, 15.0, nElems)
-
   let nRadius = df["Rho"].len
+
+
 
   ## now let's plot radius against temperature colored by density
   ggplot(df, aes("Radius", "Temp", color = "Rho")) +
     geom_line() +
     ggtitle("Radius versus temperature of solar mode, colored by density") +
-    ggsave("out/radius_temp_density.pdf")
+    ggsave(outpath / "radius_temp_density.pdf")
 
   var
     n_Z = newSeqWith(nRadius, newSeq[float](29)) #29 elements
@@ -656,7 +712,7 @@ proc main*(): DataFrame =
   ggplot(dfTemp, aes("Radius", "Ne", color = "Temp")) +
     geom_point() +
     ggtitle("Radius versus temperature of solar mode, colored by density") +
-    ggsave("out/radius_temp_ne.pdf")
+    ggsave(outpath / "radius_temp_ne.pdf")
 
   var dfPlas = seqsToDf({ "Radius": rs3,
                         "Omega": ompls,
@@ -665,11 +721,11 @@ proc main*(): DataFrame =
     geom_line() +
     scale_y_log10()+
     ggtitle("Radius versus plasma frequency") +
-    ggsave("out/radius_omegapl.pdf")
+    ggsave(outpath / "radius_omegapl.pdf")
   ggplot(dfPlas, aes("Radius", "B")) +
     geom_line() +
     ggtitle("Radius versus B field") +
-    ggsave("out/radius_B.pdf")]#
+    ggsave(outpath / "radius_B.pdf")]#
 
 
 
@@ -680,7 +736,7 @@ proc main*(): DataFrame =
     if temp notin opElements:
       opElements[temp] = newTable[ElementKind, OpacityFile]() #initTable[int, OpacityFile]()
     for (Z_str, Z) in iterEnum(ElementKind):
-      let testF = &"./OPCD_3.3/mono/fm{Z:02}.{temp}"
+      let testF = opcdPath / &"/OPCD_3.3/mono/fm{Z:02}.{temp}"
       if existsFile(testF):
         let opFile = parseOpacityFile(testF, kind = ofkOriginal)
         for k in keys(opFile.densityTab):
@@ -777,6 +833,8 @@ proc main*(): DataFrame =
           if Z > 2:
             sum += n_Z[R][Z] * opacity
 
+        #let a0 = 5.29177210903e−11.m
+        #let absCoef = (sum.`cm^-3` * a0 * a0 * (1.0 - exp(-energy_keV / temp_keV))).toNaturalUnits().to(keV) # is in keV
         absCoef = sum * 1.97327e-8 * 0.528e-8 * 0.528e-8 * (1.0 - exp(-energy_keV / temp_keV)) # is in keV
 
         absCoefs[R, iEindex] = absCoef
@@ -835,7 +893,7 @@ proc main*(): DataFrame =
   ggplot(dfNZ, aes("Radius", "nZ", color = "Z")) +
     geom_point() +
     ggtitle("Radius versus atomic density for different Z") +
-    ggsave("out/radius_nZ_Z.pdf")]#
+    ggsave(outpath / "radius_nZ_Z.pdf")]#
 
   #var dfOp = seqsToDf({ "Radius": rs2,
   #                      "opacity": ops,
@@ -844,7 +902,7 @@ proc main*(): DataFrame =
   #ggplot(dfOp, aes("Radius", "opacity", color = "energies")) +
   #  geom_point() +
   #  ggtitle("Radius versus opacity for different energies") +
-  #  ggsave("out/radius_op_energies.pdf")
+  #  ggsave(outpath / "radius_op_energies.pdf")
   let dfRadii = seqsToDf({"Radius": radii, "Flux": totalRadiiFlux})
   echo dfRadii
 
@@ -853,7 +911,7 @@ proc main*(): DataFrame =
     xlab("Solar radius") +
     ylab("Flux") +
     ggtitle(&"Differential solar axion flux for g_ae = {g_ae}, g_aγ = {g_agamma} GeV⁻¹, g_aN = {ganuclei}") +
-    ggsave("out/radFlux.pdf", width = 800, height = 480)
+    ggsave(outpath / "radFlux.pdf", width = 800, height = 480)
 
   var diffFluxDf = newDataFrame()
   diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, emratesS, "Total flux")
@@ -883,13 +941,13 @@ proc main*(): DataFrame =
     .mutate(f{"flux" ~ `emrate` * `energy` * `energy` * 0.5 / Pi / Pi})
   ggplot(dfEmrate, aes("energy", "flux")) +
     geom_line() +
-    ggsave("out/emrate_R10.pdf")
+    ggsave(outpath / "emrate_R10.pdf")
 
   let dfAbscoef = seqsToDf({ "energy": energies,
                             "absCoefs": absCoefs[10, _].squeeze.clone })
   ggplot(dfAbscoef, aes("energy", "absCoefs")) +
     geom_line() +
-    ggsave("out/abscoefs_R10.pdf")
+    ggsave(outpath / "abscoefs_R10.pdf")
 
 
   ggplot(diffFluxDf, aes("Energy", "Flux", color = "Radius")) +
@@ -898,7 +956,7 @@ proc main*(): DataFrame =
     ylab("Flux [keV⁻¹ y⁻¹ m⁻²]") +
     ggtitle(&"Differential solar axion flux for g_ae = {g_ae}, g_aγ = {g_agamma} GeV⁻¹") +
     margin(right = 6.5) +
-    ggsave("out/diffFlux_radii.pdf", width = 800, height = 480)
+    ggsave(outpath / "diffFlux_radii.pdf", width = 800, height = 480)
 
   when false:
     let dfDiffflux = seqsToDf({ "Axion energy [eV]": energieslong,
@@ -917,12 +975,36 @@ proc main*(): DataFrame =
     #scale_x_log10() +
     ggtitle(&"Differential solar axion flux for g_ae = {g_ae}, g_aγ = {g_agamma} GeV⁻¹, g_aN = {ganuclei}") +
     margin(right = 6.5) +
-    ggsave("out/diffFlux.pdf", width = 800, height = 480)
+    ggsave(outpath / "diffFlux.pdf", width = 800, height = 480)
+
+proc main*(config = "", # hand a custom path to a config file
+           configPath = "" # Hand a custom path to search in for a config file
+          ) =
+  # check if the `config.toml` file exists, otherwise recreate from the default
+  if configPath.len > 0:
+    ConfigPath = configPath
+    ConfigFile = ConfigPath / "config.toml"
+  if config.len > 0:
+    ConfigFile = config
+  elif not fileExists(ConfigFile):
+    # if neither a file given, nor a `config.toml` exists, copy over the `config_default.toml`
+    # to the ConfigPath
+    let cdata = readFile(ConfigPath / "config_default.toml")
+    writeFile(ConfigPath / "config.toml", cdata)
+
+  let resources = parseResourcesPath()
+  let outpath = parseOutputPath()
+  let solarModelInput = parseSolarModelInputFile()
+  let solarModelOutput = parseSolarModelOutputFile()
+  ## First lets access the solar model and calculate some necessary values
+  let solarModel = resources / solarModelInput
+
+  let solarModelDf = calculateOpacities(solarModel, outpath)
+  solarModelDf.writeCsv(outpath / solarModelOutput)
 
 when isMainModule:
-
-  let solarModel = main()
-  solarModel.writeCsv("solar_model_dataframe.csv")
+  import cligen
+  dispatch main
 
   when false:
     ## TODO: better approach to store the full "solar model" as a CSV from a DF
