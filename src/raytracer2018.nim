@@ -26,12 +26,12 @@ type
     htDiamond = "diamond"
 
   TelescopeKind = enum
-    tkLLNL, ## the LLNL telescope as used at CAST based on the nustar optics
-    tkXMM,  ## the XMM Newton optics as they may be used in BabyIAXO
-    tkCustomBabyIAXO, ## A hybrid optics specifically built for BabyIAXO mixing
-                      ## a nustar like inner core with an XMM like outer core
-    tkAbrixas, ## the Abrixas telescope as used at CAST
-    tkOther
+    tkLLNL = "LLNL",                     ## the LLNL telescope as used at CAST based on the nustar optics
+    tkXMM = "XMM",                       ## the XMM Newton optics as they may be used in BabyIAXO
+    tkCustomBabyIAXO = "CustomBabyIAXO", ## A hybrid optics specifically built for BabyIAXO mixing
+                                         ## a nustar like inner core with an XMM like outer core
+    tkAbrixas = "Abrixas",               ## the Abrixas telescope as used at CAST
+    tkOther = "Other"
 
   StageKind = enum
     skVacuum = "vacuum"
@@ -993,12 +993,13 @@ proc parseSolarModelFile(): string =
   let config = parseToml.parseFile(sourceDir / "config.toml")
   result = config["Resources"]["solarModelFile"].getStr
 
-proc parseSetup(): (ExperimentSetupKind, DetectorSetupKind, StageKind) =
+proc parseSetup(): (ExperimentSetupKind, DetectorSetupKind, StageKind, TelescopeKind) =
   ## parses the config.toml file containing the setup to compute the raytracing for
   let config = parseToml.parseFile(sourceDir / "config.toml")
   result[0] = config["Setup"]["experimentSetup"].getStr.parseEnum[:ExperimentSetupKind]()
   result[1] = config["Setup"]["detectorSetup"].getStr.parseEnum[:DetectorSetupKind]()
   result[2] = config["Setup"]["stageSetup"].getStr.parseEnum[:StageKind]()
+  result[3] = config["Setup"]["telescopeSetup"].getStr.parseEnum[:TelescopeKind]()
 
 proc maybeParseMagnetConfig(flags: set[ConfigFlags]): Option[Magnet] =
   ## parses the `Magnet` configuration from the `config.toml` file if
@@ -1092,19 +1093,29 @@ proc initMagnet(setup: ExperimentSetupKind, flags: set[ConfigFlags]): Magnet =
       tGas: 100.0.K #293.15, # only Gas in BabyIAXO
     )
 
-proc initPipes(setup: ExperimentSetupKind): Pipes =
-  case setup
-  of esCAST:
+proc initPipes(optics: TelescopeKind): Pipes =
+  case optics
+  of tkLLNL:
     result = Pipes(
       ## the next variable doesn't make sense. It's not 2.57m from the cold bore to VT3!
       coldBoreToVT3: Pipe(length: 2571.5.mm, # should stay the same #from beam pipe drawings #ok
                           radius: 39.64.mm), #30.0 # smallest aperture between end of CB and VT3
       vt3ToXRT: Pipe(length: 150.0.mm, # from drawings #198.2 #mm from XRT drawing #ok
                      radius: 35.0.mm), #25.0 # from drawing #35.0 #m irrelevant, large enough to not loose anything # needs to be mm #ok
-      pipesTurned: 0.0.°, #for Abrixas #2.75.°, #degree # this is the angle by which the pipes before the detector were turned in comparison to the telescope
+      pipesTurned: 2.75.°, #degree # this is the angle by which the pipes before the detector were turned in comparison to the telescope
       distanceCBAxisXRTAxis: 0.0.mm #62.1#58.44 # from XRT drawing #there is no difference in the axis even though the picture gets transfered 62,1mm down, but in the detector center
     )
-  of esBabyIAXO:
+  of tkAbrixas:
+    result = Pipes(
+      ## the next variable doesn't make sense. It's not 2.57m from the cold bore to VT3!
+      coldBoreToVT3: Pipe(length: 2571.5.mm, # should stay the same #from beam pipe drawings #ok
+                          radius: 39.64.mm), #30.0 # smallest aperture between end of CB and VT3
+      vt3ToXRT: Pipe(length: 150.0.mm, # from drawings #198.2 #mm from XRT drawing #ok
+                     radius: 35.0.mm), #25.0 # from drawing #35.0 #m irrelevant, large enough to not loose anything # needs to be mm #ok
+      pipesTurned: 0.0.°, #for Abrixas # this is the angle by which the pipes before the detector were turned in comparison to the telescope
+      distanceCBAxisXRTAxis: 0.0.mm #62.1#58.44 # from XRT drawing #there is no difference in the axis even though the picture gets transfered 62,1mm down, but in the detector center
+    )
+  of tkCustomBabyIAXO, tkXMM:
     result = Pipes(
       coldBoreToVT3: Pipe(length: 225.0.mm, #300.0.mm, # not determined
                           radius: 370.0.mm), #mm smallest aperture between end of CB and VT4 # no Idea, I just made it wider than the coldbore
@@ -1113,6 +1124,8 @@ proc initPipes(setup: ExperimentSetupKind): Pipes =
       pipesTurned: 0.0.°, # this is the angle by which the pipes before the detector were turned in comparison to the telescope
       distanceCBAxisXRTAxis: 0.0.mm
     )
+  of tkOther:
+    doAssert false, "Invalid telescope!"
 
 import nimhdf5 except linspace # only needed for here
 proc initReflectivity(optics: TelescopeKind): Reflectivity =
@@ -1334,49 +1347,48 @@ proc initTestXraySource(setup: ExperimentSetupKind, flags: set[ConfigFlags]): Te
       activity: 0.125.GBq, #proposed source thing by Thomas #1.0.GBq,
     )
 
-proc initDetectorInstallation(setup: ExperimentSetupKind,
+proc initDetectorInstallation(optics: TelescopeKind,
                               flags: set[ConfigFlags]): DetectorInstallation =
   let detOpt = maybeParseDetectorInstallation(flags)
   if detOpt.isSome:
     return detOpt.get
-  case setup
-  of esCAST:
+  case optics
+  of tkLLNL:
     result = DetectorInstallation(
-      distanceDetectorXRT: 1585.0.mm, #for Abrixas #1485.0.mm, #1300.0 # is from llnl XRT https://iopscience.iop.org/article/10.1088/1475-7516/2015/12/008/pdf #1600.0 # was the Telescope of 2014 (MPE XRT) also: Aperatur changed #ok
+      distanceDetectorXRT: 1485.mm, # for deetctor center llnl XRT https://iopscience.iop.org/article/10.1088/1475-7516/2015/12/008/pdf
       distanceWindowFocalPlane: 0.0.mm, # #no change, because don't know
-
       lateralShift: 0.0.mm, #lateral ofset of the detector in repect to the beamline
       transversalShift: 0.0.mm #transversal ofset of the detector in repect to the beamline #0.0.mm #
     )
-  of esBabyIAXO:
+  of tkAbrixas:
+    result = DetectorInstallation(
+      distanceDetectorXRT: 1585.0.mm, # for detector center #1600.0 # was the Telescope of 2014 (MPE XRT) also: Aperatur changed #ok
+      distanceWindowFocalPlane: 0.0.mm, # #no change, because don't know
+      lateralShift: 0.0.mm, #lateral ofset of the detector in repect to the beamline
+      transversalShift: 0.0.mm #transversal ofset of the detector in repect to the beamline #0.0.mm #
+    )
+  of tkXMM, tkCustomBabyIAXO:
     result = DetectorInstallation(
       distanceDetectorXRT: 7500.0.mm, # # one possibility, the other is 5050 mm
       distanceWindowFocalPlane: 0.0.mm, # #no change, because don't know #good idea
       lateralShift: 0.0.mm, #(sin(0.0.degToRad) * 7500.0).mm, #lateral ofset of the detector in repect to the beamline #0.0.mm #
       transversalShift: (sin(0.0.degToRad) * 7500.0).mm #-0.0.mm # ##transversal ofset of the detector in repect to the beamline #0.0.mm #
     )
-
-
-proc getOpticForSetup(setup: ExperimentSetupKind): TelescopeKind =
-  ## XXX: replace this by user input & config file selection. Only fall back if
-  ## neither provided!
-  case setup
-  of esCAST: result = tkAbrixas #tkLLNL
-  of esBabyIAXO: result = tkXMM # tkCustomBabyIAXO
+  of tkOther:
+    doAssert false, "Invalid telescope!"
 
 proc newExperimentSetup*(setup: ExperimentSetupKind,
                          stage: StageKind,
-                         # optics: TelescopeKind,
+                         optics: TelescopeKind,
                          flags: set[ConfigFlags]): ExperimentSetup =
-  let optics = getOpticForSetup(setup)
   result = ExperimentSetup(
     kind: setup,
     stage: stage,
     magnet: setup.initMagnet(flags),
     telescope: optics.initTelescope(),
     testSource: setup.initTestXraySource(flags),
-    pipes: setup.initPipes(),
-    detectorInstall: setup.initDetectorInstallation(flags)
+    pipes: optics.initPipes(),
+    detectorInstall: optics.initDetectorInstallation(flags)
   )
 
 defUnit(MilliMeter²)
@@ -2558,8 +2570,9 @@ proc generateResultPlots(axions: seq[Axion],
 proc initFullSetup(setup: ExperimentSetupKind,
                    detectorSetup: DetectorSetupKind,
                    stage: StageKind,
+                   telescope: TelescopeKind,
                    flags: set[ConfigFlags]): FullRaytraceSetup =
-  let expSetup = newExperimentSetup(setup, stage, flags)
+  let expSetup = newExperimentSetup(setup, stage, telescope, flags)
 
   ## TODO: make the code use tensor for the emission rates!
   let resources = parseResourcesPath()
@@ -2698,11 +2711,12 @@ proc performAngularScan(angularScanMin, angularScanMax: float, numAngularScanPoi
                         flags: set[ConfigFlags]) =
   ## Performs a scan of the telescope efficiency (intended for the XMM Newton optics)
   ## under different angles.
-  let (esKind, dkKind, skKind) = parseSetup()
+  let (esKind, dkKind, skKind, tkKind) = parseSetup()
   let angles = linspace(angularScanMin, angularScanMax, numAngularScanPoints)
   var fullSetup = initFullSetup(esKind,
                                 dkKind,
                                 skKind,
+                                tkKind,
                                 flags) # radiationCharacteristic = "axionRadiation::characteristic::sar"
   var fluxes = newSeq[float](numAngularScanPoints)
   for i, angle in angles:
@@ -2757,10 +2771,11 @@ proc main(
   echo "Flags: ", flags
 
   if angularScanMin == angularScanMax:
-    let (esKind, dkKind, skKind) = parseSetup()
+    let (esKind, dkKind, skKind, tkKind) = parseSetup()
     let fullSetup = initFullSetup(esKind,
                                   dkKind,
                                   skKind,
+                                  tkKind,
                                   flags) # radiationCharacteristic = "axionRadiation::characteristic::sar"
     discard fullSetup.calculateFluxFractions(generatePlots = not noPlots)
   else:
