@@ -899,10 +899,10 @@ proc plotHeatmap(diagramtitle: string,
     height = 586.0
   var customInferno = inferno()
   customInferno.name = "InfernoWithTransparent"
-  customInferno.colors[0] = 0 shl 24 # transparent
+  customInferno.colors[0] = 0 # transparent
   var customViridis = viridis()
   customViridis.name = "ViridisWithTransparent"
-  customViridis.colors[0] = 0 shl 24 # transparent
+  customViridis.colors[0] = 0 # transparent
   echo df
   #echo df.filter(f{`z` > 0.0})
 
