@@ -690,7 +690,7 @@ proc findPosParabolic*(pointXRT: Vec3, pointCB: Vec3,
 
 proc findPosHyperbolic*(pointXRT: Vec3, pointCB: Vec3,
                         r1: MilliMeter, angle: Radian,
-                        lMirror: MilliMeter, distMirr: MilliMeter,
+                        lMirror: MilliMeter, distMirr: MilliMeter, focalLength: MilliMeter,
                         name = ""): Vec3 =
   ## this is to find the position the ray hits the mirror shell of r1. it is after
   ## transforming the ray into a coordinate system, that has the middle of the
@@ -702,12 +702,14 @@ proc findPosHyperbolic*(pointXRT: Vec3, pointCB: Vec3,
   #echo r1, " r3 ", r3
   # calculate the values to solve for s with the p-q-formular, where p=b/a and q=c/a
   let
-    f = r3 / tan(4.0 * angle / 3.0) #focal length
-    e = 2.0 * r3.float * tan(angle) * (1.0 + 1.0 / (f.float + r3.float * cot(2.0 * angle / 3.0)))
-    a = direc[0] * direc[0] + direc[1] * direc[1]
-    b = 2.0 * (point[0] * direc[0] + point[1] * direc[1]) + e * direc[2]
+    f = focalLength # r3 / tan(4.0 * angle / 3.0) #focal length
+    e = 2.0 * r3.float * tan(angle)
+    g = 2.0 * r3.float * tan(angle) / (f.float + r3.float * cot(2.0 * angle / 3.0))
+    a = direc[0] * direc[0] + direc[1] * direc[1] - g * direc[2] * direc[2]
+    b = 2.0 * (point[0] * direc[0] + point[1] * direc[1] + g * direc[2] * lMirror.float - g * direc[2] * point[2]) + e * direc[2]
     halfb = b / 2.0
-    c = point[0] * point[0] + point[1] * point[1] - r3.float * r3.float - e * lMirror.float + e * point[2]
+    c = point[0] * point[0] + point[1] * point[1] - r3.float * r3.float - e * lMirror.float + e * point[2] - 
+        g * lMirror.float * lMirror.float + 2.0 * g * point[2] * lMirror.float - g * point[2] * point[2]
 
   # find nearest root that lies in acceptable range
   var
@@ -723,7 +725,7 @@ proc findPosHyperbolic*(pointXRT: Vec3, pointCB: Vec3,
 
   result = point + s * direc
 
-proc calcNormalVec(pointMirror: Vec3, angle: float, r1: MilliMeter, lMirror: MilliMeter,
+proc calcNormalVec(pointMirror: Vec3, angle: float, r1: MilliMeter, lMirror: MilliMeter, focalLength: MilliMeter,
                    mirrorShape: MirrorShapeKind): Vec3 =
   var normalVec = vec3(0.0)
   normalVec[0] = pointMirror[0]
@@ -742,23 +744,23 @@ proc calcNormalVec(pointMirror: Vec3, angle: float, r1: MilliMeter, lMirror: Mil
   of msHyperbolic:
     let
       r3 = - tan(angle/3.0) * lMirror + sqrt(tan(angle/3.0) * lMirror * tan(angle/3.0) * lMirror  + r1 * r1)
-      f = r3 / tan(4.0 * angle / 3.0) #focal length
-      m = 1.0 / (r3.float * tan(angle) * (1.0 + 1.0 / (f.float + r3.float * cot(2.0 * angle / 3.0))) /
+      f = focalLength #r3 / tan(4.0 * angle / 3.0) #focal length
+      m = 1.0 / (r3.float * tan(angle) * (1.0 + 2.0 * (- lMirror.float + pointMirror[2]) / (f.float + r3.float * cot(2.0 * angle / 3.0))) /
           sqrt(r3.float * r3.float + r3.float * 2.0 * tan(angle) * (lMirror.float - pointMirror[2]) *
-          (1.0 + 1.0 / (f.float + r3.float * cot(2.0 * angle / 3.0)))))
+          (1.0 + (lMirror.float - pointMirror[2]) / (f.float + r3.float * cot(2.0 * angle / 3.0)))))
       n = sqrt(pointMirror[0] * pointMirror[0] + pointMirror[1] * pointMirror[1]) - m * pointMirror[2]
     normalVec[2] = pointMirror[2] - (- n / m)
   result = normalVec
 
 
 proc getVectoraAfterMirror*(pointXRT, pointCB, pointMirror: Vec3,
-                            angle: float, r1: MilliMeter, lMirror: MilliMeter,
+                            angle: float, r1: MilliMeter, lMirror: MilliMeter, focalLength: MilliMeter,
                             mirrorShape: MirrorShapeKind): Vec3 =
   ## this is to find the vector after the reflection on the respective mirror
   ##
   ## TODO: clarify wheether this returns angles in rad or in degree!
   let
-    normalVec = calcNormalVec(pointMirror, angle, r1, lMirror, mirrorShape)
+    normalVec = calcNormalVec(pointMirror, angle, r1, lMirror, focalLength, mirrorShape)
     vectorBeforeMirror = normalize(pointXRT - pointCB)
   # this is the vector product of the normal vector on pointMirror pointing
   # in the direction of the radius of the cylinder and the vector of the ray
@@ -772,11 +774,11 @@ proc getVectoraAfterMirror*(pointXRT, pointCB, pointMirror: Vec3,
   result = vectorAfterMirror
 
 proc getMirrorAngle*(pointXRT, pointCB, pointMirror: Vec3,
-                     angle: float, r1: MilliMeter, lMirror: MilliMeter,
+                     angle: float, r1: MilliMeter, lMirror: MilliMeter, focalLength: MilliMeter,
                      mirrorShape: MirrorShapeKind): Degree =
   ## Returns the angle under which the mirror is hit.
   let
-    normalVec = calcNormalVec(pointMirror, angle, r1, lMirror, mirrorShape)
+    normalVec = calcNormalVec(pointMirror, angle, r1, lMirror, focalLength, mirrorShape)
     vectorBeforeMirror = normalize(pointXRT - pointCB)
   # this is the vector product of the normal vector on pointMirror pointing
   # in the direction of the radius of the cylinder and the vector of the ray
@@ -1379,7 +1381,7 @@ proc initDetectorInstallation(optics: TelescopeKind,
     )
   of tkAbrixas:
     result = DetectorInstallation(
-      distanceDetectorXRT: 1585.0.mm, # for detector center #1600.0 # was the Telescope of 2014 (MPE XRT) also: Aperatur changed #ok
+      distanceDetectorXRT: 1600.0.mm, # for detector center #1600.0 # was the Telescope of 2014 (MPE XRT) also: Aperatur changed #ok
       distanceWindowFocalPlane: 0.0.mm, # #no change, because don't know
       lateralShift: 0.0.mm, #lateral ofset of the detector in repect to the beamline
       transversalShift: 0.0.mm #transversal ofset of the detector in repect to the beamline #0.0.mm #
@@ -1957,25 +1959,25 @@ proc traceAxion(res: var Axion,
     )
     vectorAfterMirror1 = getVectoraAfterMirror(
       pointEntranceXRT, pointExitCB, pointMirror1, beta, r1,
-      expSetup.telescope.lMirror, msParabolic
+      expSetup.telescope.lMirror, expSetup.detectorInstall.distanceDetectorXRT, msParabolic
     )
     pointAfterMirror1 = pointMirror1 + 200.0 * vectorAfterMirror1
     pointMirror2 = findPosHyperbolic(
       pointAfterMirror1, pointMirror1, r1, beta3,
-      expSetup.telescope.lMirror, distanceMirrors, "Mirror 2"
+      expSetup.telescope.lMirror, distanceMirrors, expSetup.detectorInstall.distanceDetectorXRT, "Mirror 2"
     )
     vectorAfterMirrors = getVectoraAfterMirror(
       pointAfterMirror1, pointMirror1, pointMirror2, beta3, r1,
-      expSetup.telescope.lMirror, msParabolic
+      expSetup.telescope.lMirror, expSetup.detectorInstall.distanceDetectorXRT, msHyperbolic
     )
     pointAfterMirror2 = pointMirror2 + 200.0 * vectorAfterMirrors
     alpha1 = getMirrorAngle(
       pointEntranceXRT, pointExitCB, pointMirror1, beta, r1,
-      expSetup.telescope.lMirror, msParabolic
+      expSetup.telescope.lMirror, expSetup.detectorInstall.distanceDetectorXRT, msParabolic
     )
     alpha2 = getMirrorAngle(
       pointAfterMirror1, pointMirror1, pointMirror2, beta3, r1,
-      expSetup.telescope.lMirror, msParabolic
+      expSetup.telescope.lMirror, expSetup.detectorInstall.distanceDetectorXRT, msHyperbolic
     )
   else:
     pointMirror1 = findPosCone(
@@ -1984,7 +1986,7 @@ proc traceAxion(res: var Axion,
     )
     vectorAfterMirror1 = getVectoraAfterMirror(pointEntranceXRT,
         pointExitCB, pointMirror1, beta, r1,
-        expSetup.telescope.lMirror, msCone
+        expSetup.telescope.lMirror,expSetup.detectorInstall.distanceDetectorXRT, msCone
     )
     pointAfterMirror1 = pointMirror1 + 200.0 * vectorAfterMirror1
     pointMirror2 = findPosCone(
@@ -1993,16 +1995,16 @@ proc traceAxion(res: var Axion,
     )
     vectorAfterMirrors = getVectoraAfterMirror(
       pointAfterMirror1, pointMirror1, pointMirror2, beta3, r1,
-      expSetup.telescope.lMirror, msCone
+      expSetup.telescope.lMirror, expSetup.detectorInstall.distanceDetectorXRT, msCone
     )
     pointAfterMirror2 = pointMirror2 + 200.0 * vectorAfterMirrors
     alpha1 = getMirrorAngle(
       pointEntranceXRT, pointExitCB, pointMirror1, beta, r1,
-      expSetup.telescope.lMirror, msCone
+      expSetup.telescope.lMirror, expSetup.detectorInstall.distanceDetectorXRT, msCone
     )
     alpha2 = getMirrorAngle(
       pointAfterMirror1, pointMirror1, pointMirror2, beta3, r1,
-      expSetup.telescope.lMirror, msCone
+      expSetup.telescope.lMirror, expSetup.detectorInstall.distanceDetectorXRT, msCone
     )
 
   # getting rid of the X-rays that hit the shell below
@@ -2022,13 +2024,14 @@ proc traceAxion(res: var Axion,
   let z2 = pointMirror2[2]
   when true:
     if almostEqual(z1, z2) or almostEqual(z1, z0):
+      #echo z0, " ", z1, " ", z2
       return
   ############################################# Mirrors end #################################################
   ## now get the points in the focal / detector plane
 
   ## because the detector is tuned in regards to the coldbore because it follows the direction of the telescope, set the origin to the detector window and
-  ## turn the coordinate syste, to the detector for CAST
-
+  ## turn the coordinate system to the detector for CAST
+  
   var
     pointDetectorWindow = vec3(0.0)
     pointEndDetector = vec3(0.0)
