@@ -699,10 +699,12 @@ proc findPosHyperbolic*(pointXRT: Vec3, pointCB: Vec3,
     point = pointCB
     direc = pointXRT - pointCB
     r3 = - tan(angle/3.0) * lMirror + sqrt(tan(angle/3.0) * lMirror * tan(angle/3.0) * lMirror  + r1 * r1)
-  #echo r1, " r3 ", r3
+    f = focalLength # r3 / tan(4.0 * angle / 3.0) #focal length
+    r5 = sqrt(r3.float * r3.float - r3.float * 2.0 * tan(angle) * lMirror.float + r3.float * 2.0 * tan(angle) * lMirror.float * lMirror.float /
+              (f.float + r3.float * cot(2.0 * angle / 3.0)))
+  #echo r1, " r3 ", r3, " r5 ", r5
   # calculate the values to solve for s with the p-q-formular, where p=b/a and q=c/a
   let
-    f = focalLength # r3 / tan(4.0 * angle / 3.0) #focal length
     e = 2.0 * r3.float * tan(angle)
     g = 2.0 * r3.float * tan(angle) / (f.float + r3.float * cot(2.0 * angle / 3.0))
     a = direc[0] * direc[0] + direc[1] * direc[1] - g * direc[2] * direc[2]
@@ -1117,20 +1119,20 @@ proc initPipes(optics: TelescopeKind): Pipes =
   of tkLLNL:
     result = Pipes(
       ## the next variable doesn't make sense. It's not 2.57m from the cold bore to VT3!
-      coldBoreToVT3: Pipe(length: 2571.5.mm, # should stay the same #from beam pipe drawings #ok
-                          radius: 39.64.mm), #30.0 # smallest aperture between end of CB and VT3
-      vt3ToXRT: Pipe(length: 150.0.mm, # from drawings #198.2 #mm from XRT drawing #ok
-                     radius: 35.0.mm), #25.0 # from drawing #35.0 #m irrelevant, large enough to not loose anything # needs to be mm #ok
+      coldBoreToVT3: Pipe(length: 127.66.mm, #from beam pipe drawings 
+                          radius: 39.89.mm), #from beam pipe drawings #30.0 # smallest aperture between end of CB and VT3
+      vt3ToXRT: Pipe(length: 111.7.mm, # from drawings #198.2 #mm from XRT drawing #ok
+                     radius: 23.935.mm), #from beam pipe drawings
       pipesTurned: 2.75.°, #degree # this is the angle by which the pipes before the detector were turned in comparison to the telescope
       distanceCBAxisXRTAxis: 0.0.mm #62.1#58.44 # from XRT drawing #there is no difference in the axis even though the picture gets transfered 62,1mm down, but in the detector center
     )
   of tkAbrixas:
     result = Pipes(
       ## the next variable doesn't make sense. It's not 2.57m from the cold bore to VT3!
-      coldBoreToVT3: Pipe(length: 2571.5.mm, # should stay the same #from beam pipe drawings #ok
-                          radius: 39.64.mm), #30.0 # smallest aperture between end of CB and VT3
-      vt3ToXRT: Pipe(length: 150.0.mm, # from drawings #198.2 #mm from XRT drawing #ok
-                     radius: 35.0.mm), #25.0 # from drawing #35.0 #m irrelevant, large enough to not loose anything # needs to be mm #ok
+      coldBoreToVT3: Pipe(length: 114.3.mm, # from picture
+                          radius: 66.65.mm), # from picture
+      vt3ToXRT: Pipe(length: 171.43.mm, # from picture
+                     radius: 47.62.mm), # from picture
       pipesTurned: 0.0.°, #for Abrixas # this is the angle by which the pipes before the detector were turned in comparison to the telescope
       distanceCBAxisXRTAxis: 0.0.mm #62.1#58.44 # from XRT drawing #there is no difference in the axis even though the picture gets transfered 62,1mm down, but in the detector center
     )
