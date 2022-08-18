@@ -710,7 +710,7 @@ proc findPosHyperbolic*(pointXRT: Vec3, pointCB: Vec3,
     a = direc[0] * direc[0] + direc[1] * direc[1] - g * direc[2] * direc[2]
     b = 2.0 * (point[0] * direc[0] + point[1] * direc[1] + g * direc[2] * lMirror.float - g * direc[2] * point[2]) + e * direc[2]
     halfb = b / 2.0
-    c = point[0] * point[0] + point[1] * point[1] - r3.float * r3.float - e * lMirror.float + e * point[2] - 
+    c = point[0] * point[0] + point[1] * point[1] - r3.float * r3.float - e * lMirror.float + e * point[2] -
         g * lMirror.float * lMirror.float + 2.0 * g * point[2] * lMirror.float - g * point[2] * point[2]
 
   # find nearest root that lies in acceptable range
@@ -747,10 +747,13 @@ proc calcNormalVec(pointMirror: Vec3, angle: float, r1: MilliMeter, lMirror: Mil
     let
       r3 = - tan(angle/3.0) * lMirror + sqrt(tan(angle/3.0) * lMirror * tan(angle/3.0) * lMirror  + r1 * r1)
       f = focalLength #r3 / tan(4.0 * angle / 3.0) #focal length
-      m = 1.0 / (r3.float * tan(angle) * (1.0 + 2.0 * (- lMirror.float + pointMirror[2]) / (f.float + r3.float * cot(2.0 * angle / 3.0))) /
-          sqrt(r3.float * r3.float + r3.float * 2.0 * tan(angle) * (lMirror.float - pointMirror[2]) *
-          (1.0 + (lMirror.float - pointMirror[2]) / (f.float + r3.float * cot(2.0 * angle / 3.0)))))
-      n = sqrt(pointMirror[0] * pointMirror[0] + pointMirror[1] * pointMirror[1]) - m * pointMirror[2]
+      α = angle / 3.0
+      z = pointMirror[2]
+      m = 1.0 /
+        (r3.float * tan(angle) * (1.0 + 2.0 * (lMirror.float - z) / (f.float + r3.float * cot(2.0 * α))) /
+          sqrt(r3.float * r3.float + r3.float * 2.0 * tan(angle) * (lMirror.float - z) *
+               (1.0 + (lMirror.float - z) / (f.float + r3.float * cot(2.0 * α)))))
+      n = sqrt(pointMirror[0] * pointMirror[0] + pointMirror[1] * pointMirror[1]) - m * z
     normalVec[2] = pointMirror[2] - (- n / m)
   result = normalVec
 
