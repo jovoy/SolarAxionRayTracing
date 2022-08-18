@@ -871,7 +871,10 @@ proc plotHeatmap(diagramtitle: string,
     for x in 0 ..< width:
       xs[y * width + x] = x
       ys[y * width + x] = y
-      zs[y * width + x] = objectsToDraw[y, x]
+      zs[y * width + x] = objectsToDraw[y, x] # if objectsToDraw[y, x] > 0.0: ln(objectsToDraw[y, x]) else: 0.0
+
+  #let zmin = zs.min
+  #zs = zs.mapIt(if it == 0.0 or it < -25.0: -25.0 else: it)
 
   #d.zmin = 0.0
   #d.zmax = 5e-22
@@ -1641,6 +1644,22 @@ proc lineIntersectsOpaqueTelescopeStructures(
     ## there is a 2mm wide graphite block between each glass mirror, to seperate them
     ## in the middle of the X-ray telescope. Return if hit
     if pointEntranceXRT[1] <= 1.0 and pointEntranceXRT[1] >= -1.0: return
+  of tkAbrixas:
+    var factorSpider = (-35.0 - pointExitCB[2]) / vectorXRT[2]
+    var pointEntranceSpider = pointExitCB + factorSpider * vectorXRT
+    let
+      (radius, phiFlat) = radiusAndPhi(pointEntranceXRT)
+      (radiusSpider, phiFlatSpider) = radiusAndPhi(pointEntranceSpider)
+    if radialDist < 37.5.mm:
+      result = true
+    else:
+      # iterate all strips of the spider structure
+      for i in 0 .. 6:
+        # spider strips 
+        if ((phiFlat >= (-3.75 + 60.0 * i.float) and phiFlat <= (3.75 + 60.0 * i.float))) or
+           ((phiFlatSpider >= (-3.75 + 60.0 * i.float) and phiFlatSpider <= (3.75 + 60.0 * i.float))):
+          result = true
+          break
   of tkXMM:
     ## BabyIAXO return if X-ray its the spider structure
     ## here we have a spider structure for the XMM telescope:
@@ -1680,9 +1699,6 @@ proc lineIntersectsOpaqueTelescopeStructures(
            ((phiFlatSpider >= (-1.145 + 22.5 * i.float) and phiFlatSpider <= (1.145 + 22.5 * i.float))):
           result = true
           break
-  of tkAbrixas:
-    # TODO: I think there is none in the field of view because it's in one of the six spider strip sections?
-    if radialDist > 400.0.mm: return
   else:
     doAssert false, "The telescope kind " & $expSetup.telescope.kind & " does not have any opaque " &
       "structures implemented yet."
@@ -1965,7 +1981,7 @@ proc traceAxion(res: var Axion,
     alpha1: Degree
     alpha2: Degree
   case expSetup.telescope.kind
-  of tkAbrixas, tkXMM:
+  of tkXMM, tkAbrixas:
     pointMirror1 = findPosParabolic(
       pointEntranceXRT, pointExitCB, r1,
       beta, expSetup.telescope.lMirror, 0.0.mm, "Mirror 1"
