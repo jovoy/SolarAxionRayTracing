@@ -3,6 +3,9 @@ import seqmath
 
 import cligen/[osUt,mslice,procpool]
 
+when not defined(ssl):
+  {.error: "This module must be compiled with SSL support. Compile with `-d:ssl` to enable.".}
+
 const henkeUrl = "https://henke.lbl.gov/"
 const materialInterface = "cgi-bin/laymir.pl"
 
