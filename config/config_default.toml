@@ -33,6 +33,7 @@ tGas = 100.0             # K temperature of (optional) gas in magnet
 [TestXraySource]
 useConfig = false # sets whether to read these values here. Can be overriden here or useng flag `--testXray`
 active = true     # whether the source is active (i.e. Sun or source?)
+parallel = false  # wether the X-rays from the source are mostly parallel or not
 energy = 1.0      # keV The energy of the X-ray source
 distance = 2000.0 # mm  Distance of the X-ray source from the readout
 radius = 350.0    # mm  Radius of the X-ray source
