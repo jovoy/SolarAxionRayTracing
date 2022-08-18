@@ -163,12 +163,18 @@ proc storeDatafile(data: seq[string], h: HenkeReq) =
 proc sanityCheckHeader(h: HenkeReq, data: seq[string], path: string): bool =
   let header = data[1] # care only about line 1 similar to:
   # Au 250.nm on SiO2 at 1.3363deg, P=0.
-  let prefix = "# Au 250.nm on SiO2 at "
+  let thickness = block:
+    var t = h.layerThickness.formatBiggestFloat(format = ffDecimal, precision = 2)
+    t.trimZeros()
+    if "." notin t:
+      t.add "."
+    t
+  let prefix = &"# {h.layer} {thickness}nm on {h.substrateMaterial} at "
   let (success, angle) = scanTuple(header.dup(removePrefix(prefix)), "$fdeg")
   if not success:
     result = false
     echo "ERROR: Could not parse angle from data header. Header was: " & $header &
-      " and post: " & $h & " from path " & path
+      " and post: " & $h & " from path " & path & " for prefix: " & prefix
   else:
     result = abs(angle - h.fixedValue) < 1e-4
     if not result:
