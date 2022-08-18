@@ -107,6 +107,7 @@ type
   ## Information about an X-ray source installed for testing somewhere in front of the telescope
   TestXraySource = object
     active: bool  ## Whether the source is active (i.e. do we sample from the Sun or the source?)
+    parallel: bool ##wether the X-rays from the source are mostly parallel or not
     energy: keV   ## The energy of the X-ray source
     # distXraySource
     distance: mm  ## Distance of the X-ray source from the readout
@@ -1058,6 +1059,7 @@ proc maybeParseTestXraySource(flags: set[ConfigFlags]): Option[TestXraySource] =
     result = some(
       TestXraySource(
         active:      cfg["active"].getBool,
+        parallel:    cfg["parallel"].getBool,
         energy:      cfg["energy"].getFloat.keV,
         distance:    cfg["distance"].getFloat.mm,
         radius:      cfg["radius"].getFloat.mm,
@@ -1122,7 +1124,7 @@ proc initPipes(optics: TelescopeKind): Pipes =
   of tkLLNL:
     result = Pipes(
       ## the next variable doesn't make sense. It's not 2.57m from the cold bore to VT3!
-      coldBoreToVT3: Pipe(length: 127.66.mm, #from beam pipe drawings 
+      coldBoreToVT3: Pipe(length: 127.66.mm, #from beam pipe drawings
                           radius: 39.89.mm), #from beam pipe drawings #30.0 # smallest aperture between end of CB and VT3
       vt3ToXRT: Pipe(length: 111.7.mm, # from drawings #198.2 #mm from XRT drawing #ok
                      radius: 23.935.mm), #from beam pipe drawings
@@ -1351,6 +1353,7 @@ proc initTestXraySource(setup: ExperimentSetupKind, flags: set[ConfigFlags]): Te
   of esCAST:
     result = TestXraySource(
       active: active,
+      parallel: true,
       distance: 100.0.mm, #distance between the entrance of the magnet an a test Xray source
       radius: 10.0.mm,
       offAxisUp: 200.0.mm,
@@ -1362,6 +1365,7 @@ proc initTestXraySource(setup: ExperimentSetupKind, flags: set[ConfigFlags]): Te
   of esBabyIAXO:
     result = TestXraySource(
       active: active,
+      parallel: true,
       distance: 2000.0.mm, #88700.0.mm, #distance between the entrance of the magnet an a test Xray source
       radius: 350.0.mm,
       offAxisUp: 0.0.mm,
@@ -1766,11 +1770,15 @@ proc traceAxion(res: var Axion,
     else:
       ## XXX: check if this branch should be triggered sometimes. What hole type does this correspond to?
       radiusSpot *= (expSetup.telescope.numberOfHoles.float + 3.0)
-    pointExitCBMagneticField[0] = rayOrigin[0] + rand(0.1) - 0.05 #for parallel light
-    pointExitCBMagneticField[1] = rayOrigin[1] + rand(0.1) - 0.05 #for parallel light
-    ## XXX: this is my modification, as this is the value that would be at [2] if we still sampled from
-    ## via `getRandomPointOnDisk` before entering this `else` branch. CHECK THIS!
-    pointExitCBMagneticField[2] = expSetup.magnet.lengthB.float
+    if expSetup.testSource.parallel:
+      pointExitCBMagneticField[0] = rayOrigin[0] + rand(0.5) - 0.25 #for parallel light
+      pointExitCBMagneticField[1] = rayOrigin[1] + rand(0.5) - 0.25 #for parallel light
+      pointExitCBMagneticField[2] = expSetup.magnet.lengthB.float
+    else:
+      pointExitCBMagneticField = getRandomPointOnDisk(
+        centerVecs.exitCBMagneticField,
+        expSetup.magnet.radiusCB
+      )
 
     #pointExitCBMagneticField = getRandomPointOnDisk(centerSpot, (radiusSpot).mm) # for more statistics with hole through optics
     if not lineIntersectsCircle(rayOrigin, pointExitCBMagneticField, centerVecs.collimator, expSetup.testSource.radius):
@@ -1785,7 +1793,7 @@ proc traceAxion(res: var Axion,
   #  rayOrigin, centerVecs.centerSun, RadiusSun, emRates, emRateCDFs
   #)
   ## Throw away all the axions, that don't make it through the piping system and therefore exit the system at some point ##
-
+  
   let intersectsEntranceCB = lineIntersectsCircle(rayOrigin,
       pointExitCBMagneticField, centerVecs.entranceCB, expSetup.magnet.radiusCB)
   var intersectsCB = false
@@ -1848,7 +1856,7 @@ proc traceAxion(res: var Axion,
     (pointExitPipeCBVT3 - pointExitCB)
 
   var vectorBeforeXRT = pointExitPipeVT3XRT - pointExitCB
-
+  
   #echo centerVecs.collimator, " ", pointExitPipeVT3XRT
   ###################from the CB (coldbore(pipe in Magnet)) to the XRT (XrayTelescope)#######################
   var vectorXRT = vectorBeforeXRT
@@ -1934,7 +1942,7 @@ proc traceAxion(res: var Axion,
 
       ## TODO: verify that `break` here is actually justified
       # break
-  
+
   ## Why do we check for `lineIntersectsOpaqueTelescopeStructure` here again?
   when false:
     if testXray and minDist > 100.0.mm and
@@ -2036,7 +2044,7 @@ proc traceAxion(res: var Axion,
 
   ## because the detector is tuned in regards to the coldbore because it follows the direction of the telescope, set the origin to the detector window and
   ## turn the coordinate system to the detector for CAST
-  
+
   var
     pointDetectorWindow = vec3(0.0)
     pointEndDetector = vec3(0.0)
@@ -2110,7 +2118,7 @@ proc traceAxion(res: var Axion,
   pointDetectorWindow[1] -= expSetup.detectorInstall.transversalShift.float
   if weight != 0:
     res.passedTillWindow = true
-  
+
   ##Detector window:##
   if cfIgnoreDetWindow notin flags and sqrt(
       pointDetectorWindow[0].mm * pointDetectorWindow[0].mm +
