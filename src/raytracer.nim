@@ -2821,7 +2821,8 @@ proc main(
   angularScanMin = 0.0, angularScanMax = 0.0, numAngularScanPoints = 50,
   noPlots = false,
   config = "", # hand a custom path to a config file
-  configPath = "" # Hand a custom path to search in for a config file
+  configPath = "", # Hand a custom path to search in for a config file
+  suffix = "" # The filename suffix to apply to the CSV file
          ) =
   # check if the `config.toml` file exists, otherwise recreate from the default
 
@@ -2856,7 +2857,7 @@ proc main(
                                   skKind,
                                   tkKind,
                                   flags) # radiationCharacteristic = "axionRadiation::characteristic::sar"
-    discard fullSetup.calculateFluxFractions(generatePlots = not noPlots)
+    discard fullSetup.calculateFluxFractions(generatePlots = not noPlots, suffix = suffix)
   else:
     # perform a scan of the angular rotation of the telescope
     performAngularScan(angularScanMin, angularScanMax, numAngularScanPoints, noPlots, flags)
