@@ -1391,8 +1391,12 @@ proc initDetectorInstallation(optics: TelescopeKind,
     return detOpt.get
   case optics
   of tkLLNL:
+    ## NOTE: The beamline behind the LLNL telescope is designed such that the focal point is in
+    ## the *center of the chamber*. By default we compute the axion image there. However, realistically
+    ## the effective image seen by the detector is slightly before, due to the mean position of
+    ## photons converting in the gas.
     result = DetectorInstallation(
-      distanceDetectorXRT: 1485.mm, # for detector center llnl XRT https://iopscience.iop.org/article/10.1088/1475-7516/2015/12/008/pdf
+      distanceDetectorXRT: 1500.mm, # at focal point of LLNL XRT https://iopscience.iop.org/article/10.1088/1475-7516/2015/12/008/pdf
       distanceWindowFocalPlane: 0.0.mm, # #no change, because don't know
       lateralShift: 0.0.mm, #lateral ofset of the detector in repect to the beamline
       transversalShift: 0.0.mm #transversal ofset of the detector in repect to the beamline #0.0.mm #
@@ -1661,7 +1665,7 @@ proc lineIntersectsOpaqueTelescopeStructures(
     else:
       # iterate all strips of the spider structure
       for i in 0 .. 6:
-        # spider strips 
+        # spider strips
         if ((phiFlat >= (-3.75 + 60.0 * i.float) and phiFlat <= (3.75 + 60.0 * i.float))) or
            ((phiFlatSpider >= (-3.75 + 60.0 * i.float) and phiFlatSpider <= (3.75 + 60.0 * i.float))):
           result = true
@@ -1815,7 +1819,7 @@ proc traceAxion(res: var Axion,
   #  rayOrigin, centerVecs.centerSun, RadiusSun, emRates, emRateCDFs
   #)
   ## Throw away all the axions, that don't make it through the piping system and therefore exit the system at some point ##
-  
+
   let intersectsEntranceCB = lineIntersectsCircle(rayOrigin,
       pointExitCBMagneticField, centerVecs.entranceCB, expSetup.magnet.radiusCB)
   var intersectsCB = false
@@ -1878,7 +1882,7 @@ proc traceAxion(res: var Axion,
     (pointExitPipeCBVT3 - pointExitCB)
 
   var vectorBeforeXRT = pointExitPipeVT3XRT - pointExitCB
-  
+
   #echo centerVecs.collimator, " ", pointExitPipeVT3XRT
   ###################from the CB (coldbore(pipe in Magnet)) to the XRT (XrayTelescope)#######################
   var vectorXRT = vectorBeforeXRT
