@@ -2241,11 +2241,12 @@ proc traceAxionWrapper(axBuf: ptr UncheckedArray[Axion],
                        flags: set[ConfigFlags]
                        ) =
   echo "Starting weave!"
-  parallelFor iSun in 0 ..< bufLen:
-    captures: { axBuf, centerVecs, expSetup, fluxRadiusCDF, diffFluxCDFs,
-                detectorSetup,
-                energies,
-                flags }
+  #parallelFor iSun in 0 ..< bufLen:
+  #  captures: { axBuf, centerVecs, expSetup, fluxRadiusCDF, diffFluxCDFs,
+  #              detectorSetup,
+  #              energies,
+  #              flags }
+  for iSun in 0 ..< bufLen:
     axBuf[iSun].traceAxion(centerVecs,
                            expSetup,
                            detectorSetup,
@@ -2770,7 +2771,7 @@ proc calculateFluxFractions(raytraceSetup: FullRaytraceSetup,
   var axions = newSeq[Axion](NumberOfPointsSun)
   var axBuf = cast[ptr UncheckedArray[Axion]](axions[0].addr)
   echo "start"
-  init(Weave)
+  #init(Weave)
   traceAxionWrapper(axBuf, NumberOfPointsSun,
                     raytraceSetup.centerVecs,
                     raytraceSetup.expSetup,
@@ -2779,7 +2780,7 @@ proc calculateFluxFractions(raytraceSetup: FullRaytraceSetup,
                     raytraceSetup.diffFluxCDFs,
                     raytraceSetup.energies,
                     raytraceSetup.flags)
-  exit(Weave)
+  #exit(Weave)
 
   if generatePlots:
     generateResultPlots(axions, raytraceSetup.detectorSetup.windowYear, raytraceSetup.outpath, suffix)
