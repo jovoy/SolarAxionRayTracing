@@ -6,7 +6,9 @@ import ../axionMass/axionMassforMagnet
 # nimble
 import seqmath except linspace
 import arraymancer except readCsv, linspace
-import numericalnim, glm, ggplotnim, weave, cligen, unchained, parsetoml
+import numericalnim, glm, weave, cligen, unchained
+import ggplotnim except almostEqual
+import parsetoml except `{}`
 
 ##################rayTracer###############################
 
@@ -854,6 +856,22 @@ proc lowerBound[T](t: Tensor[T], val: T): int =
     val)
   result = min(result, t.size - 1)
 
+proc calculateDf(xs, ys: seq[int], zs, yr, yr2: seq[float],
+                 width: int, offset, rSigma1, rSigma2: float): DataFrame =
+  result = seqsToDf({ "x" : xs,
+                      "y" : ys,
+                      "photon flux" : zs,
+                      "yr0": yr,
+                      "yr02": yr2})
+    .mutate(f{float: "x-position [mm]" ~ `x` * ChipXMax.float / width.float},
+            f{float: "y-position [mm]" ~ `y` * ChipYMax.float / width.float},
+            f{float: "xr" ~ sqrt(rSigma1 * rSigma1 - `yr0` * `yr0`) + offset},
+            f{float: "xrneg" ~ - sqrt(rSigma1 * rSigma1 - `yr0` * `yr0`) + offset},
+            f{float: "yr" ~ `yr0` + offset},
+            f{float: "xr2" ~ sqrt(rSigma2 * rSigma2 - `yr02` * `yr02`) + offset},
+            f{float: "xrneg2" ~ - sqrt(rSigma2 * rSigma2 - `yr02` * `yr02`) + offset},
+            f{float: "yr2" ~ `yr02` + offset})
+
 proc plotHeatmap(diagramtitle: string,
                  objectsToDraw: Tensor[float],
                  width: int,
@@ -884,19 +902,7 @@ proc plotHeatmap(diagramtitle: string,
     yr2 = linspace(- rSigma2, rSigma2, xs.len)
     flux = zs.sum
   echo "The total flux arriving in the detector is: ", flux
-  var df = seqsToDf({ "x" : xs,
-                      "y" : ys,
-                      "photon flux" : zs,
-                      "yr0": yr,
-                      "yr02": yr2})
-    .mutate(f{float: "x-position [mm]" ~ `x` * ChipXMax.float / width.float},
-            f{float: "y-position [mm]" ~ `y` * ChipYMax.float / width.float},
-            f{float: "xr" ~ sqrt(rSigma1 * rSigma1 - `yr0` * `yr0`) + offset},
-            f{float: "xrneg" ~ - sqrt(rSigma1 * rSigma1 - `yr0` * `yr0`) + offset},
-            f{float: "yr" ~ `yr0` + offset},
-            f{float: "xr2" ~ sqrt(rSigma2 * rSigma2 - `yr02` * `yr02`) + offset},
-            f{float: "xrneg2" ~ - sqrt(rSigma2 * rSigma2 - `yr02` * `yr02`) + offset},
-            f{float: "yr2" ~ `yr02` + offset})
+  let df = calculateDf(xs, ys, zs, yr, yr2, width, offset, rSigma1, rSigma2)
   template makeMinMax(knd, ax: untyped): untyped =
     template `knd ax`(): untyped =
       `Gold ax knd` * width.float / ChipXMax.float
