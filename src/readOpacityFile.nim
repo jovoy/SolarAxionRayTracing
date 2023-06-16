@@ -963,7 +963,7 @@ proc calculateOpacities(solarModel, outpath: string): DataFrame =
                                 "Fluxfraction [keV⁻¹y⁻¹m⁻²]": fluxes,
                                 "type": kinds })]#
 
-  diffFluxDf.writeCsv(outpath / "solar_axion_flux_differential.csv")
+  diffFluxDf.writeCsv(outpath / &"solar_axion_flux_differential_g_ae_{g_ae}_g_ag_{g_agamma.float}_g_aN_{ganuclei}.csv")
   ggplot(diffFluxDf, aes("Energy", "diffFlux", color = "type")) +
     geom_line() + #size = some(0.5)
     xlab("Axion energy [eV]") +
