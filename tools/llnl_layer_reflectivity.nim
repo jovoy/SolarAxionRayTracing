@@ -77,7 +77,6 @@ proc main(energyMin = 0.03.keV,
   let Energy = linspace(energyMin.float, energyMax.float, numEnergy) # scan in a range wider than we use in the raytracer
   let θs = linspace(angleMin.float, angleMax.float, numAngle) # [0.5] # the angle under which we check
 
-  echo Energy
   var h5f = H5open(outpath / outfile, "rw")
   var eDset = h5f.create_dataset("Energy", (Energy.len, 1), dtype = float64)
   var aDset = h5f.create_dataset("Angles", (θs.len, 1), dtype = float64)
@@ -97,8 +96,6 @@ proc main(energyMin = 0.03.keV,
       let dfLoc = seqsToDf({"Energy" : Energy, "Theta" : ϑ, "Ref" : reflect})
       df.add dfLoc
       inc ϑidx
-    echo df
-    #df.writeCsv("/tmp/reflectivity_angles.csv")
     ggplot(df, aes("Energy", "Theta", fill = "Ref")) +
       geom_raster() +
       ggtitle("Reflectivity of LLNL layer type " & $i) +
