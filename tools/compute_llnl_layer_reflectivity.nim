@@ -21,7 +21,7 @@ let m1 = drp.Multilayer(MultilayerType="DepthGraded",
                         D_max = 22.5,
                         Gamma = 0.45,
                         C = 1.0,
-                        LayerMaterial=["Pt", "C"],
+                        LayerMaterial=["C", "Pt"],
                         Repetition=2,
                         SigmaValues=[1.0])
 
@@ -31,7 +31,7 @@ let m2 = drp.Multilayer(MultilayerType="DepthGraded",
                         D_max = 19.0,
                         Gamma = 0.45,
                         C = 1.0,
-                        LayerMaterial=["Pt", "C"],
+                        LayerMaterial=["C", "Pt"],
                         Repetition=3,
                         SigmaValues=[1.0])
 
@@ -41,7 +41,7 @@ let m3 = drp.Multilayer(MultilayerType="DepthGraded",
                         D_max = 16.0,
                         Gamma = 0.4,
                         C = 1.0,
-                        LayerMaterial=["Pt", "C"],
+                        LayerMaterial=["C", "Pt"],
                         Repetition=4,
                         SigmaValues=[1.0])
 
@@ -51,7 +51,7 @@ let m4 = drp.Multilayer(MultilayerType="DepthGraded",
                         D_max = 14.0,
                         Gamma = 0.4,
                         C = 1.0,
-                        LayerMaterial=["Pt", "C"],
+                        LayerMaterial=["C", "Pt"],
                         Repetition=5,
                         SigmaValues=[1.0])
 
