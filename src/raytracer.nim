@@ -275,8 +275,6 @@ let
 
 ################################
 
-randomize(299792458)
-
 proc initCenterVectors(expSetup: ExperimentSetup): CenterVectors =
   ## Initializes all the center vectors, that is the center position of specific objects
   ## part of the raytracing in the global coordinate system.
@@ -411,31 +409,32 @@ proc getFluxFraction(chipRegionstring: string): float64 =
 proc `-`[T: SomeUnit](x: T): T =
   result = -1.0 * x
 
-proc getRandomPointOnDisk(center: Vec3, radius: MilliMeter): Vec3 =
+proc getRandomPointOnDisk(center: Vec3, radius: MilliMeter, rnd: var Rand): Vec3 =
   ## This function gets a random point on a disk --> in this case this would
   ## be the exit of the coldbore ##
   var
     x = 0.0.mm
     y = 0.0.mm
-    r = radius * sqrt(rand(1.0))
-    angle = 360 * rand(1.0)
+    r = radius * sqrt(rnd.rand(1.0))
+    angle = 360 * rnd.rand(1.0)
   x = cos(degToRad(angle)) * r
   y = sin(degToRad(angle)) * r
   result = vec3(x.float, y.float, 0.0) + center
 
 
 proc getRandomPointFromSolarModel(center: Vec3, radius: MilliMeter,
-                                  fluxRadiusCDF: seq[float]): Vec3 =
+                                  fluxRadiusCDF: seq[float],
+                                  rnd: var Rand): Vec3 =
   ## This function gives the coordinates of a random point in the sun, biased
   ## by the emissionrates (which depend on the radius and the energy) ##
   ##
   ## `fluxRadiusCDF` is the normalized (to 1.0) cumulative sum of the total flux per
   ## radius of all radii of the solar model.
   let
-    angle1 = 360 * rand(1.0)
-    angle2 = 180 * rand(1.0)
+    angle1 = 360 * rnd.rand(1.0)
+    angle2 = 180 * rnd.rand(1.0)
     ## random number from 0 to 1 corresponding to possible solar radii.
-    randEmRate = rand(1.0)
+    randEmRate = rnd.rand(1.0)
     rIdx = fluxRadiusCDF.lowerBound(randEmRate)
     r = (0.0015 + (rIdx).float * 0.0005) * radius
   let x = cos(degToRad(angle1)) * sin(degToRad(angle2)) * r
@@ -451,6 +450,7 @@ template genGetRandomFromSolar(name, arg, typ, retTyp, body: untyped): untyped =
   proc `name`(vectorInSun, center: Vec3, radius: MilliMeter,
               arg: typ,
               diffFluxCDFs: seq[seq[float]],
+              rnd: var Rand,
               ): retTyp =
     var
       rad = (vectorInSun - center).length.mm
@@ -463,7 +463,7 @@ template genGetRandomFromSolar(name, arg, typ, retTyp, body: untyped): untyped =
     # get the normalized (to 1) CDF for this radius
     let cdfEmRate = diffFluxCDFs[iRad]
     # sample an index based on this CDF
-    let idx {.inject.} = cdfEmRate.lowerBound(rand(1.0))
+    let idx {.inject.} = cdfEmRate.lowerBound(rnd.rand(1.0))
     body
 
 genGetRandomFromSolar(getRandomEnergyFromSolarModel,
@@ -1750,6 +1750,7 @@ proc traceAxion(res: var Axion,
                 fluxRadiusCDF: seq[float],
                 diffFluxCDFs: seq[seq[float]],
                 energies: seq[keV],
+                rnd: var Rand,
                 flags: set[ConfigFlags]
                ) =
   ## Check if we run with an X-ray source or compute from the Sun
@@ -1761,22 +1762,23 @@ proc traceAxion(res: var Axion,
   if not testXray:
     # Get a random point in the sun, biased by the emission rate, which is higher
     # at smalller radii, so this will give more points in the center of the sun
-    rayOrigin = getRandomPointFromSolarModel(centerVecs.sun, RadiusSun, fluxRadiusCDF)
+    rayOrigin = getRandomPointFromSolarModel(centerVecs.sun, RadiusSun, fluxRadiusCDF, rnd)
     # Get a random point at the end of the coldbore of the magnet to take all
     # axions into account that make it to this point no matter where they enter the magnet
     pointExitCBMagneticField = getRandomPointOnDisk(
       centerVecs.exitCBMagneticField,
-      expSetup.magnet.radiusCB
+      expSetup.magnet.radiusCB,
+      rnd
     )
     # Get a random energy for the axion biased by the emission rate ##
     energyAx = getRandomEnergyFromSolarModel(
-      rayOrigin, centerVecs.sun, RadiusSun, energies, diffFluxCDFs
+      rayOrigin, centerVecs.sun, RadiusSun, energies, diffFluxCDFs, rnd
     )
   else:
     ## XXX: CLEAN THIS UP! likely just remove dead code & create procs for the "complicated parts" that
     ## yield a single value for `pointExitCBMagneticField`!
     rayOrigin = getRandomPointOnDisk(
-      centerVecs.xraySource, expSetup.testSource.radius
+      centerVecs.xraySource, expSetup.testSource.radius, rnd
     )
     energyAx = expSetup.testSource.energy
 
@@ -1797,16 +1799,17 @@ proc traceAxion(res: var Axion,
       ## XXX: check if this branch should be triggered sometimes. What hole type does this correspond to?
       radiusSpot *= (expSetup.telescope.numberOfHoles.float + 3.0)
     if expSetup.testSource.parallel:
-      pointExitCBMagneticField[0] = rayOrigin[0] + rand(0.5) - 0.25 #for parallel light
-      pointExitCBMagneticField[1] = rayOrigin[1] + rand(0.5) - 0.25 #for parallel light
+      pointExitCBMagneticField[0] = rayOrigin[0] + rnd.rand(0.5) - 0.25 #for parallel light
+      pointExitCBMagneticField[1] = rayOrigin[1] + rnd.rand(0.5) - 0.25 #for parallel light
       pointExitCBMagneticField[2] = expSetup.magnet.lengthB.float
     else:
       pointExitCBMagneticField = getRandomPointOnDisk(
         centerVecs.exitCBMagneticField,
-        expSetup.magnet.radiusCB
+        expSetup.magnet.radiusCB,
+        rnd
       )
 
-    #pointExitCBMagneticField = getRandomPointOnDisk(centerSpot, (radiusSpot).mm) # for more statistics with hole through optics
+    #pointExitCBMagneticField = getRandomPointOnDisk(centerSpot, (radiusSpot).mm, rnd) # for more statistics with hole through optics
     if not lineIntersectsCircle(rayOrigin, pointExitCBMagneticField, centerVecs.collimator, expSetup.testSource.radius):
       return
 
@@ -1816,7 +1819,7 @@ proc traceAxion(res: var Axion,
     var testTime = 1_000_000 / (xraysThroughHole * 3600.0.s * 24.0)
     #echo "Days Testing ", testTime, " with a ", expSetup.testSource.activity, " source"
   #let emissionRateAx = getRandomEmissionRateFromSolarModel(
-  #  rayOrigin, centerVecs.centerSun, RadiusSun, emRates, emRateCDFs
+  #  rayOrigin, centerVecs.centerSun, RadiusSun, emRates, emRateCDFs, rnd
   #)
   ## Throw away all the axions, that don't make it through the piping system and therefore exit the system at some point ##
 
@@ -2246,12 +2249,14 @@ proc traceAxionWrapper(axBuf: ptr UncheckedArray[Axion],
   #              detectorSetup,
   #              energies,
   #              flags }
+  var rnd = initRand(299792458)
   for iSun in 0 ..< bufLen:
     axBuf[iSun].traceAxion(centerVecs,
                            expSetup,
                            detectorSetup,
                            fluxRadiusCDF, diffFluxCDFs,
                            energies,
+                           rnd,
                            flags)
 
 proc generateResultPlots(axions: seq[Axion],
@@ -2724,7 +2729,7 @@ proc initFullSetup(setup: ExperimentSetupKind,
     var ps = newSeq[float]()
 
     for i in 0 ..< 100_000:
-      let pos = getRandomPointFromSolarModel(centerSun, RadiusSun, emratesRadiusCumSum)
+      let pos = getRandomPointFromSolarModel(centerSun, RadiusSun, emratesRadiusCumSum, rnd)
       let r = (pos - centerSun).length()
       let energyAx = getRandomEnergyFromSolarModel(
         pos, centerSun, RadiusSun, energies, emrates, diffFluxCDFs, "energy"
