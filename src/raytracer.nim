@@ -245,12 +245,11 @@ type
 
 ################################
 # VARIABLES from rayTracer.h
-## WARNING: cannot be `const` at the moment, due to Nim compiler bug with distinct types
 defUnit(GeV⁻¹)
-let
-  DistanceSunEarth = 1.5e14.mm # #ok
-  RadiusSun = 6.9e11.mm                    # #ok
-  NumberOfPointsSun = 1_000_000            #100000 for statistics   #37734 for CAST if BabyIaxo 10 mio  #26500960 corresponding to 100_000 axions at CAST, doesnt work
+const
+  DistanceSunEarth = 1.0.AU
+  RadiusSun = 696_342.km                   # SOHO mission 2003 & 2006
+  NumberOfPointsSun = 1_000_000
   # 1000000 axions that reach the coldbore then are reached after an operating time of 2.789 \times 10^{-5}\,\si{\second} for CAST
 
   RoomTemp = 293.15.K
@@ -281,7 +280,7 @@ proc initCenterVectors(expSetup: ExperimentSetup): CenterVectors =
   # Position of center of the Sun
   let sun = vec3(0.0,
                  - (0.0 * 1.33e10),   ## first number number of millimeters at bore entrance
-                 - DistanceSunEarth.float)
+                 - DistanceSunEarth.to(mm).float)
   # position of the entrance of the magnet cold bore
   let entranceCB = vec3(0.0, -0.0, 0.0) #coldboreBlockedLength # was 0 anyway
   # position of beginning of magnetic field
@@ -422,7 +421,7 @@ proc getRandomPointOnDisk(center: Vec3, radius: MilliMeter, rnd: var Rand): Vec3
   result = vec3(x.float, y.float, 0.0) + center
 
 
-proc getRandomPointFromSolarModel(center: Vec3, radius: MilliMeter,
+proc getRandomPointFromSolarModel(center: Vec3, radius: KiloMeter,
                                   fluxRadiusCDF: seq[float],
                                   rnd: var Rand): Vec3 =
   ## This function gives the coordinates of a random point in the sun, biased
@@ -436,7 +435,7 @@ proc getRandomPointFromSolarModel(center: Vec3, radius: MilliMeter,
     ## random number from 0 to 1 corresponding to possible solar radii.
     randEmRate = rnd.rand(1.0)
     rIdx = fluxRadiusCDF.lowerBound(randEmRate)
-    r = (0.0015 + (rIdx).float * 0.0005) * radius
+    r = (0.0015 + (rIdx).float * 0.0005) * radius.to(mm)
   let x = cos(degToRad(angle1)) * sin(degToRad(angle2)) * r
   let y = sin(degToRad(angle1)) * sin(degToRad(angle2)) * r
   let z = cos(degToRad(angle2)) * r
@@ -447,14 +446,14 @@ template genGetRandomFromSolar(name, arg, typ, retTyp, body: untyped): untyped =
   ## for an event at a given radius or a random emission rate, biased
   ## by the emission rates at that radius.
   ## This only works if the energies to from are evenly distributed
-  proc `name`(vectorInSun, center: Vec3, radius: MilliMeter,
+  proc `name`(vectorInSun, center: Vec3, radius: KiloMeter,
               arg: typ,
               diffFluxCDFs: seq[seq[float]],
               rnd: var Rand,
               ): retTyp =
     var
       rad = (vectorInSun - center).length.mm
-      r = rad / radius # `UnitLess` radius
+      r = rad / radius # `UnitLess` radius (radius auto converted)
       iRad {.inject.}: int
       indexRad = (r - 0.0015) / 0.0005
     if indexRad - 0.5 > floor(indexRad):
