@@ -1,6 +1,8 @@
 import std / [strutils, math, tables, sequtils, strformat, hashes, macros, os, strscans]
 import pkg / [polynumeric, ggplotnim, numericalnim, glm, parsetoml]
 
+import unchained # for units
+
 import seqmath except linspace
 import arraymancer except readCsv, linspace
 import json except `{}` # to not get into trouble with datamancer `f{}`
@@ -111,6 +113,12 @@ proc parseSolarModelOutputFile(): string =
   ## parses the config.toml file containing the name of the generated solar model DF file
   let config = parseToml.parseFile(ConfigFile)
   result = config["ReadOpacityFile"]["solarModelFile"].getStr
+
+proc parseDistanceSunEarth(): AU =
+  ## parses the config.toml file containing the distance Sun⇔Earth to use.
+  ## The distance is given in AU in the file.
+  let config = parseToml.parseFile(ConfigFile)
+  result = config["ReadOpacityFile"]["distanceSunEarth"].getFloat.AU
 
 proc parseOpcdPath(): string =
   ## parses the config.toml file containing the path to the OPCD data files
@@ -469,6 +477,7 @@ proc iron(ganuclei: float, temp: float, energy: float, rho: float): float = #htt
 proc getFluxFraction(energies: seq[float], df: DataFrame,
                      n_es, temperatures: seq[int],
                      emratesS: Tensor[float],
+                     distanceSunEarth: AU,
                      typ: string = ""): DataFrame =
   const
     alpha = 1.0 / 137.0
@@ -477,10 +486,11 @@ proc getFluxFraction(energies: seq[float], df: DataFrame,
     e_charge = sqrt(4.0 * PI * alpha)#1.0
     kB = 1.380649e-23
     r_sun = 6.957e11 #mm
-    r_sunearth = 1.5e14 #mm
     hbar = 6.582119514e-25 # in GeV * s
     keV2cm = 1.97327e-8 # cm per keV^-1
     amu = 1.6605e-24 #grams
+  let r_sunearth = distanceSunEarth.to(mm).float #
+
   let factor = pow(r_sun * 0.1 / (keV2cm), 3.0) /
                (pow(0.1 * r_sunearth, 2.0) * (1.0e6 * hbar)) /
                (3.1709791983765E-8 * 1.0e-4) # for units of 1/(keV y m²)
@@ -529,6 +539,7 @@ proc getFluxFraction(energies: seq[float], df: DataFrame,
 proc getFluxFractionR(energies: seq[float], df: DataFrame,
                      n_es, temperatures: seq[int],
                      emratesS: Tensor[float],
+                     distanceSunEarth: AU,
                      typ: string = ""): DataFrame =
   const
     alpha = 1.0 / 137.0
@@ -537,10 +548,11 @@ proc getFluxFractionR(energies: seq[float], df: DataFrame,
     e_charge = sqrt(4.0 * PI * alpha)#1.0
     kB = 1.380649e-23
     r_sun = 6.957e11 #mm
-    r_sunearth = 1.5e14 #mm
     hbar = 6.582119514e-25 # in GeV * s
     keV2cm = 1.97327e-8 # cm per keV^-1
     amu = 1.6605e-24 #grams
+  let r_sunearth = distanceSunEarth.to(mm).float
+
   let factor = pow(r_sun * 0.1 / (keV2cm), 3.0) /
                (pow(0.1 * r_sunearth, 2.0) * (1.0e6 * hbar)) /
                (3.1709791983765E-8 * 1.0e-4) # for units of 1/(keV y m²)
@@ -595,7 +607,8 @@ proc hash(x: ElementKind): Hash =
   result = h !& int(x)
   result = !$result
 
-proc calculateOpacities(solarModel, outpath: string): DataFrame =
+proc calculateOpacities(solarModel, outpath, suffix: string,
+                        distanceSunEarth: AU): DataFrame =
   var df = try:
              readSolarModel(solarModel)
            except IOError, OSError:
@@ -645,11 +658,11 @@ proc calculateOpacities(solarModel, outpath: string): DataFrame =
     e_charge = sqrt(4.0 * PI * alpha)#1.0
     kB = 1.380649e-23
     r_sun = 6.957e11 #mm
-    r_sunearth = 1.5e14 #mm
     hbar = 6.582119514e-25 # in GeV * s
     keV2cm = 1.97327e-8 # cm per keV^-1
     amu = 1.6605e-24 #grams
   # send halp
+  let r_sunearth = distanceSunEarth.to(mm).float # Input in AU
 
   echo "Walking all radii"
   let rho = df["Rho"].toTensor(float)
@@ -914,18 +927,18 @@ proc calculateOpacities(solarModel, outpath: string): DataFrame =
     ggsave(outpath / "radFlux.pdf", width = 800, height = 480)
 
   var diffFluxDf = newDataFrame()
-  diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, emratesS, "Total flux")
-  diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, term1s, "FB BB Flux")
-  diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, comptons, "Compton Flux")
-  diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, term3s, "EE Flux")
-  diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, ffterms, "FF Flux")
-  diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, primakoffs, "Primakoff Flux")
-  diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, longPlasmons, "LP Flux")
-  diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, transPlasmons, "TP Flux")
-  diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, iron57s, "57Fe Flux")
+  diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, emratesS, distanceSunEarth, "Total flux")
+  diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, term1s, distanceSunEarth, "FB BB Flux")
+  diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, comptons, distanceSunEarth, "Compton Flux")
+  diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, term3s, distanceSunEarth, "EE Flux")
+  diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, ffterms, distanceSunEarth, "FF Flux")
+  diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, primakoffs, distanceSunEarth, "Primakoff Flux")
+  diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, longPlasmons, distanceSunEarth, "LP Flux")
+  diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, transPlasmons, distanceSunEarth, "TP Flux")
+  diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, iron57s, distanceSunEarth, "57Fe Flux")
   echo diffFluxDf
   let
-    ironflux = getFluxFractionR(energies, df, n_es, temperatures, iron57s, "57Fe Flux")
+    ironflux = getFluxFractionR(energies, df, n_es, temperatures, iron57s, distanceSunEarth, "57Fe Flux")
   echo ironflux
   let
     ir = ironflux["diffFlux"].toTensor(float).torawseq
@@ -963,7 +976,7 @@ proc calculateOpacities(solarModel, outpath: string): DataFrame =
                                 "Fluxfraction [keV⁻¹y⁻¹m⁻²]": fluxes,
                                 "type": kinds })]#
 
-  diffFluxDf.writeCsv(outpath / &"solar_axion_flux_differential_g_ae_{g_ae}_g_ag_{g_agamma.float}_g_aN_{ganuclei}.csv")
+  diffFluxDf.writeCsv(outpath / &"solar_axion_flux_differential_g_ae_{g_ae}_g_ag_{g_agamma.float}_g_aN_{ganuclei}{suffix}.csv")
   ggplot(diffFluxDf, aes("Energy", "diffFlux", color = "type")) +
     geom_line() + #size = some(0.5)
     xlab("Axion energy [eV]") +
@@ -976,10 +989,12 @@ proc calculateOpacities(solarModel, outpath: string): DataFrame =
     #scale_x_log10() +
     ggtitle(&"Differential solar axion flux for g_ae = {g_ae}, g_aγ = {g_agamma} GeV⁻¹, g_aN = {ganuclei}") +
     margin(right = 6.5) +
-    ggsave(outpath / "diffFlux.pdf", width = 800, height = 480)
+    ggsave(outpath / &"diffFlux{suffix}.pdf", width = 800, height = 480)
 
 proc main*(config = "", # hand a custom path to a config file
-           configPath = "" # Hand a custom path to search in for a config file
+           configPath = "", # Hand a custom path to search in for a config file
+           suffix = "", # appended to the generated filenames
+           distanceSunEarth = 0.0.AU # Distance Sun ⇔ Earth to use in AU
           ) =
   # check if the `config.toml` file exists, otherwise recreate from the default
   if configPath.len > 0:
@@ -997,14 +1012,17 @@ proc main*(config = "", # hand a custom path to a config file
   let outpath = parseOutputPath()
   let solarModelInput = parseSolarModelInputFile()
   let solarModelOutput = parseSolarModelOutputFile()
+  let distanceSunEarth = if distanceSunEarth > 0.0.AU: distanceSunEarth else: parseDistanceSunEarth()
   ## First lets access the solar model and calculate some necessary values
   let solarModel = resources / solarModelInput
 
-  let solarModelDf = calculateOpacities(solarModel, outpath)
+  let solarModelDf = calculateOpacities(solarModel, outpath, suffix,
+                                        distanceSunEarth)
   solarModelDf.writeCsv(outpath / solarModelOutput)
 
 when isMainModule:
   import cligen
+  import unchained / cligenParseUnits
   dispatch main
 
   when false:
