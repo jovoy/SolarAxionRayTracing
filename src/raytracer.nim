@@ -6,7 +6,7 @@ import ../axionMass/axionMassforMagnet
 # nimble
 import seqmath except linspace
 import arraymancer except readCsv, linspace
-import numericalnim, glm, weave, cligen, unchained
+import numericalnim, glm, weave, unchained
 import ggplotnim except almostEqual
 import parsetoml except `{}`
 
@@ -162,6 +162,7 @@ type
     testSource*: TestXraySource
     pipes*: Pipes
     detectorInstall*: DetectorInstallation
+    distanceSunEarth*: AstronomicalUnit ## Can be adjusted due to large variation on flux!
 
   DetectorSetupKind = enum
     dkInGrid2017 = "InGrid2017" # the setup as used in 2017
@@ -247,7 +248,6 @@ type
 # VARIABLES from rayTracer.h
 defUnit(GeV⁻¹)
 const
-  DistanceSunEarth = 1.0.AU
   RadiusSun = 696_342.km                   # SOHO mission 2003 & 2006
   NumberOfPointsSun = 1_000_000
   # 1000000 axions that reach the coldbore then are reached after an operating time of 2.789 \times 10^{-5}\,\si{\second} for CAST
@@ -280,7 +280,7 @@ proc initCenterVectors(expSetup: ExperimentSetup): CenterVectors =
   # Position of center of the Sun
   let sun = vec3(0.0,
                  - (0.0 * 1.33e10),   ## first number number of millimeters at bore entrance
-                 - DistanceSunEarth.to(mm).float)
+                 - expSetup.distanceSunEarth.to(mm).float)
   # position of the entrance of the magnet cold bore
   let entranceCB = vec3(0.0, -0.0, 0.0) #coldboreBlockedLength # was 0 anyway
   # position of beginning of magnetic field
@@ -1420,6 +1420,7 @@ proc initDetectorInstallation(optics: TelescopeKind,
 proc newExperimentSetup*(setup: ExperimentSetupKind,
                          stage: StageKind,
                          optics: TelescopeKind,
+                         distanceSunEarth: AstronomicalUnit,
                          flags: set[ConfigFlags]): ExperimentSetup =
   result = ExperimentSetup(
     kind: setup,
@@ -1428,7 +1429,8 @@ proc newExperimentSetup*(setup: ExperimentSetupKind,
     telescope: optics.initTelescope(),
     testSource: setup.initTestXraySource(flags),
     pipes: optics.initPipes(),
-    detectorInstall: optics.initDetectorInstallation(flags)
+    detectorInstall: optics.initDetectorInstallation(flags),
+    distanceSunEarth: distanceSunEarth
   )
 
 defUnit(MilliMeter²)
@@ -2653,8 +2655,9 @@ proc initFullSetup(setup: ExperimentSetupKind,
                    detectorSetup: DetectorSetupKind,
                    stage: StageKind,
                    telescope: TelescopeKind,
+                   distanceSunEarth: AstronomicalUnit,
                    flags: set[ConfigFlags]): FullRaytraceSetup =
-  let expSetup = newExperimentSetup(setup, stage, telescope, flags)
+  let expSetup = newExperimentSetup(setup, stage, telescope, distanceSunEarth, flags)
 
   ## TODO: make the code use tensor for the emission rates!
   let resources = parseResourcesPath()
@@ -2791,7 +2794,8 @@ proc calculateFluxFractions(raytraceSetup: FullRaytraceSetup,
   result = axions
 
 proc performAngularScan(angularScanMin, angularScanMax: float, numAngularScanPoints: int,
-                        noPlots: bool, flags: set[ConfigFlags]) =
+                        noPlots: bool, distanceSunEarth: AstronomicalUnit,
+                        flags: set[ConfigFlags]) =
   ## Performs a scan of the telescope efficiency (intended for the XMM Newton optics)
   ## under different angles.
   let (esKind, dkKind, skKind, tkKind) = parseSetup()
@@ -2800,6 +2804,7 @@ proc performAngularScan(angularScanMin, angularScanMax: float, numAngularScanPoi
                                 dkKind,
                                 skKind,
                                 tkKind,
+                                distanceSunEarth,
                                 flags)
   let outpath = fullSetup.outpath
   var fluxes = newSeq[float](numAngularScanPoints)
@@ -2833,6 +2838,7 @@ proc main(
   ignoreDetWindow = false, ignoreGasAbs = false,
   ignoreConvProb = false, ignoreReflection = false, xrayTest = false,
   detectorInstall = false, magnet = false,
+  distanceSunEarth = 1.0.AU,
   angularScanMin = 0.0, angularScanMax = 0.0, numAngularScanPoints = 50,
   noPlots = false,
   config = "", # hand a custom path to a config file
@@ -2871,11 +2877,14 @@ proc main(
                                   dkKind,
                                   skKind,
                                   tkKind,
+                                  distanceSunEarth,
                                   flags) # radiationCharacteristic = "axionRadiation::characteristic::sar"
     discard fullSetup.calculateFluxFractions(generatePlots = not noPlots, suffix = suffix)
   else:
     # perform a scan of the angular rotation of the telescope
-    performAngularScan(angularScanMin, angularScanMax, numAngularScanPoints, noPlots, flags)
+    performAngularScan(angularScanMin, angularScanMax, numAngularScanPoints, noPlots, distanceSunEarth, flags)
 
 when isMainModule:
+  import cligen
+  import unchained / cligenParseUnits
   dispatch main
