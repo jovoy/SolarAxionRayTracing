@@ -646,8 +646,6 @@ proc calculateOpacities(solarModel, outpath, suffix: string,
 
   let noElement = @[3, 4, 5, 9, 15, 17, 19, 21, 22, 23, 27]
   # send halp
-  let r_sunearth = distanceSunEarth.to(mm).float # Input in AU
-
   echo "Walking all radii"
   let rho = df["Rho"].toTensor(float)
 
