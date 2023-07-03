@@ -87,6 +87,23 @@ type
 #for Z in Zs:
 #  let opacity = interp.eval( temperature, density, energy )
 
+## Constants used in the code. Note that the distance Sun ⇔ Earth is
+## not fixed to 1 AU, but is a config/CL argument due to the large variation
+## over the year!
+const
+  alpha = 1.0 / 137.0
+  g_ae = 1e-13 # Redondo 2013: 0.511e-10
+  gagamma = 1e-12 #the latter for DFSZ  #1e-9 #5e-10 #
+  ganuclei = 1e-15 #1.475e-8 * m_a #KSVZ model #no units  #1e-7
+  m_a = 0.0853 #eV
+  m_e_keV = 510.998 #keV
+  e_charge = sqrt(4.0 * PI * alpha)#1.0
+  kB = 1.380649e-23
+  r_sun = 696_342.km.to(mm).float # SOHO mission 2003 & 2006
+  hbar = 6.582119514e-25 # in GeV * s
+  keV2cm = 1.97327e-8 # cm per keV^-1
+  amu = 1.6605e-24 #grams
+
 ## NOTE: In principle it's a bit inefficient to re-parse the same config.toml file multiple times, but
 ## in the context of the whole ray tracing it doesn't matter. Makes the code a bit simpler.
 const sourceDir = currentSourcePath().parentDir
@@ -479,16 +496,6 @@ proc getFluxFraction(energies: seq[float], df: DataFrame,
                      emratesS: Tensor[float],
                      distanceSunEarth: AU,
                      typ: string = ""): DataFrame =
-  const
-    alpha = 1.0 / 137.0
-    g_ae = 1e-13 # Redondo 2013: 0.511e-10
-    m_e_keV = 510.998 #keV
-    e_charge = sqrt(4.0 * PI * alpha)#1.0
-    kB = 1.380649e-23
-    r_sun = 6.957e11 #mm
-    hbar = 6.582119514e-25 # in GeV * s
-    keV2cm = 1.97327e-8 # cm per keV^-1
-    amu = 1.6605e-24 #grams
   let r_sunearth = distanceSunEarth.to(mm).float #
 
   let factor = pow(r_sun * 0.1 / (keV2cm), 3.0) /
@@ -541,16 +548,6 @@ proc getFluxFractionR(energies: seq[float], df: DataFrame,
                      emratesS: Tensor[float],
                      distanceSunEarth: AU,
                      typ: string = ""): DataFrame =
-  const
-    alpha = 1.0 / 137.0
-    g_ae = 1e-13 # Redondo 2013: 0.511e-10
-    m_e_keV = 510.998 #keV
-    e_charge = sqrt(4.0 * PI * alpha)#1.0
-    kB = 1.380649e-23
-    r_sun = 6.957e11 #mm
-    hbar = 6.582119514e-25 # in GeV * s
-    keV2cm = 1.97327e-8 # cm per keV^-1
-    amu = 1.6605e-24 #grams
   let r_sunearth = distanceSunEarth.to(mm).float
 
   let factor = pow(r_sun * 0.1 / (keV2cm), 3.0) /
@@ -648,19 +645,6 @@ proc calculateOpacities(solarModel, outpath, suffix: string,
     ompls: seq[float]
 
   let noElement = @[3, 4, 5, 9, 15, 17, 19, 21, 22, 23, 27]
-  const
-    alpha = 1.0 / 137.0
-    g_ae = 1e-13 # Redondo 2013: 0.511e-10  #1e-11 #
-    gagamma = 1e-12 #the latter for DFSZ  #1e-9 #5e-10 #
-    m_a = 0.0853 #eV
-    ganuclei = 1e-15 #1.475e-8 * m_a #KSVZ model #no units  #1e-7
-    m_e_keV = 510.998 #keV
-    e_charge = sqrt(4.0 * PI * alpha)#1.0
-    kB = 1.380649e-23
-    r_sun = 6.957e11 #mm
-    hbar = 6.582119514e-25 # in GeV * s
-    keV2cm = 1.97327e-8 # cm per keV^-1
-    amu = 1.6605e-24 #grams
   # send halp
   let r_sunearth = distanceSunEarth.to(mm).float # Input in AU
 
