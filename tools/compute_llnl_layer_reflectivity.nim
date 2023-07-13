@@ -17,8 +17,8 @@ let drp = pyImport("darpanx")
 
 let m1 = drp.Multilayer(MultilayerType="DepthGraded",
                         SubstrateMaterial="SiO2",
-                        D_min = 11.5,
-                        D_max = 22.5,
+                        D_min = 115.0,
+                        D_max = 225.0,
                         Gamma = 0.45,
                         C = 1.0,
                         LayerMaterial=["C", "Pt"],
@@ -27,8 +27,8 @@ let m1 = drp.Multilayer(MultilayerType="DepthGraded",
 
 let m2 = drp.Multilayer(MultilayerType="DepthGraded",
                         SubstrateMaterial="SiO2",
-                        D_min = 7.0,
-                        D_max = 19.0,
+                        D_min = 70.0,
+                        D_max = 190.0,
                         Gamma = 0.45,
                         C = 1.0,
                         LayerMaterial=["C", "Pt"],
@@ -37,8 +37,8 @@ let m2 = drp.Multilayer(MultilayerType="DepthGraded",
 
 let m3 = drp.Multilayer(MultilayerType="DepthGraded",
                         SubstrateMaterial="SiO2",
-                        D_min = 5.5,
-                        D_max = 16.0,
+                        D_min = 55.0,
+                        D_max = 160.0,
                         Gamma = 0.4,
                         C = 1.0,
                         LayerMaterial=["C", "Pt"],
@@ -47,14 +47,13 @@ let m3 = drp.Multilayer(MultilayerType="DepthGraded",
 
 let m4 = drp.Multilayer(MultilayerType="DepthGraded",
                         SubstrateMaterial="SiO2",
-                        D_min = 5.0,
-                        D_max = 14.0,
+                        D_min = 50.0,
+                        D_max = 140.0,
                         Gamma = 0.4,
                         C = 1.0,
                         LayerMaterial=["C", "Pt"],
                         Repetition=5,
                         SigmaValues=[1.0])
-
 
 let ms = [m1, m2, m3, m4]
 
