@@ -878,7 +878,8 @@ proc plotHeatmap(diagramtitle: string,
                  rSigma1: float,
                  rSigma2: float,
                  outpath: string,
-                 suffix = "") =
+                 suffix = "",
+                 title = "") =
   ## this function draws a diagram out a given heatmap ##
   var
     xs = newSeq[int](width * width)
@@ -925,6 +926,8 @@ proc plotHeatmap(diagramtitle: string,
   ## Write the heatmap as a CSV file using the same name schema
   df.writeCsv(outpath / &"axion_image_{year}{suffix}.csv")
 
+  let title = if title.len > 0: title
+              else: &"Simulated X-ray signal distribution on the detector chip with a total flux of {flux:.3e} events after 3 months {suffix}"
   ggplot(df, aes("x-position [mm]", "y-position [mm]", fill = "photon flux")) +
     geom_raster() +
     scale_x_continuous() + scale_y_continuous() + scale_fill_continuous("photon flux") +
@@ -942,7 +945,7 @@ proc plotHeatmap(diagramtitle: string,
     #canvasColor(parseHex("8cc7d4")) +
     #theme_transparent() +
     margin(top = 2, left = 3, right = 6) +
-    ggtitle(&"Simulated X-ray signal distribution on the detector chip with a total flux of {flux:.3e} events after 3 months {suffix}") +
+    ggtitle(title) +
     ggsave(outpath / &"axion_image_{year}{suffix}.pdf", width = width, height = height)
 
   ggplot(df, aes("x-position [mm]", "y-position [mm]", fill = "photon flux")) +
@@ -2263,7 +2266,8 @@ proc traceAxionWrapper(axBuf: ptr UncheckedArray[Axion],
 proc generateResultPlots(axions: seq[Axion],
                          windowYear: WindowYearKind,
                          outpath: string,
-                         suffix = ""
+                         suffix = "",
+                         title = ""
                          ) =
   ## Creates all plots we want based on the raytracing result
   let axionsPass = axions.filterIt(it.passed)
@@ -2649,7 +2653,7 @@ proc generateResultPlots(axions: seq[Axion],
                                      pointdataX, pointdataY, weights, heatmaptable2.max) # if change number of rows: has to be in the maxVal as well
  # echo "Probability of it originating from an axion if a photon hits at x = 5,3mm and y = 8,4mm (in this model):"
  # echo (heatmaptable3[53][84]) * 100.0  #echo heatmaptable3[x][y]
-  plotHeatmap("Axion Model Fluxfraction", heatmaptable2, 256, $windowYear, rSigma1W, rSigma2W, outpath, suffix) #rSigma1, rSigma2)
+  plotHeatmap("Axion Model Fluxfraction", heatmaptable2, 256, $windowYear, rSigma1W, rSigma2W, outpath, suffix, title) #rSigma1, rSigma2)
 
 proc initFullSetup(setup: ExperimentSetupKind,
                    detectorSetup: DetectorSetupKind,
@@ -2771,7 +2775,7 @@ proc initFullSetup(setup: ExperimentSetupKind,
   )
 
 proc calculateFluxFractions(raytraceSetup: FullRaytraceSetup,
-                            generatePlots = true, suffix = ""): seq[Axion] =
+                            generatePlots = true, suffix = "", title = ""): seq[Axion] =
   ## In the following we will go over a number of points in the sun, whose location and
   ## energy will be biased by the emission rate and whose track will be through the CAST
   ## experimental setup from 2018 at VT3
@@ -2790,7 +2794,7 @@ proc calculateFluxFractions(raytraceSetup: FullRaytraceSetup,
   #exit(Weave)
 
   if generatePlots:
-    generateResultPlots(axions, raytraceSetup.detectorSetup.windowYear, raytraceSetup.outpath, suffix)
+    generateResultPlots(axions, raytraceSetup.detectorSetup.windowYear, raytraceSetup.outpath, suffix, title)
   result = axions
 
 proc performAngularScan(angularScanMin, angularScanMax: float, numAngularScanPoints: int,
@@ -2843,7 +2847,8 @@ proc main(
   noPlots = false,
   config = "", # hand a custom path to a config file
   configPath = "", # Hand a custom path to search in for a config file
-  suffix = "" # The filename suffix to apply to the CSV file
+  suffix = "", # The filename suffix to apply to the CSV file
+  title = "" # title for the axion image plot
          ) =
   # check if the `config.toml` file exists, otherwise recreate from the default
 
