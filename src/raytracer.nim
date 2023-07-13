@@ -1196,7 +1196,7 @@ proc initReflectivity(optics: TelescopeKind): Reflectivity =
   of tkLLNL:
     result = Reflectivity(
       kind: rkMultiCoating,
-      layers: @[2, 2+3, 2+3+4, 2+3+4+5] # layers of LLNL telescope
+      layers: @[3, 3+4, 3+4+4, 3+4+4+3] # layers of LLNL telescope
     )
     # read reflectivities from H5 file
     let resources = parseResourcesPath()
