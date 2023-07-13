@@ -2880,9 +2880,12 @@ proc performAngularScan(angularScanMin, angularScanMax: float, numAngularScanPoi
     ggtitle("Normalized total flux in scan of telescope angle. Solid line: XMM Newton 'theory'") +
     ggsave(outpath / "angular_scan_telescope_y.pdf", width = 800, height = 480)
 
-proc performEffectiveAreaScan(effectiveAreaScanMin, effectiveAreaScanMax: float, numEffectiveAreaScanPoints: int,
-                        noPlots: bool, distanceSunEarth: AstronomicalUnit,
-                        flags: set[ConfigFlags]) =
+proc performEffectiveAreaScan(
+  effectiveAreaScanMin, effectiveAreaScanMax: float, numEffectiveAreaScanPoints: int,
+  noPlots: bool, distanceSunEarth: AstronomicalUnit,
+  flags: set[ConfigFlags],
+  suffix = ""
+     ) =
   ## Performs a scan of the telescope efficiency (intended for the XMM Newton optics)
   ## under different angles.
   let (esKind, dkKind, skKind, tkKind) = parseSetup()
@@ -2924,7 +2927,7 @@ proc performEffectiveAreaScan(effectiveAreaScanMin, effectiveAreaScanMax: float,
     geom_point() +
     geom_line() +
     ggtitle("Effective area of the telescope") +
-    ggsave(outpath / "effective_area_scan_telescope.pdf", width = 800, height = 480)
+    ggsave(outpath / &"effective_area_scan_telescope{suffix}.pdf", width = 800, height = 480)
 
 proc main(
   ignoreDetWindow = false, ignoreGasAbs = false,
@@ -2967,7 +2970,7 @@ proc main(
 
   if effectiveAreaScanMin != effectiveAreaScanMax:
     # perform a scan of the effective area of the telescope
-    performEffectiveAreaScan(effectiveAreaScanMin, effectiveAreaScanMax, numEffectiveAreaScanPoints, noPlots, distanceSunEarth, flags)
+    performEffectiveAreaScan(effectiveAreaScanMin, effectiveAreaScanMax, numEffectiveAreaScanPoints, noPlots, distanceSunEarth, flags, suffix)
   elif angularScanMin != angularScanMax:
     # perform a scan of the angular rotation of the telescope
     performAngularScan(angularScanMin, angularScanMax, numAngularScanPoints, noPlots, distanceSunEarth, flags)
