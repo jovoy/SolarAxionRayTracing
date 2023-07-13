@@ -1,5 +1,6 @@
 # stdlib
 import std / [math, strutils, algorithm, random, sequtils, os, strformat, tables, options]
+from std / stats import mean
 
 import ../axionMass/axionMassforMagnet
 
@@ -106,22 +107,29 @@ type
     holeType: HoleType
     reflectivity: Reflectivity
 
+  XraySourceKind = enum
+    xsSun = "sun"           ## Uses the Sun as the X-ray emission source, instead of a normal source
+    xsClassical = "classical" ## Uses a classical X-ray source, i.e. a disk of some size
+
   ## Information about an X-ray source installed for testing somewhere in front of the telescope
   TestXraySource = object
     active: bool  ## Whether the source is active (i.e. do we sample from the Sun or the source?)
-    parallel: bool ##wether the X-rays from the source are mostly parallel or not
     energy: keV   ## The energy of the X-ray source
-    # distXraySource
-    distance: mm  ## Distance of the X-ray source from the readout
-    # radiusXraySource
-    radius: mm    ## Radius of the X-ray source
-    # offAxXraySourceUp
-    offAxisUp: mm
-    # offAxXraySourceLeft
-    offAxisLeft: mm
     # activityXraySource
     activity: GBq ## The activity in `GBq` of the source
-    lengthCol: mm ## Length of a collimator in front of the source
+    case kind: XraySourceKind
+    of xsClassical:
+      parallel: bool ##wether the X-rays from the source are mostly parallel or not
+      # distXraySource
+      distance: mm  ## Distance of the X-ray source from the readout
+      # radiusXraySource
+      radius: mm    ## Radius of the X-ray source
+      # offAxXraySourceUp
+      offAxisUp: mm
+      # offAxXraySourceLeft
+      offAxisLeft: mm
+      lengthCol: mm ## Length of a collimator in front of the source
+    of xsSun: discard
 
   ## An object that represents a single pipe
   Pipe = object
@@ -301,13 +309,16 @@ proc initCenterVectors(expSetup: ExperimentSetup): CenterVectors =
                              expSetup.pipes.coldBoreToVT3.length +
                              expSetup.pipes.vt3ToXRT.length).float)
   # position of an optional X-ray source for testing
-  let xraySource = vec3(expSetup.testSource.offAxisLeft.float,
-                        expSetup.testSource.offAxisUp.float, #250.0
-                        - (expSetup.testSource.distance.float))
-  # position of the collimator of the X-ray test source
-  let collimator = vec3(expSetup.testSource.offAxisLeft.float,
-                        expSetup.testSource.offAxisUp.float, #250.0
-                        - (expSetup.testSource.distance.float) + expSetup.testSource.lengthCol.float)
+  var xraySource: Vec3[float]
+  var collimator: Vec3[float]
+  if expSetup.testSource.kind == xsClassical:
+    xraySource = vec3(expSetup.testSource.offAxisLeft.float,
+                      expSetup.testSource.offAxisUp.float, #250.0
+                      - (expSetup.testSource.distance.float))
+    # position of the collimator of the X-ray test source
+    collimator = vec3(expSetup.testSource.offAxisLeft.float,
+                      expSetup.testSource.offAxisUp.float, #250.0
+                      - (expSetup.testSource.distance.float) + expSetup.testSource.lengthCol.float)
   result = CenterVectors(entranceCB: entranceCB,
                          exitCB: exitCB,
                          exitPipeCBVT3: exitPipeCBVT3,
@@ -1067,19 +1078,32 @@ proc maybeParseTestXraySource(flags: set[ConfigFlags]): Option[TestXraySource] =
   ## we should use the experiment specific magnet.
   let cfg = parseToml.parseFile(ConfigFile)["TestXraySource"]
   if cfXrayTest in flags or cfg["useConfig"].getBool:
-    result = some(
-      TestXraySource(
-        active:      cfg["active"].getBool,
-        parallel:    cfg["parallel"].getBool,
-        energy:      cfg["energy"].getFloat.keV,
-        distance:    cfg["distance"].getFloat.mm,
-        radius:      cfg["radius"].getFloat.mm,
-        offAxisUp:   cfg["offAxisUp"].getFloat.mm,
-        offAxisLeft: cfg["offAxisLeft"].getFloat.mm,
-        activity:    cfg["activity"].getFloat.GBq,
-        lengthCol:   cfg["lengthCol"].getFloat.mm
+    let kind = parseEnum[XraySourceKind](cfg["sourceKind"].getStr)
+    case kind
+    of xsClassical:
+      result = some(
+        TestXraySource(
+          active:      cfg["active"].getBool,
+          kind:        kind,
+          parallel:    cfg["parallel"].getBool,
+          energy:      cfg["energy"].getFloat.keV,
+          distance:    cfg["distance"].getFloat.mm,
+          radius:      cfg["radius"].getFloat.mm,
+          offAxisUp:   cfg["offAxisUp"].getFloat.mm,
+          offAxisLeft: cfg["offAxisLeft"].getFloat.mm,
+          activity:    cfg["activity"].getFloat.GBq,
+          lengthCol:   cfg["lengthCol"].getFloat.mm
+        )
       )
-    )
+    of xsSun:
+      result = some(
+        TestXraySource(
+          active:      cfg["active"].getBool,
+          kind:        kind,
+          energy:      cfg["energy"].getFloat.keV,
+          activity:    cfg["activity"].getFloat.GBq,
+        )
+      )
   else:
     result = none[TestXraySource]() # default, but let's be explicit
 
@@ -1364,6 +1388,7 @@ proc initTestXraySource(setup: ExperimentSetupKind, flags: set[ConfigFlags]): Te
   of esCAST:
     result = TestXraySource(
       active: active,
+      kind: xsClassical,
       parallel: true,
       distance: 100.0.mm, #distance between the entrance of the magnet an a test Xray source
       radius: 10.0.mm,
@@ -1376,6 +1401,7 @@ proc initTestXraySource(setup: ExperimentSetupKind, flags: set[ConfigFlags]): Te
   of esBabyIAXO:
     result = TestXraySource(
       active: active,
+      kind: xsClassical,
       parallel: true,
       distance: 2000.0.mm, #88700.0.mm, #distance between the entrance of the magnet an a test Xray source
       radius: 350.0.mm,
@@ -1747,6 +1773,47 @@ proc lineHitsNickel(expSetup: ExperimentSetup, α1: Degree, r1: MilliMeter,
       echo pointLowerMirror, " ", pointMirror1, " ", pointMirror2, " ", angle1, " ", angle2, " ", h
     result = tanα > compVal
 
+proc propagateTestSource(rnd: var Rand, rayOrigin: Vec3[float], expSetup: ExperimentSetup, centerVecs: CenterVectors): Vec3[float] =
+  ## XXX: CLEAN THIS UP! likely just remove dead code & create procs for the "complicated parts" that
+  ## yield a single value for `pointExitCBMagneticField`!
+  ## i.e. all this here
+
+  if expSetup.testSource.parallel:
+    result[0] = rayOrigin[0] + rnd.rand(0.5) - 0.25 #for parallel light
+    result[1] = rayOrigin[1] + rnd.rand(0.5) - 0.25 #for parallel light
+    result[2] = expSetup.magnet.lengthB.float
+  else:
+    result = getRandomPointOnDisk(
+      centerVecs.exitCBMagneticField,
+      expSetup.magnet.radiusCB,
+      rnd
+    )
+
+  when false: ## DEAD CODE
+    var centerSpot = vec3(0.0)
+    if abs(expSetup.testSource.offAxisUp.float) > 50.0:
+      centerSpot[0] = expSetup.testSource.offAxisLeft.float
+      centerSpot[1] = expSetup.testSource.offAxisUp.float
+    centerSpot[2] = expSetup.magnet.lengthB.float
+    #var radiusProjection = expSetup.testSource.radius * 2.0 * (- centerVecs.xraySource[2] - expSetup.lengthCol.float).mm / expSetup.lengthCol + expSetup.radiusXraySource
+    var radiusSpot = expSetup.telescope.holeInOptics.float
+    case expSetup.telescope.holeType
+    of htCross, htStar:
+      radiusSpot *= (expSetup.telescope.numberOfHoles.float + 16.0)
+    of htNone:
+      radiusSpot = expSetup.testSource.radius.float / 100.0 #* 3.0 #expSetup.telescope.radiusCB.float / 6.0 #
+    else:
+      ## XXX: check if this branch should be triggered sometimes. What hole type does this correspond to?
+      radiusSpot *= (expSetup.telescope.numberOfHoles.float + 3.0)
+
+    #pointExitCBMagneticField = getRandomPointOnDisk(centerSpot, (radiusSpot).mm, rnd) # for more statistics with hole through optics
+    var xraysThroughHole = PI * radiusSpot * radiusSpot /
+      (4.0 * PI * (- centerVecs.xraySource[2] + centerVecs.exitPipeVT3XRT[2]).mm *
+      (- centerVecs.xraySource[2] + centerVecs.exitPipeVT3XRT[2]).mm) * expSetup.testSource.activity
+    var testTime = 1_000_000 / (xraysThroughHole * 3600.0.s * 24.0)
+    #echo "Days Testing ", testTime, " with a ", expSetup.testSource.activity, " source"
+
+
 proc traceAxion(res: var Axion,
                 centerVecs: CenterVectors,
                 expSetup: ExperimentSetup,
@@ -1779,49 +1846,24 @@ proc traceAxion(res: var Axion,
       rayOrigin, centerVecs.sun, RadiusSun, energies, diffFluxCDFs, rnd
     )
   else:
-    ## XXX: CLEAN THIS UP! likely just remove dead code & create procs for the "complicated parts" that
-    ## yield a single value for `pointExitCBMagneticField`!
-    rayOrigin = getRandomPointOnDisk(
-      centerVecs.xraySource, expSetup.testSource.radius, rnd
-    )
     energyAx = expSetup.testSource.energy
-
-    ## i.e. all this here
-    var centerSpot = vec3(0.0)
-    if abs(expSetup.testSource.offAxisUp.float) > 50.0:
-      centerSpot[0] = expSetup.testSource.offAxisLeft.float
-      centerSpot[1] = expSetup.testSource.offAxisUp.float
-    centerSpot[2] = expSetup.magnet.lengthB.float
-    #var radiusProjection = expSetup.testSource.radius * 2.0 * (- centerVecs.xraySource[2] - expSetup.lengthCol.float).mm / expSetup.lengthCol + expSetup.radiusXraySource
-    var radiusSpot = expSetup.telescope.holeInOptics.float
-    case expSetup.telescope.holeType
-    of htCross, htStar:
-      radiusSpot *= (expSetup.telescope.numberOfHoles.float + 16.0)
-    of htNone:
-      radiusSpot = expSetup.testSource.radius.float / 100.0 #* 3.0 #expSetup.telescope.radiusCB.float / 6.0 #
-    else:
-      ## XXX: check if this branch should be triggered sometimes. What hole type does this correspond to?
-      radiusSpot *= (expSetup.telescope.numberOfHoles.float + 3.0)
-    if expSetup.testSource.parallel:
-      pointExitCBMagneticField[0] = rayOrigin[0] + rnd.rand(0.5) - 0.25 #for parallel light
-      pointExitCBMagneticField[1] = rayOrigin[1] + rnd.rand(0.5) - 0.25 #for parallel light
-      pointExitCBMagneticField[2] = expSetup.magnet.lengthB.float
-    else:
+    case expSetup.testSource.kind
+    of xsClassical:
+      rayOrigin = getRandomPointOnDisk(
+        centerVecs.xraySource, expSetup.testSource.radius, rnd
+      )
+      pointExitCBMagneticField = rnd.propagateTestSource(rayOrigin, expSetup, centerVecs)
+      #if not lineIntersectsCircle(rayOrigin, pointExitCBMagneticField, centerVecs.collimator, expSetup.testSource.radius):
+      #  return
+    of xsSun:
+      ## Same branch as `not testXray` above aside from energy!
+      rayOrigin = getRandomPointFromSolarModel(centerVecs.sun, RadiusSun, fluxRadiusCDF, rnd)
       pointExitCBMagneticField = getRandomPointOnDisk(
         centerVecs.exitCBMagneticField,
         expSetup.magnet.radiusCB,
         rnd
       )
 
-    #pointExitCBMagneticField = getRandomPointOnDisk(centerSpot, (radiusSpot).mm, rnd) # for more statistics with hole through optics
-    if not lineIntersectsCircle(rayOrigin, pointExitCBMagneticField, centerVecs.collimator, expSetup.testSource.radius):
-      return
-
-    var xraysThroughHole = PI * radiusSpot * radiusSpot /
-      (4.0 * PI * (- centerVecs.xraySource[2] + centerVecs.exitPipeVT3XRT[2]).mm *
-      (- centerVecs.xraySource[2] + centerVecs.exitPipeVT3XRT[2]).mm) * expSetup.testSource.activity
-    var testTime = 1_000_000 / (xraysThroughHole * 3600.0.s * 24.0)
-    #echo "Days Testing ", testTime, " with a ", expSetup.testSource.activity, " source"
   #let emissionRateAx = getRandomEmissionRateFromSolarModel(
   #  rayOrigin, centerVecs.centerSun, RadiusSun, emRates, emRateCDFs, rnd
   #)
@@ -2838,12 +2880,59 @@ proc performAngularScan(angularScanMin, angularScanMax: float, numAngularScanPoi
     ggtitle("Normalized total flux in scan of telescope angle. Solid line: XMM Newton 'theory'") +
     ggsave(outpath / "angular_scan_telescope_y.pdf", width = 800, height = 480)
 
+proc performEffectiveAreaScan(effectiveAreaScanMin, effectiveAreaScanMax: float, numEffectiveAreaScanPoints: int,
+                        noPlots: bool, distanceSunEarth: AstronomicalUnit,
+                        flags: set[ConfigFlags]) =
+  ## Performs a scan of the telescope efficiency (intended for the XMM Newton optics)
+  ## under different angles.
+  let (esKind, dkKind, skKind, tkKind) = parseSetup()
+  let energies = linspace(effectiveAreaScanMin, effectiveAreaScanMax, numEffectiveAreaScanPoints)
+  ## Make sure the flags are correct
+  var flags = flags
+  flags.incl cfIgnoreDetWindow
+  flags.incl cfIgnoreGasAbs
+  flags.incl cfIgnoreConvProb
+  # the only aspect we actually need!
+  flags.excl cfIgnoreReflection
+
+  var fullSetup = initFullSetup(esKind,
+                                dkKind,
+                                skKind,
+                                tkKind,
+                                distanceSunEarth,
+                                flags)
+  let outpath = fullSetup.outpath
+  var fluxes = newSeq[float](numEffectiveAreaScanPoints)
+  for i, energy in energies:
+    let suffix = &"_energy_{energy:.2f}"
+    # modify the energy of the test source
+    var expSetup = fullSetup.expSetup
+    expSetup.testSource.energy = energy.keV
+    fullSetup.expSetup = expSetup
+    let axions = fullSetup.calculateFluxFractions(generatePlots = not noPlots, suffix = suffix)
+    ## XXX: update this
+    let totalAxions = axions.len
+    echo "Total axions: ", axions.len
+    let passing = axions.filterIt(it.passed)
+    fluxes[i] = axions.mapIt(it.weights).mean() # * (passing.len.float / totalAxions.float)
+  #let maxFlux = fluxes.max
+  #fluxes.applyIt(it / maxFlux)
+  var df = toDf({"Energy [keV]" : energies, "relative flux" : fluxes})
+  echo df.pretty(-1)
+  df.writeCsv("/tmp/test_effective_area_scan.csv")
+  ggplot(df, aes("Energy [keV]", "relative flux")) +
+    geom_point() +
+    geom_line() +
+    ggtitle("Effective area of the telescope") +
+    ggsave(outpath / "effective_area_scan_telescope.pdf", width = 800, height = 480)
+
 proc main(
   ignoreDetWindow = false, ignoreGasAbs = false,
   ignoreConvProb = false, ignoreReflection = false, xrayTest = false,
   detectorInstall = false, magnet = false,
   distanceSunEarth = 1.0.AU,
   angularScanMin = 0.0, angularScanMax = 0.0, numAngularScanPoints = 50,
+  effectiveAreaScanMin = 0.0, effectiveAreaScanMax = 0.0, numEffectiveAreaScanPoints = 100,
   noPlots = false,
   config = "", # hand a custom path to a config file
   configPath = "", # Hand a custom path to search in for a config file
@@ -2876,7 +2965,13 @@ proc main(
   if detectorInstall: flags.incl cfReadDetInstallConfig
   echo "Flags: ", flags
 
-  if angularScanMin == angularScanMax:
+  if effectiveAreaScanMin != effectiveAreaScanMax:
+    # perform a scan of the effective area of the telescope
+    performEffectiveAreaScan(effectiveAreaScanMin, effectiveAreaScanMax, numEffectiveAreaScanPoints, noPlots, distanceSunEarth, flags)
+  elif angularScanMin != angularScanMax:
+    # perform a scan of the angular rotation of the telescope
+    performAngularScan(angularScanMin, angularScanMax, numAngularScanPoints, noPlots, distanceSunEarth, flags)
+  else:
     let (esKind, dkKind, skKind, tkKind) = parseSetup()
     let fullSetup = initFullSetup(esKind,
                                   dkKind,
@@ -2884,10 +2979,8 @@ proc main(
                                   tkKind,
                                   distanceSunEarth,
                                   flags) # radiationCharacteristic = "axionRadiation::characteristic::sar"
-    discard fullSetup.calculateFluxFractions(generatePlots = not noPlots, suffix = suffix)
-  else:
-    # perform a scan of the angular rotation of the telescope
-    performAngularScan(angularScanMin, angularScanMax, numAngularScanPoints, noPlots, distanceSunEarth, flags)
+    discard fullSetup.calculateFluxFractions(generatePlots = not noPlots, suffix = suffix, title = title)
+
 
 when isMainModule:
   import cligen
