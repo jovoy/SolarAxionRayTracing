@@ -2438,6 +2438,12 @@ proc generateResultPlots(axions: seq[Axion],
     ggtitle("Deviation of X-rays - detector entrance to readout") +
     ggsave(outpath / &"deviationDet_ridges_{windowYear}.pdf", height = 600)]#
 
+  ggplot(dfDet, aes("Shell")) +
+    geom_bar() +
+    scale_x_discrete() +
+    ggtitle("Distribution of number of times each shell hit in the telescope") +
+    ggsave(outpath / &"shells_hit_{windowYear}{suffix}.pdf")
+
 
   let dfRad = seqsToDf({"Radial component [mm]": pointdataR,
                         "Transmission probability": weights,
