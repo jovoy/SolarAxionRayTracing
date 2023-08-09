@@ -2186,7 +2186,7 @@ proc traceAxion(res: var Axion,
     energyAx, hitLayer, res.transmissionMagnet, p, ya, alpha1, alpha2, flags
   )
 
-  if testXray and minDist > 100.0.mm:
+  if false: # testXray and minDist > 100.0.mm:
     n = (distDet - pointExitCB[2].mm) / (pointEntranceXRT - pointExitCB)[2].mm
     pointDetectorWindow = pointExitCB + n.float * (pointEntranceXRT - pointExitCB)
   pointDetectorWindow[0] -= expSetup.detectorInstall.lateralShift.float
@@ -2200,7 +2200,6 @@ proc traceAxion(res: var Axion,
       pointDetectorWindow[1].mm * pointDetectorWindow[1].mm
       ) > detectorSetup.radiusWindow:
       return
-
   else:
     if abs(pointDetectorWindow[0].mm) > ChipCenterX or abs(pointDetectorWindow[1].mm) > ChipCenterY:
       return
