@@ -2449,7 +2449,7 @@ proc generateResultPlots(axions: seq[Axion],
     ggplot(dfRad, aes("Radial component [mm]", weight = "Transmission probability")) +
       geom_histogram(binWidth = 0.001) +
       ggtitle("Radial distribution of the axions") +
-      ggsave(outpath / &"radialDistribution_{windowYear}.pdf")
+      ggsave(outpath / &"radialDistribution_{windowYear}{suffix}.pdf")
 
   when false:
     let dfFluxE = seqsToDf({ "Axion energy [keV]": energiesAx.mapIt(it.float),
@@ -2922,7 +2922,7 @@ proc performEffectiveAreaScan(
   #fluxes.applyIt(it / maxFlux)
   var df = toDf({"Energy [keV]" : energies, "relative flux" : fluxes})
   echo df.pretty(-1)
-  df.writeCsv("/tmp/test_effective_area_scan.csv")
+  df.writeCsv(outpath / &"effective_area_scan_telescope{suffix}.csv")
   ggplot(df, aes("Energy [keV]", "relative flux")) +
     geom_point() +
     geom_line() +
