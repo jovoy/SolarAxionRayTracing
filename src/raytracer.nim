@@ -1631,11 +1631,11 @@ proc computeMagnetTransmission(
   ## in a gas, is more complicated than this!
   case expSetup.stage
   of skVacuum:
-    let probConversionMagnet = if cfIgnoreConvProb notin flags:
-                                 conversionProb(expSetup.magnet.B, g_aγ, pathCB)
-                               else:
-                                 1.0
-    result = cos(ya) * probConversionMagnet
+    if cfIgnoreConvProb notin flags:
+      let probConversionMagnet = conversionProb(expSetup.magnet.B, g_aγ, pathCB)
+      result = cos(ya) * probConversionMagnet
+    else:
+      result = 1.0
   of skGas:
     let
       pGas = expSetup.magnet.pGasRoom / RoomTemp * expSetup.magnet.tGas
