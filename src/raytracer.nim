@@ -2181,7 +2181,7 @@ proc traceAxion(res: var Axion,
   )
   res.yawAngles = ya
 
-  var weight = 1.0
+  var weight = 0.0
   (res.reflect, weight) = expSetup.computeReflectivity(
     energyAx, hitLayer, res.transmissionMagnet, p, ya, alpha1, alpha2, flags
   )
