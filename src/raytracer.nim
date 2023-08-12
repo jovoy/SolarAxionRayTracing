@@ -1781,7 +1781,6 @@ proc propagateTestSource(rnd: var Rand, rayOrigin: Vec3[float], expSetup: Experi
   ## XXX: CLEAN THIS UP! likely just remove dead code & create procs for the "complicated parts" that
   ## yield a single value for `pointExitCBMagneticField`!
   ## i.e. all this here
-
   if expSetup.testSource.parallel:
     result[0] = rayOrigin[0] + rnd.rand(0.5) - 0.25 #for parallel light
     result[1] = rayOrigin[1] + rnd.rand(0.5) - 0.25 #for parallel light
@@ -1876,7 +1875,7 @@ proc traceAxion(res: var Axion,
   let intersectsEntranceCB = lineIntersectsCircle(rayOrigin,
       pointExitCBMagneticField, centerVecs.entranceCB, expSetup.magnet.radiusCB)
   var intersectsCB = false
-  var rayOriginInSun = rayOrigin - centerVecs.sun #
+  #var rayOriginInSun = rayOrigin - centerVecs.sun #
   #echo energyAx.float, " ", sqrt(rayOriginInSun[0].float * rayOriginInSun[0].float + rayOriginInSun[1].float * rayOriginInSun[1].float + rayOriginInSun[2].float * rayOriginInSun[2].float) / 6.9e11, " ", energyAx.float  * energyAx.float * (rayOriginInSun[0].float * rayOriginInSun[0].float + rayOriginInSun[1].float * rayOriginInSun[1].float + rayOriginInSun[2].float * rayOriginInSun[2].float) / 6.9e11 / 6.9e11
   res.emratesPre = 1.0 #* energyAx.float * energyAx.float * (rayOriginInSun[0].float * rayOriginInSun[0].float + rayOriginInSun[1].float * rayOriginInSun[1].float + rayOriginInSun[2].float * rayOriginInSun[2].float) / 6.9e11 / 6.9e11
   res.energiesPre = energyAx
@@ -2389,57 +2388,57 @@ proc generateResultPlots(axions: seq[Axion],
     ylab("The flux before the experiment") +
     ggsave(outpath / &"TelProb.pdf")]#
 
-  #[let dfTransProb = seqsToDf({ "Axion energy [keV]": energiesAxAll.mapIt(it.float),
-                               "Transmission Probability": transProbDetector,
-                               "type": kinds.mapIt($it),
-                               "Axion energy window[keV]":energiesAxWindow.mapIt(it.float),
-                               "Transmission Probability window": transprobWindow,
-                               "type window":kindsWindow.mapIt($it),
-                               "Flux after experiment": weightsAll })
-
-  ggplot(dfTransProb.arrange("Axion energy [keV]")) +
-    geom_line(aes("Axion energy [keV]", "Transmission Probability",
-             color = "type")) +
-    geom_line(aes("Axion energy [keV]", "Transmission Probability window",
-             color = "type window")) +
-    geom_histogram(aes("Axion energy [keV]", weight = "Flux after experiment"), binWidth = 0.01) +
-    ggtitle("The transmission probability for different detector parts") +
-    ggsave(outpath / &"TransProb_{windowYear}.pdf")
-
-  let dfTransProbAr = seqsToDf({ "Axion energy [keV]": energiesAx.mapIt(it.float),
-                                 "Transmission Probability": transProbArgon })
-  ggplot(dfTransProbAr.arrange("Axion energy [keV]"),
-         aes("Axion energy [keV]", "Transmission Probability")) +
-    geom_line() +
-    ggtitle("The transmission probability for the detector gas") +
-    ggsave(outpath / &"TransProbAr_{windowYear}.pdf")
+  # let dfTransProb = seqsToDf({ "Axion energy [keV]": energiesAxAll.mapIt(it.float),
+  #                              "Transmission Probability": transProbDetector,
+  #                              "type": kinds.mapIt($it),
+  #                              "Axion energy window[keV]":energiesAxWindow.mapIt(it.float),
+  #                              "Transmission Probability window": transprobWindow,
+  #                              "type window":kindsWindow.mapIt($it),
+  #                              "Flux after experiment": weightsAll })
+  #
+  # ggplot(dfTransProb.arrange("Axion energy [keV]")) +
+  #   geom_line(aes("Axion energy [keV]", "Transmission Probability",
+  #            color = "type")) +
+  #   geom_line(aes("Axion energy [keV]", "Transmission Probability window",
+  #            color = "type window")) +
+  #   geom_histogram(aes("Axion energy [keV]", weight = "Flux after experiment"), binWidth = 0.01) +
+  #   ggtitle("The transmission probability for different detector parts") +
+  #   ggsave(outpath / &"TransProb_{windowYear}.pdf")
+  #
+  # let dfTransProbAr = seqsToDf({ "Axion energy [keV]": energiesAx.mapIt(it.float),
+  #                                "Transmission Probability": transProbArgon })
+  # ggplot(dfTransProbAr.arrange("Axion energy [keV]"),
+  #        aes("Axion energy [keV]", "Transmission Probability")) +
+  #   geom_line() +
+  #   ggtitle("The transmission probability for the detector gas") +
+  #   ggsave(outpath / &"TransProbAr_{windowYear}.pdf")
 
   let dfDet = seqsToDf({ "Deviation [mm]": deviationDet,
                          "Energies": energiesAx.mapIt(it.float),
                          "Shell": shellNumber })
     .filter(f{Value: isNull(df["Shell"][idx]).toBool == false})
 
-  ggplot(dfDet, aes("Deviation [mm]")) +
-    geom_histogram(binWidth = 0.001) +
-    ggtitle("Deviation of X-rays detector entrance to readout") +
-    ggsave(outpath / &"deviationDet_{windowYear}.pdf")
-
-  ggplot(dfDet, aes("Deviation [mm]", fill = factor("Shell"))) +
-    geom_histogram(binWidth = 0.001) +
-    ggtitle("Deviation of X-rays - detector entrance to readout") +
-    ggsave(outpath / &"deviationDet_stacked_{windowYear}.pdf")
-
-  ggplot(dfDet, aes("Energies", fill = factor("Shell"))) +
-    ggridges("Shell", overlap = 1.8) +
-    geom_histogram(binWidth = 0.1, position = "identity") +
-    ggtitle("X-ray energy distributions at detector") +
-    ggsave(outpath / &"energies_by_shell_{windowYear}.pdf", height = 600)
-
-  ggplot(dfDet, aes("Deviation [mm]", fill = factor("Shell"))) +
-    ggridges("Shell", overlap = 1.8) +
-    geom_histogram(binWidth = 0.001, position = "identity") +
-    ggtitle("Deviation of X-rays - detector entrance to readout") +
-    ggsave(outpath / &"deviationDet_ridges_{windowYear}.pdf", height = 600)]#
+  #ggplot(dfDet, aes("Deviation [mm]")) +
+  #  geom_histogram(binWidth = 0.001) +
+  #  ggtitle("Deviation of X-rays detector entrance to readout") +
+  #  ggsave(outpath / &"deviationDet_{windowYear}.pdf")
+  #
+  #ggplot(dfDet, aes("Deviation [mm]", fill = factor("Shell"))) +
+  #  geom_histogram(binWidth = 0.001) +
+  #  ggtitle("Deviation of X-rays - detector entrance to readout") +
+  #  ggsave(outpath / &"deviationDet_stacked_{windowYear}.pdf")
+  #
+  #ggplot(dfDet, aes("Energies", fill = factor("Shell"))) +
+  #  ggridges("Shell", overlap = 1.8) +
+  #  geom_histogram(binWidth = 0.1, position = "identity") +
+  #  ggtitle("X-ray energy distributions at detector") +
+  #  ggsave(outpath / &"energies_by_shell_{windowYear}.pdf", height = 600)
+  #
+  #ggplot(dfDet, aes("Deviation [mm]", fill = factor("Shell"))) +
+  #  ggridges("Shell", overlap = 1.8) +
+  #  geom_histogram(binWidth = 0.001, position = "identity") +
+  #  ggtitle("Deviation of X-rays - detector entrance to readout") +
+  #  ggsave(outpath / &"deviationDet_ridges_{windowYear}.pdf", height = 600)
 
   ggplot(dfDet, aes("Shell")) +
     geom_bar() +
