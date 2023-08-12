@@ -1686,8 +1686,8 @@ proc lineIntersectsOpaqueTelescopeStructures(
   case expSetup.telescope.kind
   of tkLLNL:
     ## there is a 2mm wide graphite block between each glass mirror, to seperate them
-    ## in the middle of the X-ray telescope. Return if hit
-    if pointEntranceXRT[1] <= 1.0 and pointEntranceXRT[1] >= -1.0: return
+    ## in the middle of the X-ray telescope. Return `true` if hit.
+    result = pointEntranceXRT[1] <= 1.0 and pointEntranceXRT[1] >= -1.0
   of tkAbrixas:
     var factorSpider = (-35.0 - pointExitCB[2]) / vectorXRT[2]
     var pointEntranceSpider = pointExitCB + factorSpider * vectorXRT
