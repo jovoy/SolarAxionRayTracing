@@ -77,6 +77,13 @@ type
 
   ZTempDensity = tuple[Z: int, temp: int, density: int]
 
+  FluxKind = enum
+    fkAxionElectron, # only g_ae processes
+    fkAxionPhoton,   # only g_aγ processes
+    fkAxionNucleus,  # only g_aN processes
+    fkAxionElectronPhoton, # g_ae + g_aγ
+    fkAll            # g_ae + g_aγ + g_aN + plasmon (g_aγ)
+
 #for R in Radii:
 #  for E in Energies:
 #    for Z in Zs:
@@ -605,7 +612,8 @@ proc hash(x: ElementKind): Hash =
   result = !$result
 
 proc calculateOpacities(solarModel, outpath, suffix: string,
-                        distanceSunEarth: AU): DataFrame =
+                        distanceSunEarth: AU,
+                        fluxKind: FluxKind): DataFrame =
   var df = try:
              readSolarModel(solarModel)
            except IOError, OSError:
@@ -859,13 +867,19 @@ proc calculateOpacities(solarModel, outpath, suffix: string,
       longPlasmons[R, iEindex] = longPlas
       transPlasmons[R, iEindex] = transPlas
       iron57s[R, iEindex] = iron57
-      abc[R, iEindex] = compton +  term1 + term3 + ffterm
-      let total_emrate = compton +  term1 + term3 + ffterm  + transPlas + primakoff  + longPlas + iron57
-      let total_emrate_s = total_emrate / (6.58e-19) # in 1/sec
-      emratesS[R, iEindex] = total_emrate
-      emratesInS[R, iEindex] = total_emrate_s
+      abc[R, iEindex] = compton + term1 + term3 + ffterm
+      let totalEmrate =
+        case fluxKind
+        of fkAxionElectron:       compton + term1 + term3 + ffterm
+        of fkAxionPhoton:         primakoff
+        of fkAxionNucleus:        iron57
+        of fkAxionElectronPhoton: compton + term1 + term3 + ffterm + primakoff
+        of fkAll:                 compton + term1 + term3 + ffterm + primakoff + longPlas + transPlas + iron57
+      let totalEmrateSec = totalEmrate / (6.58e-19) # in 1/sec
+      emratesS[R, iEindex] = totalEmrate
+      emratesInS[R, iEindex] = totalEmrateSec
 
-      radiiFlux += totalEmRates * energyDiff #iron57 * 0.001
+      radiiFlux += totalEmrateSec * energyDiff #iron57 * 0.001
       #if w <= 0.0732 :
         #echo transPlas
       # if want to have absorbtion coefficient of a radius and energy: R = (r (in % of sunR) - 0.0015) / 0.0005
@@ -961,7 +975,7 @@ proc calculateOpacities(solarModel, outpath, suffix: string,
   diffFluxDf = diffFluxDf.rename(f{"Flux / keV⁻¹ m⁻² yr⁻¹" <- "diffFlux"},
                                  f{"Energy [keV]" <- "Energy"})
   diffFluxDf.writeCsv(outpath / &"solar_axion_flux_differential_g_ae_{g_ae}_g_ag_{g_agamma.float}_g_aN_{ganuclei}{suffix}.csv")
-  ggplot(diffFluxDf, aes("Energy", "diffFlux", color = "type")) +
+  ggplot(diffFluxDf, aes("Energy [keV]", "Flux / keV⁻¹ m⁻² yr⁻¹", color = "type")) +
     geom_line() + #size = some(0.5)
     xlab("Axion energy [eV]") +
     ylab("Flux [keV⁻¹ yr⁻¹ m⁻²]") +
@@ -978,7 +992,8 @@ proc calculateOpacities(solarModel, outpath, suffix: string,
 proc main*(config = "", # hand a custom path to a config file
            configPath = "", # Hand a custom path to search in for a config file
            suffix = "", # appended to the generated filenames
-           distanceSunEarth = 0.0.AU # Distance Sun ⇔ Earth to use in AU
+           distanceSunEarth = 0.0.AU, # Distance Sun ⇔ Earth to use in AU
+           fluxKind = fkAll
           ) =
   # check if the `config.toml` file exists, otherwise recreate from the default
   if configPath.len > 0:
@@ -1001,8 +1016,9 @@ proc main*(config = "", # hand a custom path to a config file
   let solarModel = resources / solarModelInput
 
   let solarModelDf = calculateOpacities(solarModel, outpath, suffix,
-                                        distanceSunEarth)
-  solarModelDf.writeCsv(outpath / solarModelOutput)
+                                        distanceSunEarth,
+                                        fluxKind)
+  solarModelDf.writeCsv(outpath / solarModelOutput.replace(".csv", &"_fluxKind_{fluxKind}{suffix}.csv"))
 
 when isMainModule:
   import cligen
