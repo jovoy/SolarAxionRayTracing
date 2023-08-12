@@ -14,6 +14,7 @@ goldReflFile   = "gold_0.25microns_reflectivities.h5"
 # field, to allow to save a different file than we read in `raytracer`
 solarModelFile = "solar_model_dataframe.csv"
 opcdPath       = "OPCD"
+distanceSunEarth = 1.0 # in AU. Old code used `1.5e14 mm`!
 
 [Setup] # settings related to the setup we raytrace through
 experimentSetup = "BabyIAXO"   # [BabyIAXO, CAST]
@@ -33,6 +34,7 @@ tGas = 100.0             # K temperature of (optional) gas in magnet
 [TestXraySource]
 useConfig = false # sets whether to read these values here. Can be overriden here or useng flag `--testXray`
 active = true     # whether the source is active (i.e. Sun or source?)
+sourceKind = "classical" # whether a "classical" source or the "sun" (Sun only for position *not* for energy)
 parallel = false  # wether the X-rays from the source are mostly parallel or not
 energy = 1.0      # keV The energy of the X-ray source
 distance = 2000.0 # mm  Distance of the X-ray source from the readout
@@ -44,6 +46,7 @@ lengthCol = 0.021 # mm  Length of a collimator in front of the source
 
 [DetectorInstallation]
 useConfig = false # sets whether to read these values here. Can be overriden here or useng flag `--detectorInstall`
+# Note: 1500mm is LLNL focal length. That corresponds to center of the chamber!
 distanceDetectorXRT = 1485.0   # mm
 distanceWindowFocalPlane = 0.0 # mm
 lateralShift = 0.0             # mm lateral ofset of the detector in repect to the beamline
