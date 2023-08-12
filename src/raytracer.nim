@@ -238,7 +238,8 @@ type
     cfIgnoreConvProb,    ## use to ignore axion conversion probability
     cfXrayTest,          ## if given reads the TestXraySource config values and uses it
     cfReadMagnetConfig,  ## if given uses configuration of magnet from config file
-    cfReadDetInstallConfig ## if given uses configuration of detector install. from config file
+    cfReadDetInstallConfig, ## if given uses configuration of detector install. from config file
+    cfSanityChecks       ## if given produce some sanity check plots
 
   FullRaytraceSetup = object
     outpath: string # path where to store output data
@@ -1017,6 +1018,11 @@ proc parseOutputPath(): string =
   ## parses the config.toml file containing the path to `output` directory for all plots & CSV files
   let config = parseToml.parseFile(ConfigFile)
   result = config["Resources"]["outputPath"].getStr
+
+proc parseSanityCheckPath(): string =
+  ## parses the config.toml file containing the path to `sanityCheck` directory for all sanity check plots
+  let config = parseToml.parseFile(ConfigFile)
+  result = config["Resources"]["sanityCheckPath"].getStr
 
 proc parseLlnlTelescopeFile(): string =
   ## parses the config.toml file containing the LLNL telescope efficiency filename
@@ -2705,17 +2711,73 @@ proc generateResultPlots(axions: seq[Axion],
  # echo (heatmaptable3[53][84]) * 100.0  #echo heatmaptable3[x][y]
   plotHeatmap("Axion Model Fluxfraction", heatmaptable2, 256, $windowYear, rSigma1W, rSigma2W, outpath, suffix, title) #rSigma1, rSigma2)
 
+proc sanityCheckSampling(setup: FullRaytraceSetup, radii: seq[float],
+                         emRates: seq[seq[float]],
+                         fluxesDf: DataFrame,
+                         suffix, outpath: string) =
+  var es = newSeq[float]()
+  var ems = newSeq[float]()
+  var rs = newSeq[float]()
+  var ts = newSeq[float]()
+  var ps = newSeq[float]()
+  var rnd = initRand(123)
+
+  for i in 0 ..< 100_000:
+    let pos = getRandomPointFromSolarModel(setup.centerVecs.sun, RadiusSun, setup.fluxRadiusCDF, rnd)
+    let r = (pos - setup.centerVecs.sun).length()
+    let energyAx = getRandomEnergyFromSolarModel(
+      pos, setup.centerVecs.sun, RadiusSun, setup.energies, setup.diffFluxCDFs, rnd
+    )
+    let em = getRandomEmissionRateFromSolarModel(
+      pos, setup.centerVecs.sun, RadiusSun, emrates, setup.diffFluxCDFs, rnd
+    )
+    ts.add arccos(pos[2] / r)
+    ps.add arctan(pos[1] / pos[0])
+    es.add energyAx.float
+    ems.add em
+    rs.add r.mm.to(km) / RadiusSun
+
+  let df = seqsToDf(es, ems, rs)
+  ggplot(df, aes("es")) +
+    geom_histogram(bins = 500, density = true) +
+    geom_density(normalize = true, color = "orange") +
+    xlab("Energy [keV]") + ggtitle("Sampled energies") +
+    ggsave(outpath / &"sampled_energy{suffix}.pdf")
+  ggplot(df, aes("rs")) +
+    geom_histogram(bins = 300, density = true) +
+    geom_density(normalize = true, color = "orange") +
+    xlab("Radii [fraction solar radius]") +
+    ggtitle("Sampled radii as fraction of solar radius") +
+    ggsave(outpath / &"sampled_radii{suffix}.pdf")
+
+  ggplot(fluxesDf, aes("Energy", "Radius", fill = "Flux")) +
+    geom_raster() +
+    scale_fill_continuous(scale = (0.0, percentile(fluxesDf["Flux", float], 99))) +
+    ggtitle("Flux by energy and fraction of solar radius") +
+    ggsave(outpath / &"flux_by_energy_vs_radius{suffix}.pdf")
+
+  let dfCdf = toDf({"Radius" : radii, "FluxCDF": setup.fluxRadiusCDF})
+  ggplot(dfCdf, aes("Radius", "FluxCDF")) +
+    geom_line() +
+    ggsave(outpath / &"radius_vs_fluxRadiusCDF{suffix}.pdf")
+
+  #ggplot(df, aes("ems")) + geom_histogram(bins = 500) + ggsave("/tmp/ems.pdf")
+  #ggplot(df, aes("ts")) + geom_histogram() + ggsave("/tmp/ts.pdf")
+  #ggplot(df, aes("ps")) + geom_histogram() + ggsave("/tmp/ps.pdf")
+
 proc initFullSetup(setup: ExperimentSetupKind,
                    detectorSetup: DetectorSetupKind,
                    stage: StageKind,
                    telescope: TelescopeKind,
                    distanceSunEarth: AstronomicalUnit,
-                   flags: set[ConfigFlags]): FullRaytraceSetup =
+                   flags: set[ConfigFlags],
+                   suffix = ""): FullRaytraceSetup =
   let expSetup = newExperimentSetup(setup, stage, telescope, distanceSunEarth, flags)
 
   ## TODO: make the code use tensor for the emission rates!
   let resources = parseResourcesPath()
   let outpath = parseOutputPath()
+  let sanityPath = parseSanityCheckPath()
   var emRatesDf = readCsv(resources / parseSolarModelFile())
 
   # get all radii and energies from DF so that we don't need to compute them manually (risking to
@@ -2735,10 +2797,13 @@ proc initFullSetup(setup: ExperimentSetupKind,
   var emRates = newSeq[seq[float]]()
   ## group the "solar model" DF by the radius & append the emission rates for all energies
   ## to the `emRates`
+  var k = 0
   for tup, subDf in groups(emRatesDf.group_by("Radius")):
+    let radius = tup[0][1].toFloat
     doAssert subDf["Energy [keV]", float].toSeq1D.mapIt(it.keV) == energies
+    doAssert radius == radii[k], "Input DF not sorted correctly!"
     emRates.add subDf["emRates", float].toSeq1D
-
+    inc k
   var
     fluxRadiusCumSum: seq[float] = newSeq[float](radii.len)
     diffFluxCDFs: seq[seq[float]] = newSeq[seq[float]](radii.len)
@@ -2748,6 +2813,8 @@ proc initFullSetup(setup: ExperimentSetupKind,
     let integral = x[^1]
     x.mapIt( it / integral )
 
+
+  var fluxesDf = newDataFrame()
   for iRad, radius in radii:
     # emRates is seq of radii of energies
     let emRate = emRates[iRad]
@@ -2758,53 +2825,13 @@ proc initFullSetup(setup: ExperimentSetupKind,
       diffFlux[iEnergy] = emRate[iEnergy] * (energy.float*energy.float) * radius*radius
       diffSum += diffFlux[iEnergy]
       radiusCumSum[iEnergy] = diffSum
+    fluxesDf.add toDf({"Energy" : energies.mapIt(it.float), "Flux" : diffFlux, "Radius" : radius})
 
-    when false:
-      # sanity checks for calc of differential flux & emission rate
-      let df = toDf({ "diffFlux" : diffFlux, "energy" : energies.mapIt(it.float),
-                      "emRate" : emRates[iRad] })
-      ggplot(df, aes("energy", "diffFlux")) +
-        geom_line() +
-        scale_y_continuous() +
-        ggsave("/tmp/diff_flux_vs_energy.pdf")
-      ggplot(df, aes("energy", "emRate")) +
-        geom_line() +
-        scale_y_continuous() +
-        ggsave("/tmp/emRate_vs_energy.pdf")
     diffRadiusSum += diffSum
     fluxRadiusCumSum[iRad] = diffRadiusSum
     diffFluxCDFs[iRad] = radiusCumSum.toCdf()
+
   let fluxRadiusCDF = fluxRadiusCumSum.toCdf()
-
-  ## sample from random point and plot
-  when false: # this is a sort of sanity check to check the sampling of 100_000 elements
-    var es = newSeq[float]()
-    var ems = newSeq[float]()
-    var rs = newSeq[float]()
-    var ts = newSeq[float]()
-    var ps = newSeq[float]()
-
-    for i in 0 ..< 100_000:
-      let pos = getRandomPointFromSolarModel(centerSun, RadiusSun, emratesRadiusCumSum, rnd)
-      let r = (pos - centerSun).length()
-      let energyAx = getRandomEnergyFromSolarModel(
-        pos, centerSun, RadiusSun, energies, emrates, diffFluxCDFs, "energy"
-      )
-      let em = getRandomEnergyFromSolarModel(
-        pos, centerSun, RadiusSun, energies, emrates, diffFluxCDFs, "emissionRate"
-      )
-      ts.add arccos(pos[2] / r)
-      ps.add arctan(pos[1] / pos[0])
-      es.add energyAx.float
-      ems.add em
-      rs.add r
-
-    let df = seqsToDf(es, ems, rs)
-    ggplot(df, aes("es")) + geom_histogram(bins = 500) + ggsave("/tmp/es.pdf")
-    ggplot(df, aes("rs")) + geom_histogram(bins = 300) + ggsave("/tmp/rs.pdf")
-    ggplot(df, aes("ems")) + geom_histogram(bins = 500) + ggsave("/tmp/ems.pdf")
-    ggplot(df, aes("ts")) + geom_histogram() + ggsave("/tmp/ts.pdf")
-    ggplot(df, aes("ps")) + geom_histogram() + ggsave("/tmp/ps.pdf")
 
   ################################################################################
   #############################Detector Window####################################
@@ -2824,8 +2851,15 @@ proc initFullSetup(setup: ExperimentSetupKind,
     flags: flags
   )
 
+  ## sample from random point and plot
+  if cfSanityChecks in flags:
+    result.sanityCheckSampling(radii, emrates, fluxesDf, suffix, sanityPath)
+
 proc calculateFluxFractions(raytraceSetup: FullRaytraceSetup,
-                            generatePlots = true, suffix = "", title = ""): seq[Axion] =
+                            generatePlots = true,
+                            suffix = "",
+                            title = "",
+                            sanityChecks = false): seq[Axion] =
   ## In the following we will go over a number of points in the sun, whose location and
   ## energy will be biased by the emission rate and whose track will be through the CAST
   ## experimental setup from 2018 at VT3
@@ -2948,7 +2982,8 @@ proc main(
   config = "", # hand a custom path to a config file
   configPath = "", # Hand a custom path to search in for a config file
   suffix = "", # The filename suffix to apply to the CSV file
-  title = "" # title for the axion image plot
+  title = "", # title for the axion image plot
+  sanity = false, ## If true, produces several sanity check plots
          ) =
   # check if the `config.toml` file exists, otherwise recreate from the default
 
@@ -2971,9 +3006,10 @@ proc main(
   if ignoreGasAbs:     flags.incl cfIgnoreGasAbs
   if ignoreConvProb:   flags.incl cfIgnoreConvProb
   if ignoreReflection: flags.incl cfIgnoreReflection
-  if xrayTest: flags.incl cfXrayTest
-  if magnet: flags.incl cfReadMagnetConfig
-  if detectorInstall: flags.incl cfReadDetInstallConfig
+  if xrayTest:         flags.incl cfXrayTest
+  if magnet:           flags.incl cfReadMagnetConfig
+  if detectorInstall:  flags.incl cfReadDetInstallConfig
+  if sanity:           flags.incl cfSanityChecks
   echo "Flags: ", flags
 
   if effectiveAreaScanMin != effectiveAreaScanMax:
@@ -2989,8 +3025,13 @@ proc main(
                                   skKind,
                                   tkKind,
                                   distanceSunEarth,
-                                  flags) # radiationCharacteristic = "axionRadiation::characteristic::sar"
-    discard fullSetup.calculateFluxFractions(generatePlots = not noPlots, suffix = suffix, title = title)
+                                  flags,
+                                  suffix)
+    discard fullSetup.calculateFluxFractions(
+      generatePlots = not
+      noPlots,
+      suffix = suffix,
+      title = title)
 
 
 when isMainModule:
