@@ -304,21 +304,25 @@ proc initCenterVectors(expSetup: ExperimentSetup): CenterVectors =
                            (expSetup.magnet.lengthColdbore +
                             expSetup.pipes.coldBoreToVT3.length).float)
   # exit of the pipe connecting VT3 to the telescope
-  let exitPipeVT3XRT = vec3(0.0, 0.0,
-                            (expSetup.magnet.lengthColdbore +
-                             expSetup.pipes.coldBoreToVT3.length +
-                             expSetup.pipes.vt3ToXRT.length).float)
+  let telEntrance = (expSetup.magnet.lengthColdbore +
+                     expSetup.pipes.coldBoreToVT3.length +
+                     expSetup.pipes.vt3ToXRT.length)
+  let exitPipeVT3XRT = vec3(0.0, 0.0, telEntrance.float)
   # position of an optional X-ray source for testing
   var xraySource: Vec3[float]
   var collimator: Vec3[float]
   if expSetup.testSource.kind == xsClassical:
+    # transform the distance from user given value to coordinate system
+    let sourcePos = expSetup.testSource.distance - telEntrance
+    if sourcePos < 0.mm:
+      echo "[WARNING]: The X-ray test source is inside the Magnet. Is that desired?"
     xraySource = vec3(expSetup.testSource.offAxisLeft.float,
                       expSetup.testSource.offAxisUp.float, #250.0
-                      - (expSetup.testSource.distance.float))
+                      - sourcePos.float)
     # position of the collimator of the X-ray test source
     collimator = vec3(expSetup.testSource.offAxisLeft.float,
                       expSetup.testSource.offAxisUp.float, #250.0
-                      - (expSetup.testSource.distance.float) + expSetup.testSource.lengthCol.float)
+                      - (sourcePos - expSetup.testSource.lengthCol).float)
   result = CenterVectors(entranceCB: entranceCB,
                          exitCB: exitCB,
                          exitPipeCBVT3: exitPipeCBVT3,
