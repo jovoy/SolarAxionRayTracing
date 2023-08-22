@@ -1,12 +1,15 @@
 # stdlib
 import std / [math, strutils, algorithm, random, sequtils, os, strformat, tables, options]
+from std / stats import mean
 
 import ../axionMass/axionMassforMagnet
 
 # nimble
 import seqmath except linspace
 import arraymancer except readCsv, linspace
-import numericalnim, glm, ggplotnim, weave, cligen, unchained, parsetoml
+import numericalnim, glm, weave, unchained
+import ggplotnim except almostEqual
+import parsetoml except `{}`
 
 ##################rayTracer###############################
 
@@ -104,22 +107,29 @@ type
     holeType: HoleType
     reflectivity: Reflectivity
 
+  XraySourceKind = enum
+    xsSun = "sun"           ## Uses the Sun as the X-ray emission source, instead of a normal source
+    xsClassical = "classical" ## Uses a classical X-ray source, i.e. a disk of some size
+
   ## Information about an X-ray source installed for testing somewhere in front of the telescope
   TestXraySource = object
     active: bool  ## Whether the source is active (i.e. do we sample from the Sun or the source?)
-    parallel: bool ##wether the X-rays from the source are mostly parallel or not
     energy: keV   ## The energy of the X-ray source
-    # distXraySource
-    distance: mm  ## Distance of the X-ray source from the readout
-    # radiusXraySource
-    radius: mm    ## Radius of the X-ray source
-    # offAxXraySourceUp
-    offAxisUp: mm
-    # offAxXraySourceLeft
-    offAxisLeft: mm
     # activityXraySource
     activity: GBq ## The activity in `GBq` of the source
-    lengthCol: mm ## Length of a collimator in front of the source
+    case kind: XraySourceKind
+    of xsClassical:
+      parallel: bool ##wether the X-rays from the source are mostly parallel or not
+      # distXraySource
+      distance: mm  ## Distance of the X-ray source from the readout
+      # radiusXraySource
+      radius: mm    ## Radius of the X-ray source
+      # offAxXraySourceUp
+      offAxisUp: mm
+      # offAxXraySourceLeft
+      offAxisLeft: mm
+      lengthCol: mm ## Length of a collimator in front of the source
+    of xsSun: discard
 
   ## An object that represents a single pipe
   Pipe = object
@@ -160,6 +170,7 @@ type
     testSource*: TestXraySource
     pipes*: Pipes
     detectorInstall*: DetectorInstallation
+    distanceSunEarth*: AstronomicalUnit ## Can be adjusted due to large variation on flux!
 
   DetectorSetupKind = enum
     dkInGrid2017 = "InGrid2017" # the setup as used in 2017
@@ -227,7 +238,8 @@ type
     cfIgnoreConvProb,    ## use to ignore axion conversion probability
     cfXrayTest,          ## if given reads the TestXraySource config values and uses it
     cfReadMagnetConfig,  ## if given uses configuration of magnet from config file
-    cfReadDetInstallConfig ## if given uses configuration of detector install. from config file
+    cfReadDetInstallConfig, ## if given uses configuration of detector install. from config file
+    cfSanityChecks       ## if given produce some sanity check plots
 
   FullRaytraceSetup = object
     outpath: string # path where to store output data
@@ -243,12 +255,10 @@ type
 
 ################################
 # VARIABLES from rayTracer.h
-## WARNING: cannot be `const` at the moment, due to Nim compiler bug with distinct types
 defUnit(GeV⁻¹)
-let
-  DistanceSunEarth = 1.5e14.mm # #ok
-  RadiusSun = 6.9e11.mm                    # #ok
-  NumberOfPointsSun = 1_000_000            #100000 for statistics   #37734 for CAST if BabyIaxo 10 mio  #26500960 corresponding to 100_000 axions at CAST, doesnt work
+const
+  RadiusSun = 696_342.km                   # SOHO mission 2003 & 2006
+  NumberOfPointsSun = 1_000_000
   # 1000000 axions that reach the coldbore then are reached after an operating time of 2.789 \times 10^{-5}\,\si{\second} for CAST
 
   RoomTemp = 293.15.K
@@ -273,15 +283,13 @@ let
 
 ################################
 
-randomize(299792458)
-
 proc initCenterVectors(expSetup: ExperimentSetup): CenterVectors =
   ## Initializes all the center vectors, that is the center position of specific objects
   ## part of the raytracing in the global coordinate system.
   # Position of center of the Sun
   let sun = vec3(0.0,
                  - (0.0 * 1.33e10),   ## first number number of millimeters at bore entrance
-                 - DistanceSunEarth.float)
+                 - expSetup.distanceSunEarth.to(mm).float)
   # position of the entrance of the magnet cold bore
   let entranceCB = vec3(0.0, -0.0, 0.0) #coldboreBlockedLength # was 0 anyway
   # position of beginning of magnetic field
@@ -297,18 +305,25 @@ proc initCenterVectors(expSetup: ExperimentSetup): CenterVectors =
                            (expSetup.magnet.lengthColdbore +
                             expSetup.pipes.coldBoreToVT3.length).float)
   # exit of the pipe connecting VT3 to the telescope
-  let exitPipeVT3XRT = vec3(0.0, 0.0,
-                            (expSetup.magnet.lengthColdbore +
-                             expSetup.pipes.coldBoreToVT3.length +
-                             expSetup.pipes.vt3ToXRT.length).float)
+  let telEntrance = (expSetup.magnet.lengthColdbore +
+                     expSetup.pipes.coldBoreToVT3.length +
+                     expSetup.pipes.vt3ToXRT.length)
+  let exitPipeVT3XRT = vec3(0.0, 0.0, telEntrance.float)
   # position of an optional X-ray source for testing
-  let xraySource = vec3(expSetup.testSource.offAxisLeft.float,
-                        expSetup.testSource.offAxisUp.float, #250.0
-                        - (expSetup.testSource.distance.float))
-  # position of the collimator of the X-ray test source
-  let collimator = vec3(expSetup.testSource.offAxisLeft.float,
-                        expSetup.testSource.offAxisUp.float, #250.0
-                        - (expSetup.testSource.distance.float) + expSetup.testSource.lengthCol.float)
+  var xraySource: Vec3[float]
+  var collimator: Vec3[float]
+  if expSetup.testSource.kind == xsClassical:
+    # transform the distance from user given value to coordinate system
+    let sourcePos = expSetup.testSource.distance - telEntrance
+    if sourcePos < 0.mm:
+      echo "[WARNING]: The X-ray test source is inside the Magnet. Is that desired?"
+    xraySource = vec3(expSetup.testSource.offAxisLeft.float,
+                      expSetup.testSource.offAxisUp.float, #250.0
+                      - sourcePos.float)
+    # position of the collimator of the X-ray test source
+    collimator = vec3(expSetup.testSource.offAxisLeft.float,
+                      expSetup.testSource.offAxisUp.float, #250.0
+                      - (sourcePos - expSetup.testSource.lengthCol).float)
   result = CenterVectors(entranceCB: entranceCB,
                          exitCB: exitCB,
                          exitPipeCBVT3: exitPipeCBVT3,
@@ -409,33 +424,34 @@ proc getFluxFraction(chipRegionstring: string): float64 =
 proc `-`[T: SomeUnit](x: T): T =
   result = -1.0 * x
 
-proc getRandomPointOnDisk(center: Vec3, radius: MilliMeter): Vec3 =
+proc getRandomPointOnDisk(center: Vec3, radius: MilliMeter, rnd: var Rand): Vec3 =
   ## This function gets a random point on a disk --> in this case this would
   ## be the exit of the coldbore ##
   var
     x = 0.0.mm
     y = 0.0.mm
-    r = radius * sqrt(rand(1.0))
-    angle = 360 * rand(1.0)
+    r = radius * sqrt(rnd.rand(1.0))
+    angle = 360 * rnd.rand(1.0)
   x = cos(degToRad(angle)) * r
   y = sin(degToRad(angle)) * r
   result = vec3(x.float, y.float, 0.0) + center
 
 
-proc getRandomPointFromSolarModel(center: Vec3, radius: MilliMeter,
-                                  fluxRadiusCDF: seq[float]): Vec3 =
+proc getRandomPointFromSolarModel(center: Vec3, radius: KiloMeter,
+                                  fluxRadiusCDF: seq[float],
+                                  rnd: var Rand): Vec3 =
   ## This function gives the coordinates of a random point in the sun, biased
   ## by the emissionrates (which depend on the radius and the energy) ##
   ##
   ## `fluxRadiusCDF` is the normalized (to 1.0) cumulative sum of the total flux per
   ## radius of all radii of the solar model.
   let
-    angle1 = 360 * rand(1.0)
-    angle2 = 180 * rand(1.0)
+    angle1 = 360 * rnd.rand(1.0)
+    angle2 = 180 * rnd.rand(1.0)
     ## random number from 0 to 1 corresponding to possible solar radii.
-    randEmRate = rand(1.0)
+    randEmRate = rnd.rand(1.0)
     rIdx = fluxRadiusCDF.lowerBound(randEmRate)
-    r = (0.0015 + (rIdx).float * 0.0005) * radius
+    r = (0.0015 + (rIdx).float * 0.0005) * radius.to(mm)
   let x = cos(degToRad(angle1)) * sin(degToRad(angle2)) * r
   let y = sin(degToRad(angle1)) * sin(degToRad(angle2)) * r
   let z = cos(degToRad(angle2)) * r
@@ -446,13 +462,14 @@ template genGetRandomFromSolar(name, arg, typ, retTyp, body: untyped): untyped =
   ## for an event at a given radius or a random emission rate, biased
   ## by the emission rates at that radius.
   ## This only works if the energies to from are evenly distributed
-  proc `name`(vectorInSun, center: Vec3, radius: MilliMeter,
+  proc `name`(vectorInSun, center: Vec3, radius: KiloMeter,
               arg: typ,
               diffFluxCDFs: seq[seq[float]],
+              rnd: var Rand,
               ): retTyp =
     var
       rad = (vectorInSun - center).length.mm
-      r = rad / radius # `UnitLess` radius
+      r = rad / radius # `UnitLess` radius (radius auto converted)
       iRad {.inject.}: int
       indexRad = (r - 0.0015) / 0.0005
     if indexRad - 0.5 > floor(indexRad):
@@ -461,7 +478,7 @@ template genGetRandomFromSolar(name, arg, typ, retTyp, body: untyped): untyped =
     # get the normalized (to 1) CDF for this radius
     let cdfEmRate = diffFluxCDFs[iRad]
     # sample an index based on this CDF
-    let idx {.inject.} = cdfEmRate.lowerBound(rand(1.0))
+    let idx {.inject.} = cdfEmRate.lowerBound(rnd.rand(1.0))
     body
 
 genGetRandomFromSolar(getRandomEnergyFromSolarModel,
@@ -854,6 +871,22 @@ proc lowerBound[T](t: Tensor[T], val: T): int =
     val)
   result = min(result, t.size - 1)
 
+proc calculateDf(xs, ys: seq[int], zs, yr, yr2: seq[float],
+                 width: int, offset, rSigma1, rSigma2: float): DataFrame =
+  result = seqsToDf({ "x" : xs,
+                      "y" : ys,
+                      "photon flux" : zs,
+                      "yr0": yr,
+                      "yr02": yr2})
+    .mutate(f{float: "x-position [mm]" ~ `x` * ChipXMax.float / width.float},
+            f{float: "y-position [mm]" ~ `y` * ChipYMax.float / width.float},
+            f{float: "xr" ~ sqrt(rSigma1 * rSigma1 - `yr0` * `yr0`) + offset},
+            f{float: "xrneg" ~ - sqrt(rSigma1 * rSigma1 - `yr0` * `yr0`) + offset},
+            f{float: "yr" ~ `yr0` + offset},
+            f{float: "xr2" ~ sqrt(rSigma2 * rSigma2 - `yr02` * `yr02`) + offset},
+            f{float: "xrneg2" ~ - sqrt(rSigma2 * rSigma2 - `yr02` * `yr02`) + offset},
+            f{float: "yr2" ~ `yr02` + offset})
+
 proc plotHeatmap(diagramtitle: string,
                  objectsToDraw: Tensor[float],
                  width: int,
@@ -861,7 +894,8 @@ proc plotHeatmap(diagramtitle: string,
                  rSigma1: float,
                  rSigma2: float,
                  outpath: string,
-                 suffix = "") =
+                 suffix = "",
+                 title = "") =
   ## this function draws a diagram out a given heatmap ##
   var
     xs = newSeq[int](width * width)
@@ -884,19 +918,7 @@ proc plotHeatmap(diagramtitle: string,
     yr2 = linspace(- rSigma2, rSigma2, xs.len)
     flux = zs.sum
   echo "The total flux arriving in the detector is: ", flux
-  var df = seqsToDf({ "x" : xs,
-                      "y" : ys,
-                      "photon flux" : zs,
-                      "yr0": yr,
-                      "yr02": yr2})
-    .mutate(f{float: "x-position [mm]" ~ `x` * ChipXMax.float / width.float},
-            f{float: "y-position [mm]" ~ `y` * ChipYMax.float / width.float},
-            f{float: "xr" ~ sqrt(rSigma1 * rSigma1 - `yr0` * `yr0`) + offset},
-            f{float: "xrneg" ~ - sqrt(rSigma1 * rSigma1 - `yr0` * `yr0`) + offset},
-            f{float: "yr" ~ `yr0` + offset},
-            f{float: "xr2" ~ sqrt(rSigma2 * rSigma2 - `yr02` * `yr02`) + offset},
-            f{float: "xrneg2" ~ - sqrt(rSigma2 * rSigma2 - `yr02` * `yr02`) + offset},
-            f{float: "yr2" ~ `yr02` + offset})
+  let df = calculateDf(xs, ys, zs, yr, yr2, width, offset, rSigma1, rSigma2)
   template makeMinMax(knd, ax: untyped): untyped =
     template `knd ax`(): untyped =
       `Gold ax knd` * width.float / ChipXMax.float
@@ -920,6 +942,8 @@ proc plotHeatmap(diagramtitle: string,
   ## Write the heatmap as a CSV file using the same name schema
   df.writeCsv(outpath / &"axion_image_{year}{suffix}.csv")
 
+  let title = if title.len > 0: title
+              else: &"Simulated X-ray signal distribution on the detector chip with a total flux of {flux:.3e} events after 3 months {suffix}"
   ggplot(df, aes("x-position [mm]", "y-position [mm]", fill = "photon flux")) +
     geom_raster() +
     scale_x_continuous() + scale_y_continuous() + scale_fill_continuous("photon flux") +
@@ -937,7 +961,7 @@ proc plotHeatmap(diagramtitle: string,
     #canvasColor(parseHex("8cc7d4")) +
     #theme_transparent() +
     margin(top = 2, left = 3, right = 6) +
-    ggtitle(&"Simulated X-ray signal distribution on the detector chip with a total flux of {flux:.3e} events after 3 months {suffix}") +
+    ggtitle(title) +
     ggsave(outpath / &"axion_image_{year}{suffix}.pdf", width = width, height = height)
 
   ggplot(df, aes("x-position [mm]", "y-position [mm]", fill = "photon flux")) +
@@ -994,6 +1018,11 @@ proc parseOutputPath(): string =
   ## parses the config.toml file containing the path to `output` directory for all plots & CSV files
   let config = parseToml.parseFile(ConfigFile)
   result = config["Resources"]["outputPath"].getStr
+
+proc parseSanityCheckPath(): string =
+  ## parses the config.toml file containing the path to `sanityCheck` directory for all sanity check plots
+  let config = parseToml.parseFile(ConfigFile)
+  result = config["Resources"]["sanityCheckPath"].getStr
 
 proc parseLlnlTelescopeFile(): string =
   ## parses the config.toml file containing the LLNL telescope efficiency filename
@@ -1059,19 +1088,32 @@ proc maybeParseTestXraySource(flags: set[ConfigFlags]): Option[TestXraySource] =
   ## we should use the experiment specific magnet.
   let cfg = parseToml.parseFile(ConfigFile)["TestXraySource"]
   if cfXrayTest in flags or cfg["useConfig"].getBool:
-    result = some(
-      TestXraySource(
-        active:      cfg["active"].getBool,
-        parallel:    cfg["parallel"].getBool,
-        energy:      cfg["energy"].getFloat.keV,
-        distance:    cfg["distance"].getFloat.mm,
-        radius:      cfg["radius"].getFloat.mm,
-        offAxisUp:   cfg["offAxisUp"].getFloat.mm,
-        offAxisLeft: cfg["offAxisLeft"].getFloat.mm,
-        activity:    cfg["activity"].getFloat.GBq,
-        lengthCol:   cfg["lengthCol"].getFloat.mm
+    let kind = parseEnum[XraySourceKind](cfg["sourceKind"].getStr)
+    case kind
+    of xsClassical:
+      result = some(
+        TestXraySource(
+          active:      cfg["active"].getBool,
+          kind:        kind,
+          parallel:    cfg["parallel"].getBool,
+          energy:      cfg["energy"].getFloat.keV,
+          distance:    cfg["distance"].getFloat.mm,
+          radius:      cfg["radius"].getFloat.mm,
+          offAxisUp:   cfg["offAxisUp"].getFloat.mm,
+          offAxisLeft: cfg["offAxisLeft"].getFloat.mm,
+          activity:    cfg["activity"].getFloat.GBq,
+          lengthCol:   cfg["lengthCol"].getFloat.mm
+        )
       )
-    )
+    of xsSun:
+      result = some(
+        TestXraySource(
+          active:      cfg["active"].getBool,
+          kind:        kind,
+          energy:      cfg["energy"].getFloat.keV,
+          activity:    cfg["activity"].getFloat.GBq,
+        )
+      )
   else:
     result = none[TestXraySource]() # default, but let's be explicit
 
@@ -1164,7 +1206,7 @@ proc initReflectivity(optics: TelescopeKind): Reflectivity =
   of tkLLNL:
     result = Reflectivity(
       kind: rkMultiCoating,
-      layers: @[2, 2+3, 2+3+4, 2+3+4+5] # layers of LLNL telescope
+      layers: @[3 - 1, 3+4 - 1, 3+4+4 - 1, 3+4+4+3 - 1] # layers of LLNL telescope
     )
     # read reflectivities from H5 file
     let resources = parseResourcesPath()
@@ -1356,6 +1398,7 @@ proc initTestXraySource(setup: ExperimentSetupKind, flags: set[ConfigFlags]): Te
   of esCAST:
     result = TestXraySource(
       active: active,
+      kind: xsClassical,
       parallel: true,
       distance: 100.0.mm, #distance between the entrance of the magnet an a test Xray source
       radius: 10.0.mm,
@@ -1368,6 +1411,7 @@ proc initTestXraySource(setup: ExperimentSetupKind, flags: set[ConfigFlags]): Te
   of esBabyIAXO:
     result = TestXraySource(
       active: active,
+      kind: xsClassical,
       parallel: true,
       distance: 2000.0.mm, #88700.0.mm, #distance between the entrance of the magnet an a test Xray source
       radius: 350.0.mm,
@@ -1385,8 +1429,12 @@ proc initDetectorInstallation(optics: TelescopeKind,
     return detOpt.get
   case optics
   of tkLLNL:
+    ## NOTE: The beamline behind the LLNL telescope is designed such that the focal point is in
+    ## the *center of the chamber*. By default we compute the axion image there. However, realistically
+    ## the effective image seen by the detector is slightly before, due to the mean position of
+    ## photons converting in the gas.
     result = DetectorInstallation(
-      distanceDetectorXRT: 1485.mm, # for detector center llnl XRT https://iopscience.iop.org/article/10.1088/1475-7516/2015/12/008/pdf
+      distanceDetectorXRT: 1500.mm, # at focal point of LLNL XRT https://iopscience.iop.org/article/10.1088/1475-7516/2015/12/008/pdf
       distanceWindowFocalPlane: 0.0.mm, # #no change, because don't know
       lateralShift: 0.0.mm, #lateral ofset of the detector in repect to the beamline
       transversalShift: 0.0.mm #transversal ofset of the detector in repect to the beamline #0.0.mm #
@@ -1411,6 +1459,7 @@ proc initDetectorInstallation(optics: TelescopeKind,
 proc newExperimentSetup*(setup: ExperimentSetupKind,
                          stage: StageKind,
                          optics: TelescopeKind,
+                         distanceSunEarth: AstronomicalUnit,
                          flags: set[ConfigFlags]): ExperimentSetup =
   result = ExperimentSetup(
     kind: setup,
@@ -1419,7 +1468,8 @@ proc newExperimentSetup*(setup: ExperimentSetupKind,
     telescope: optics.initTelescope(),
     testSource: setup.initTestXraySource(flags),
     pipes: optics.initPipes(),
-    detectorInstall: optics.initDetectorInstallation(flags)
+    detectorInstall: optics.initDetectorInstallation(flags),
+    distanceSunEarth: distanceSunEarth
   )
 
 defUnit(MilliMeter²)
@@ -1591,11 +1641,11 @@ proc computeMagnetTransmission(
   ## in a gas, is more complicated than this!
   case expSetup.stage
   of skVacuum:
-    let probConversionMagnet = if cfIgnoreConvProb notin flags:
-                                 conversionProb(expSetup.magnet.B, g_aγ, pathCB)
-                               else:
-                                 1.0
-    result = cos(ya) * probConversionMagnet
+    if cfIgnoreConvProb notin flags:
+      let probConversionMagnet = conversionProb(expSetup.magnet.B, g_aγ, pathCB)
+      result = cos(ya) * probConversionMagnet
+    else:
+      result = 1.0
   of skGas:
     let
       pGas = expSetup.magnet.pGasRoom / RoomTemp * expSetup.magnet.tGas
@@ -1642,8 +1692,8 @@ proc lineIntersectsOpaqueTelescopeStructures(
   case expSetup.telescope.kind
   of tkLLNL:
     ## there is a 2mm wide graphite block between each glass mirror, to seperate them
-    ## in the middle of the X-ray telescope. Return if hit
-    if pointEntranceXRT[1] <= 1.0 and pointEntranceXRT[1] >= -1.0: return
+    ## in the middle of the X-ray telescope. Return `true` if hit.
+    result = pointEntranceXRT[1] <= 1.0 and pointEntranceXRT[1] >= -1.0
   of tkAbrixas:
     var factorSpider = (-35.0 - pointExitCB[2]) / vectorXRT[2]
     var pointEntranceSpider = pointExitCB + factorSpider * vectorXRT
@@ -1655,7 +1705,7 @@ proc lineIntersectsOpaqueTelescopeStructures(
     else:
       # iterate all strips of the spider structure
       for i in 0 .. 6:
-        # spider strips 
+        # spider strips
         if ((phiFlat >= (-3.75 + 60.0 * i.float) and phiFlat <= (3.75 + 60.0 * i.float))) or
            ((phiFlatSpider >= (-3.75 + 60.0 * i.float) and phiFlatSpider <= (3.75 + 60.0 * i.float))):
           result = true
@@ -1733,44 +1783,22 @@ proc lineHitsNickel(expSetup: ExperimentSetup, α1: Degree, r1: MilliMeter,
       echo pointLowerMirror, " ", pointMirror1, " ", pointMirror2, " ", angle1, " ", angle2, " ", h
     result = tanα > compVal
 
-proc traceAxion(res: var Axion,
-                centerVecs: CenterVectors,
-                expSetup: ExperimentSetup,
-                detectorSetup: DetectorSetup,
-                fluxRadiusCDF: seq[float],
-                diffFluxCDFs: seq[seq[float]],
-                energies: seq[keV],
-                flags: set[ConfigFlags]
-               ) =
-  ## Check if we run with an X-ray source or compute from the Sun
-  let testXray = expSetup.testSource.active
-
-  var rayOrigin: Vec3[float] # Starting point of the ray (typically axion somewhere in the Sun)
-  var pointExitCBMagneticField: Vec3[float] # position at exit of magnet (entry from viewpoint of incoming ray)
-  var energyAx: keV # energy of the axion
-  if not testXray:
-    # Get a random point in the sun, biased by the emission rate, which is higher
-    # at smalller radii, so this will give more points in the center of the sun
-    rayOrigin = getRandomPointFromSolarModel(centerVecs.sun, RadiusSun, fluxRadiusCDF)
-    # Get a random point at the end of the coldbore of the magnet to take all
-    # axions into account that make it to this point no matter where they enter the magnet
-    pointExitCBMagneticField = getRandomPointOnDisk(
-      centerVecs.exitCBMagneticField,
-      expSetup.magnet.radiusCB
-    )
-    # Get a random energy for the axion biased by the emission rate ##
-    energyAx = getRandomEnergyFromSolarModel(
-      rayOrigin, centerVecs.sun, RadiusSun, energies, diffFluxCDFs
-    )
+proc propagateTestSource(rnd: var Rand, rayOrigin: Vec3[float], expSetup: ExperimentSetup, centerVecs: CenterVectors): Vec3[float] =
+  ## XXX: CLEAN THIS UP! likely just remove dead code & create procs for the "complicated parts" that
+  ## yield a single value for `pointExitCBMagneticField`!
+  ## i.e. all this here
+  if expSetup.testSource.parallel:
+    result[0] = rayOrigin[0] + rnd.rand(0.5) - 0.25 #for parallel light
+    result[1] = rayOrigin[1] + rnd.rand(0.5) - 0.25 #for parallel light
+    result[2] = expSetup.magnet.lengthB.float
   else:
-    ## XXX: CLEAN THIS UP! likely just remove dead code & create procs for the "complicated parts" that
-    ## yield a single value for `pointExitCBMagneticField`!
-    rayOrigin = getRandomPointOnDisk(
-      centerVecs.xraySource, expSetup.testSource.radius
+    result = getRandomPointOnDisk(
+      centerVecs.exitCBMagneticField,
+      expSetup.magnet.radiusCB,
+      rnd
     )
-    energyAx = expSetup.testSource.energy
 
-    ## i.e. all this here
+  when false: ## DEAD CODE
     var centerSpot = vec3(0.0)
     if abs(expSetup.testSource.offAxisUp.float) > 50.0:
       centerSpot[0] = expSetup.testSource.offAxisLeft.float
@@ -1786,34 +1814,74 @@ proc traceAxion(res: var Axion,
     else:
       ## XXX: check if this branch should be triggered sometimes. What hole type does this correspond to?
       radiusSpot *= (expSetup.telescope.numberOfHoles.float + 3.0)
-    if expSetup.testSource.parallel:
-      pointExitCBMagneticField[0] = rayOrigin[0] + rand(0.5) - 0.25 #for parallel light
-      pointExitCBMagneticField[1] = rayOrigin[1] + rand(0.5) - 0.25 #for parallel light
-      pointExitCBMagneticField[2] = expSetup.magnet.lengthB.float
-    else:
-      pointExitCBMagneticField = getRandomPointOnDisk(
-        centerVecs.exitCBMagneticField,
-        expSetup.magnet.radiusCB
-      )
 
-    #pointExitCBMagneticField = getRandomPointOnDisk(centerSpot, (radiusSpot).mm) # for more statistics with hole through optics
-    if not lineIntersectsCircle(rayOrigin, pointExitCBMagneticField, centerVecs.collimator, expSetup.testSource.radius):
-      return
-
+    #pointExitCBMagneticField = getRandomPointOnDisk(centerSpot, (radiusSpot).mm, rnd) # for more statistics with hole through optics
     var xraysThroughHole = PI * radiusSpot * radiusSpot /
       (4.0 * PI * (- centerVecs.xraySource[2] + centerVecs.exitPipeVT3XRT[2]).mm *
       (- centerVecs.xraySource[2] + centerVecs.exitPipeVT3XRT[2]).mm) * expSetup.testSource.activity
     var testTime = 1_000_000 / (xraysThroughHole * 3600.0.s * 24.0)
     #echo "Days Testing ", testTime, " with a ", expSetup.testSource.activity, " source"
+
+
+proc traceAxion(res: var Axion,
+                centerVecs: CenterVectors,
+                expSetup: ExperimentSetup,
+                detectorSetup: DetectorSetup,
+                fluxRadiusCDF: seq[float],
+                diffFluxCDFs: seq[seq[float]],
+                energies: seq[keV],
+                rnd: var Rand,
+                flags: set[ConfigFlags]
+               ) =
+  ## Check if we run with an X-ray source or compute from the Sun
+  let testXray = expSetup.testSource.active
+
+  var rayOrigin: Vec3[float] # Starting point of the ray (typically axion somewhere in the Sun)
+  var pointExitCBMagneticField: Vec3[float] # position at exit of magnet (entry from viewpoint of incoming ray)
+  var energyAx: keV # energy of the axion
+  if not testXray:
+    # Get a random point in the sun, biased by the emission rate, which is higher
+    # at smalller radii, so this will give more points in the center of the sun
+    rayOrigin = getRandomPointFromSolarModel(centerVecs.sun, RadiusSun, fluxRadiusCDF, rnd)
+    # Get a random point at the end of the coldbore of the magnet to take all
+    # axions into account that make it to this point no matter where they enter the magnet
+    pointExitCBMagneticField = getRandomPointOnDisk(
+      centerVecs.exitCBMagneticField,
+      expSetup.magnet.radiusCB,
+      rnd
+    )
+    # Get a random energy for the axion biased by the emission rate ##
+    energyAx = getRandomEnergyFromSolarModel(
+      rayOrigin, centerVecs.sun, RadiusSun, energies, diffFluxCDFs, rnd
+    )
+  else:
+    energyAx = expSetup.testSource.energy
+    case expSetup.testSource.kind
+    of xsClassical:
+      rayOrigin = getRandomPointOnDisk(
+        centerVecs.xraySource, expSetup.testSource.radius, rnd
+      )
+      pointExitCBMagneticField = rnd.propagateTestSource(rayOrigin, expSetup, centerVecs)
+      #if not lineIntersectsCircle(rayOrigin, pointExitCBMagneticField, centerVecs.collimator, expSetup.testSource.radius):
+      #  return
+    of xsSun:
+      ## Same branch as `not testXray` above aside from energy!
+      rayOrigin = getRandomPointFromSolarModel(centerVecs.sun, RadiusSun, fluxRadiusCDF, rnd)
+      pointExitCBMagneticField = getRandomPointOnDisk(
+        centerVecs.exitCBMagneticField,
+        expSetup.magnet.radiusCB,
+        rnd
+      )
+
   #let emissionRateAx = getRandomEmissionRateFromSolarModel(
-  #  rayOrigin, centerVecs.centerSun, RadiusSun, emRates, emRateCDFs
+  #  rayOrigin, centerVecs.centerSun, RadiusSun, emRates, emRateCDFs, rnd
   #)
   ## Throw away all the axions, that don't make it through the piping system and therefore exit the system at some point ##
-  
+
   let intersectsEntranceCB = lineIntersectsCircle(rayOrigin,
       pointExitCBMagneticField, centerVecs.entranceCB, expSetup.magnet.radiusCB)
   var intersectsCB = false
-  var rayOriginInSun = rayOrigin - centerVecs.sun #
+  #var rayOriginInSun = rayOrigin - centerVecs.sun #
   #echo energyAx.float, " ", sqrt(rayOriginInSun[0].float * rayOriginInSun[0].float + rayOriginInSun[1].float * rayOriginInSun[1].float + rayOriginInSun[2].float * rayOriginInSun[2].float) / 6.9e11, " ", energyAx.float  * energyAx.float * (rayOriginInSun[0].float * rayOriginInSun[0].float + rayOriginInSun[1].float * rayOriginInSun[1].float + rayOriginInSun[2].float * rayOriginInSun[2].float) / 6.9e11 / 6.9e11
   res.emratesPre = 1.0 #* energyAx.float * energyAx.float * (rayOriginInSun[0].float * rayOriginInSun[0].float + rayOriginInSun[1].float * rayOriginInSun[1].float + rayOriginInSun[2].float * rayOriginInSun[2].float) / 6.9e11 / 6.9e11
   res.energiesPre = energyAx
@@ -1872,7 +1940,7 @@ proc traceAxion(res: var Axion,
     (pointExitPipeCBVT3 - pointExitCB)
 
   var vectorBeforeXRT = pointExitPipeVT3XRT - pointExitCB
-  
+
   #echo centerVecs.collimator, " ", pointExitPipeVT3XRT
   ###################from the CB (coldbore(pipe in Magnet)) to the XRT (XrayTelescope)#######################
   var vectorXRT = vectorBeforeXRT
@@ -2122,12 +2190,12 @@ proc traceAxion(res: var Axion,
   )
   res.yawAngles = ya
 
-  var weight = 1.0
+  var weight = 0.0
   (res.reflect, weight) = expSetup.computeReflectivity(
     energyAx, hitLayer, res.transmissionMagnet, p, ya, alpha1, alpha2, flags
   )
 
-  if testXray and minDist > 100.0.mm:
+  if false: # testXray and minDist > 100.0.mm:
     n = (distDet - pointExitCB[2].mm) / (pointEntranceXRT - pointExitCB)[2].mm
     pointDetectorWindow = pointExitCB + n.float * (pointEntranceXRT - pointExitCB)
   pointDetectorWindow[0] -= expSetup.detectorInstall.lateralShift.float
@@ -2141,7 +2209,6 @@ proc traceAxion(res: var Axion,
       pointDetectorWindow[1].mm * pointDetectorWindow[1].mm
       ) > detectorSetup.radiusWindow:
       return
-
   else:
     if abs(pointDetectorWindow[0].mm) > ChipCenterX or abs(pointDetectorWindow[1].mm) > ChipCenterY:
       return
@@ -2231,22 +2298,26 @@ proc traceAxionWrapper(axBuf: ptr UncheckedArray[Axion],
                        flags: set[ConfigFlags]
                        ) =
   echo "Starting weave!"
-  parallelFor iSun in 0 ..< bufLen:
-    captures: { axBuf, centerVecs, expSetup, fluxRadiusCDF, diffFluxCDFs,
-                detectorSetup,
-                energies,
-                flags }
+  #parallelFor iSun in 0 ..< bufLen:
+  #  captures: { axBuf, centerVecs, expSetup, fluxRadiusCDF, diffFluxCDFs,
+  #              detectorSetup,
+  #              energies,
+  #              flags }
+  var rnd = initRand(299792458)
+  for iSun in 0 ..< bufLen:
     axBuf[iSun].traceAxion(centerVecs,
                            expSetup,
                            detectorSetup,
                            fluxRadiusCDF, diffFluxCDFs,
                            energies,
+                           rnd,
                            flags)
 
 proc generateResultPlots(axions: seq[Axion],
                          windowYear: WindowYearKind,
                          outpath: string,
-                         suffix = ""
+                         suffix = "",
+                         title = ""
                          ) =
   ## Creates all plots we want based on the raytracing result
   let axionsPass = axions.filterIt(it.passed)
@@ -2323,57 +2394,63 @@ proc generateResultPlots(axions: seq[Axion],
     ylab("The flux before the experiment") +
     ggsave(outpath / &"TelProb.pdf")]#
 
-  #[let dfTransProb = seqsToDf({ "Axion energy [keV]": energiesAxAll.mapIt(it.float),
-                               "Transmission Probability": transProbDetector,
-                               "type": kinds.mapIt($it),
-                               "Axion energy window[keV]":energiesAxWindow.mapIt(it.float),
-                               "Transmission Probability window": transprobWindow,
-                               "type window":kindsWindow.mapIt($it),
-                               "Flux after experiment": weightsAll })
-
-  ggplot(dfTransProb.arrange("Axion energy [keV]")) +
-    geom_line(aes("Axion energy [keV]", "Transmission Probability",
-             color = "type")) +
-    geom_line(aes("Axion energy [keV]", "Transmission Probability window",
-             color = "type window")) +
-    geom_histogram(aes("Axion energy [keV]", weight = "Flux after experiment"), binWidth = 0.01) +
-    ggtitle("The transmission probability for different detector parts") +
-    ggsave(outpath / &"TransProb_{windowYear}.pdf")
-
-  let dfTransProbAr = seqsToDf({ "Axion energy [keV]": energiesAx.mapIt(it.float),
-                                 "Transmission Probability": transProbArgon })
-  ggplot(dfTransProbAr.arrange("Axion energy [keV]"),
-         aes("Axion energy [keV]", "Transmission Probability")) +
-    geom_line() +
-    ggtitle("The transmission probability for the detector gas") +
-    ggsave(outpath / &"TransProbAr_{windowYear}.pdf")
+  # let dfTransProb = seqsToDf({ "Axion energy [keV]": energiesAxAll.mapIt(it.float),
+  #                              "Transmission Probability": transProbDetector,
+  #                              "type": kinds.mapIt($it),
+  #                              "Axion energy window[keV]":energiesAxWindow.mapIt(it.float),
+  #                              "Transmission Probability window": transprobWindow,
+  #                              "type window":kindsWindow.mapIt($it),
+  #                              "Flux after experiment": weightsAll })
+  #
+  # ggplot(dfTransProb.arrange("Axion energy [keV]")) +
+  #   geom_line(aes("Axion energy [keV]", "Transmission Probability",
+  #            color = "type")) +
+  #   geom_line(aes("Axion energy [keV]", "Transmission Probability window",
+  #            color = "type window")) +
+  #   geom_histogram(aes("Axion energy [keV]", weight = "Flux after experiment"), binWidth = 0.01) +
+  #   ggtitle("The transmission probability for different detector parts") +
+  #   ggsave(outpath / &"TransProb_{windowYear}.pdf")
+  #
+  # let dfTransProbAr = seqsToDf({ "Axion energy [keV]": energiesAx.mapIt(it.float),
+  #                                "Transmission Probability": transProbArgon })
+  # ggplot(dfTransProbAr.arrange("Axion energy [keV]"),
+  #        aes("Axion energy [keV]", "Transmission Probability")) +
+  #   geom_line() +
+  #   ggtitle("The transmission probability for the detector gas") +
+  #   ggsave(outpath / &"TransProbAr_{windowYear}.pdf")
 
   let dfDet = seqsToDf({ "Deviation [mm]": deviationDet,
                          "Energies": energiesAx.mapIt(it.float),
                          "Shell": shellNumber })
     .filter(f{Value: isNull(df["Shell"][idx]).toBool == false})
 
-  ggplot(dfDet, aes("Deviation [mm]")) +
-    geom_histogram(binWidth = 0.001) +
-    ggtitle("Deviation of X-rays detector entrance to readout") +
-    ggsave(outpath / &"deviationDet_{windowYear}.pdf")
+  #ggplot(dfDet, aes("Deviation [mm]")) +
+  #  geom_histogram(binWidth = 0.001) +
+  #  ggtitle("Deviation of X-rays detector entrance to readout") +
+  #  ggsave(outpath / &"deviationDet_{windowYear}.pdf")
+  #
+  #ggplot(dfDet, aes("Deviation [mm]", fill = factor("Shell"))) +
+  #  geom_histogram(binWidth = 0.001) +
+  #  ggtitle("Deviation of X-rays - detector entrance to readout") +
+  #  ggsave(outpath / &"deviationDet_stacked_{windowYear}.pdf")
+  #
+  #ggplot(dfDet, aes("Energies", fill = factor("Shell"))) +
+  #  ggridges("Shell", overlap = 1.8) +
+  #  geom_histogram(binWidth = 0.1, position = "identity") +
+  #  ggtitle("X-ray energy distributions at detector") +
+  #  ggsave(outpath / &"energies_by_shell_{windowYear}.pdf", height = 600)
+  #
+  #ggplot(dfDet, aes("Deviation [mm]", fill = factor("Shell"))) +
+  #  ggridges("Shell", overlap = 1.8) +
+  #  geom_histogram(binWidth = 0.001, position = "identity") +
+  #  ggtitle("Deviation of X-rays - detector entrance to readout") +
+  #  ggsave(outpath / &"deviationDet_ridges_{windowYear}.pdf", height = 600)
 
-  ggplot(dfDet, aes("Deviation [mm]", fill = factor("Shell"))) +
-    geom_histogram(binWidth = 0.001) +
-    ggtitle("Deviation of X-rays - detector entrance to readout") +
-    ggsave(outpath / &"deviationDet_stacked_{windowYear}.pdf")
-
-  ggplot(dfDet, aes("Energies", fill = factor("Shell"))) +
-    ggridges("Shell", overlap = 1.8) +
-    geom_histogram(binWidth = 0.1, position = "identity") +
-    ggtitle("X-ray energy distributions at detector") +
-    ggsave(outpath / &"energies_by_shell_{windowYear}.pdf", height = 600)
-
-  ggplot(dfDet, aes("Deviation [mm]", fill = factor("Shell"))) +
-    ggridges("Shell", overlap = 1.8) +
-    geom_histogram(binWidth = 0.001, position = "identity") +
-    ggtitle("Deviation of X-rays - detector entrance to readout") +
-    ggsave(outpath / &"deviationDet_ridges_{windowYear}.pdf", height = 600)]#
+  ggplot(dfDet, aes("Shell")) +
+    geom_bar() +
+    scale_x_discrete() +
+    ggtitle("Distribution of number of times each shell hit in the telescope") +
+    ggsave(outpath / &"shells_hit_{windowYear}{suffix}.pdf")
 
 
   let dfRad = seqsToDf({"Radial component [mm]": pointdataR,
@@ -2386,7 +2463,7 @@ proc generateResultPlots(axions: seq[Axion],
     ggplot(dfRad, aes("Radial component [mm]", weight = "Transmission probability")) +
       geom_histogram(binWidth = 0.001) +
       ggtitle("Radial distribution of the axions") +
-      ggsave(outpath / &"radialDistribution_{windowYear}.pdf")
+      ggsave(outpath / &"radialDistribution_{windowYear}{suffix}.pdf")
 
   when false:
     let dfFluxE = seqsToDf({ "Axion energy [keV]": energiesAx.mapIt(it.float),
@@ -2632,18 +2709,75 @@ proc generateResultPlots(axions: seq[Axion],
                                      pointdataX, pointdataY, weights, heatmaptable2.max) # if change number of rows: has to be in the maxVal as well
  # echo "Probability of it originating from an axion if a photon hits at x = 5,3mm and y = 8,4mm (in this model):"
  # echo (heatmaptable3[53][84]) * 100.0  #echo heatmaptable3[x][y]
-  plotHeatmap("Axion Model Fluxfraction", heatmaptable2, 256, $windowYear, rSigma1W, rSigma2W, outpath, suffix) #rSigma1, rSigma2)
+  plotHeatmap("Axion Model Fluxfraction", heatmaptable2, 256, $windowYear, rSigma1W, rSigma2W, outpath, suffix, title) #rSigma1, rSigma2)
+
+proc sanityCheckSampling(setup: FullRaytraceSetup, radii: seq[float],
+                         emRates: seq[seq[float]],
+                         fluxesDf: DataFrame,
+                         suffix, outpath: string) =
+  var es = newSeq[float]()
+  var ems = newSeq[float]()
+  var rs = newSeq[float]()
+  var ts = newSeq[float]()
+  var ps = newSeq[float]()
+  var rnd = initRand(123)
+
+  for i in 0 ..< 100_000:
+    let pos = getRandomPointFromSolarModel(setup.centerVecs.sun, RadiusSun, setup.fluxRadiusCDF, rnd)
+    let r = (pos - setup.centerVecs.sun).length()
+    let energyAx = getRandomEnergyFromSolarModel(
+      pos, setup.centerVecs.sun, RadiusSun, setup.energies, setup.diffFluxCDFs, rnd
+    )
+    let em = getRandomEmissionRateFromSolarModel(
+      pos, setup.centerVecs.sun, RadiusSun, emrates, setup.diffFluxCDFs, rnd
+    )
+    ts.add arccos(pos[2] / r)
+    ps.add arctan(pos[1] / pos[0])
+    es.add energyAx.float
+    ems.add em
+    rs.add r.mm.to(km) / RadiusSun
+
+  let df = seqsToDf(es, ems, rs)
+  ggplot(df, aes("es")) +
+    geom_histogram(bins = 500, density = true) +
+    geom_density(normalize = true, color = "orange") +
+    xlab("Energy [keV]") + ggtitle("Sampled energies") +
+    ggsave(outpath / &"sampled_energy{suffix}.pdf")
+  ggplot(df, aes("rs")) +
+    geom_histogram(bins = 300, density = true) +
+    geom_density(normalize = true, color = "orange") +
+    xlab("Radii [fraction solar radius]") +
+    ggtitle("Sampled radii as fraction of solar radius") +
+    ggsave(outpath / &"sampled_radii{suffix}.pdf")
+
+  ggplot(fluxesDf, aes("Energy", "Radius", fill = "Flux")) +
+    geom_raster() +
+    scale_fill_continuous(scale = (0.0, percentile(fluxesDf["Flux", float], 99))) +
+    ggtitle("Flux by energy and fraction of solar radius") +
+    ggsave(outpath / &"flux_by_energy_vs_radius{suffix}.pdf")
+
+  let dfCdf = toDf({"Radius" : radii, "FluxCDF": setup.fluxRadiusCDF})
+  ggplot(dfCdf, aes("Radius", "FluxCDF")) +
+    geom_line() +
+    ggsave(outpath / &"radius_vs_fluxRadiusCDF{suffix}.pdf")
+
+  #ggplot(df, aes("ems")) + geom_histogram(bins = 500) + ggsave("/tmp/ems.pdf")
+  #ggplot(df, aes("ts")) + geom_histogram() + ggsave("/tmp/ts.pdf")
+  #ggplot(df, aes("ps")) + geom_histogram() + ggsave("/tmp/ps.pdf")
 
 proc initFullSetup(setup: ExperimentSetupKind,
                    detectorSetup: DetectorSetupKind,
                    stage: StageKind,
                    telescope: TelescopeKind,
-                   flags: set[ConfigFlags]): FullRaytraceSetup =
-  let expSetup = newExperimentSetup(setup, stage, telescope, flags)
+                   distanceSunEarth: AstronomicalUnit,
+                   flags: set[ConfigFlags],
+                   suffix = ""): FullRaytraceSetup =
+  let expSetup = newExperimentSetup(setup, stage, telescope, distanceSunEarth, flags)
 
   ## TODO: make the code use tensor for the emission rates!
   let resources = parseResourcesPath()
   let outpath = parseOutputPath()
+  let sanityPath = parseSanityCheckPath()
   var emRatesDf = readCsv(resources / parseSolarModelFile())
 
   # get all radii and energies from DF so that we don't need to compute them manually (risking to
@@ -2663,10 +2797,13 @@ proc initFullSetup(setup: ExperimentSetupKind,
   var emRates = newSeq[seq[float]]()
   ## group the "solar model" DF by the radius & append the emission rates for all energies
   ## to the `emRates`
+  var k = 0
   for tup, subDf in groups(emRatesDf.group_by("Radius")):
+    let radius = tup[0][1].toFloat
     doAssert subDf["Energy [keV]", float].toSeq1D.mapIt(it.keV) == energies
+    doAssert radius == radii[k], "Input DF not sorted correctly!"
     emRates.add subDf["emRates", float].toSeq1D
-
+    inc k
   var
     fluxRadiusCumSum: seq[float] = newSeq[float](radii.len)
     diffFluxCDFs: seq[seq[float]] = newSeq[seq[float]](radii.len)
@@ -2676,6 +2813,8 @@ proc initFullSetup(setup: ExperimentSetupKind,
     let integral = x[^1]
     x.mapIt( it / integral )
 
+
+  var fluxesDf = newDataFrame()
   for iRad, radius in radii:
     # emRates is seq of radii of energies
     let emRate = emRates[iRad]
@@ -2686,53 +2825,13 @@ proc initFullSetup(setup: ExperimentSetupKind,
       diffFlux[iEnergy] = emRate[iEnergy] * (energy.float*energy.float) * radius*radius
       diffSum += diffFlux[iEnergy]
       radiusCumSum[iEnergy] = diffSum
+    fluxesDf.add toDf({"Energy" : energies.mapIt(it.float), "Flux" : diffFlux, "Radius" : radius})
 
-    when false:
-      # sanity checks for calc of differential flux & emission rate
-      let df = toDf({ "diffFlux" : diffFlux, "energy" : energies.mapIt(it.float),
-                      "emRate" : emRates[iRad] })
-      ggplot(df, aes("energy", "diffFlux")) +
-        geom_line() +
-        scale_y_continuous() +
-        ggsave("/tmp/diff_flux_vs_energy.pdf")
-      ggplot(df, aes("energy", "emRate")) +
-        geom_line() +
-        scale_y_continuous() +
-        ggsave("/tmp/emRate_vs_energy.pdf")
     diffRadiusSum += diffSum
     fluxRadiusCumSum[iRad] = diffRadiusSum
     diffFluxCDFs[iRad] = radiusCumSum.toCdf()
+
   let fluxRadiusCDF = fluxRadiusCumSum.toCdf()
-
-  ## sample from random point and plot
-  when false: # this is a sort of sanity check to check the sampling of 100_000 elements
-    var es = newSeq[float]()
-    var ems = newSeq[float]()
-    var rs = newSeq[float]()
-    var ts = newSeq[float]()
-    var ps = newSeq[float]()
-
-    for i in 0 ..< 100_000:
-      let pos = getRandomPointFromSolarModel(centerSun, RadiusSun, emratesRadiusCumSum)
-      let r = (pos - centerSun).length()
-      let energyAx = getRandomEnergyFromSolarModel(
-        pos, centerSun, RadiusSun, energies, emrates, diffFluxCDFs, "energy"
-      )
-      let em = getRandomEnergyFromSolarModel(
-        pos, centerSun, RadiusSun, energies, emrates, diffFluxCDFs, "emissionRate"
-      )
-      ts.add arccos(pos[2] / r)
-      ps.add arctan(pos[1] / pos[0])
-      es.add energyAx.float
-      ems.add em
-      rs.add r
-
-    let df = seqsToDf(es, ems, rs)
-    ggplot(df, aes("es")) + geom_histogram(bins = 500) + ggsave("/tmp/es.pdf")
-    ggplot(df, aes("rs")) + geom_histogram(bins = 300) + ggsave("/tmp/rs.pdf")
-    ggplot(df, aes("ems")) + geom_histogram(bins = 500) + ggsave("/tmp/ems.pdf")
-    ggplot(df, aes("ts")) + geom_histogram() + ggsave("/tmp/ts.pdf")
-    ggplot(df, aes("ps")) + geom_histogram() + ggsave("/tmp/ps.pdf")
 
   ################################################################################
   #############################Detector Window####################################
@@ -2752,15 +2851,22 @@ proc initFullSetup(setup: ExperimentSetupKind,
     flags: flags
   )
 
+  ## sample from random point and plot
+  if cfSanityChecks in flags:
+    result.sanityCheckSampling(radii, emrates, fluxesDf, suffix, sanityPath)
+
 proc calculateFluxFractions(raytraceSetup: FullRaytraceSetup,
-                            generatePlots = true, suffix = ""): seq[Axion] =
+                            generatePlots = true,
+                            suffix = "",
+                            title = "",
+                            sanityChecks = false): seq[Axion] =
   ## In the following we will go over a number of points in the sun, whose location and
   ## energy will be biased by the emission rate and whose track will be through the CAST
   ## experimental setup from 2018 at VT3
   var axions = newSeq[Axion](NumberOfPointsSun)
   var axBuf = cast[ptr UncheckedArray[Axion]](axions[0].addr)
   echo "start"
-  init(Weave)
+  #init(Weave)
   traceAxionWrapper(axBuf, NumberOfPointsSun,
                     raytraceSetup.centerVecs,
                     raytraceSetup.expSetup,
@@ -2769,14 +2875,15 @@ proc calculateFluxFractions(raytraceSetup: FullRaytraceSetup,
                     raytraceSetup.diffFluxCDFs,
                     raytraceSetup.energies,
                     raytraceSetup.flags)
-  exit(Weave)
+  #exit(Weave)
 
   if generatePlots:
-    generateResultPlots(axions, raytraceSetup.detectorSetup.windowYear, raytraceSetup.outpath, suffix)
+    generateResultPlots(axions, raytraceSetup.detectorSetup.windowYear, raytraceSetup.outpath, suffix, title)
   result = axions
 
 proc performAngularScan(angularScanMin, angularScanMax: float, numAngularScanPoints: int,
-                        noPlots: bool, flags: set[ConfigFlags]) =
+                        noPlots: bool, distanceSunEarth: AstronomicalUnit,
+                        flags: set[ConfigFlags]) =
   ## Performs a scan of the telescope efficiency (intended for the XMM Newton optics)
   ## under different angles.
   let (esKind, dkKind, skKind, tkKind) = parseSetup()
@@ -2785,6 +2892,7 @@ proc performAngularScan(angularScanMin, angularScanMax: float, numAngularScanPoi
                                 dkKind,
                                 skKind,
                                 tkKind,
+                                distanceSunEarth,
                                 flags)
   let outpath = fullSetup.outpath
   var fluxes = newSeq[float](numAngularScanPoints)
@@ -2814,14 +2922,68 @@ proc performAngularScan(angularScanMin, angularScanMax: float, numAngularScanPoi
     ggtitle("Normalized total flux in scan of telescope angle. Solid line: XMM Newton 'theory'") +
     ggsave(outpath / "angular_scan_telescope_y.pdf", width = 800, height = 480)
 
+proc performEffectiveAreaScan(
+  effectiveAreaScanMin, effectiveAreaScanMax: float, numEffectiveAreaScanPoints: int,
+  noPlots: bool, distanceSunEarth: AstronomicalUnit,
+  flags: set[ConfigFlags],
+  suffix = ""
+     ) =
+  ## Performs a scan of the telescope efficiency (intended for the XMM Newton optics)
+  ## under different angles.
+  let (esKind, dkKind, skKind, tkKind) = parseSetup()
+  let energies = linspace(effectiveAreaScanMin, effectiveAreaScanMax, numEffectiveAreaScanPoints)
+  ## Make sure the flags are correct
+  var flags = flags
+  flags.incl cfIgnoreDetWindow
+  flags.incl cfIgnoreGasAbs
+  flags.incl cfIgnoreConvProb
+  # the only aspect we actually need!
+  flags.excl cfIgnoreReflection
+
+  var fullSetup = initFullSetup(esKind,
+                                dkKind,
+                                skKind,
+                                tkKind,
+                                distanceSunEarth,
+                                flags)
+  let outpath = fullSetup.outpath
+  var fluxes = newSeq[float](numEffectiveAreaScanPoints)
+  for i, energy in energies:
+    let suffix = &"_energy_{energy:.2f}"
+    # modify the energy of the test source
+    var expSetup = fullSetup.expSetup
+    expSetup.testSource.energy = energy.keV
+    fullSetup.expSetup = expSetup
+    let axions = fullSetup.calculateFluxFractions(generatePlots = not noPlots, suffix = suffix)
+    ## XXX: update this
+    let totalAxions = axions.len
+    echo "Total axions: ", axions.len
+    let passing = axions.filterIt(it.passed)
+    fluxes[i] = axions.mapIt(it.weights).mean() # * (passing.len.float / totalAxions.float)
+  #let maxFlux = fluxes.max
+  #fluxes.applyIt(it / maxFlux)
+  var df = toDf({"Energy [keV]" : energies, "relative flux" : fluxes})
+  echo df.pretty(-1)
+  df.writeCsv(outpath / &"effective_area_scan_telescope{suffix}.csv")
+  ggplot(df, aes("Energy [keV]", "relative flux")) +
+    geom_point() +
+    geom_line() +
+    ggtitle("Effective area of the telescope") +
+    ggsave(outpath / &"effective_area_scan_telescope{suffix}.pdf", width = 800, height = 480)
+
 proc main(
   ignoreDetWindow = false, ignoreGasAbs = false,
   ignoreConvProb = false, ignoreReflection = false, xrayTest = false,
   detectorInstall = false, magnet = false,
+  distanceSunEarth = 1.0.AU,
   angularScanMin = 0.0, angularScanMax = 0.0, numAngularScanPoints = 50,
+  effectiveAreaScanMin = 0.0, effectiveAreaScanMax = 0.0, numEffectiveAreaScanPoints = 100,
   noPlots = false,
   config = "", # hand a custom path to a config file
-  configPath = "" # Hand a custom path to search in for a config file
+  configPath = "", # Hand a custom path to search in for a config file
+  suffix = "", # The filename suffix to apply to the CSV file
+  title = "", # title for the axion image plot
+  sanity = false, ## If true, produces several sanity check plots
          ) =
   # check if the `config.toml` file exists, otherwise recreate from the default
 
@@ -2844,22 +3006,35 @@ proc main(
   if ignoreGasAbs:     flags.incl cfIgnoreGasAbs
   if ignoreConvProb:   flags.incl cfIgnoreConvProb
   if ignoreReflection: flags.incl cfIgnoreReflection
-  if xrayTest: flags.incl cfXrayTest
-  if magnet: flags.incl cfReadMagnetConfig
-  if detectorInstall: flags.incl cfReadDetInstallConfig
+  if xrayTest:         flags.incl cfXrayTest
+  if magnet:           flags.incl cfReadMagnetConfig
+  if detectorInstall:  flags.incl cfReadDetInstallConfig
+  if sanity:           flags.incl cfSanityChecks
   echo "Flags: ", flags
 
-  if angularScanMin == angularScanMax:
+  if effectiveAreaScanMin != effectiveAreaScanMax:
+    # perform a scan of the effective area of the telescope
+    performEffectiveAreaScan(effectiveAreaScanMin, effectiveAreaScanMax, numEffectiveAreaScanPoints, noPlots, distanceSunEarth, flags, suffix)
+  elif angularScanMin != angularScanMax:
+    # perform a scan of the angular rotation of the telescope
+    performAngularScan(angularScanMin, angularScanMax, numAngularScanPoints, noPlots, distanceSunEarth, flags)
+  else:
     let (esKind, dkKind, skKind, tkKind) = parseSetup()
     let fullSetup = initFullSetup(esKind,
                                   dkKind,
                                   skKind,
                                   tkKind,
-                                  flags) # radiationCharacteristic = "axionRadiation::characteristic::sar"
-    discard fullSetup.calculateFluxFractions(generatePlots = not noPlots)
-  else:
-    # perform a scan of the angular rotation of the telescope
-    performAngularScan(angularScanMin, angularScanMax, numAngularScanPoints, noPlots, flags)
+                                  distanceSunEarth,
+                                  flags,
+                                  suffix)
+    discard fullSetup.calculateFluxFractions(
+      generatePlots = not
+      noPlots,
+      suffix = suffix,
+      title = title)
+
 
 when isMainModule:
+  import cligen
+  import unchained / cligenParseUnits
   dispatch main
