@@ -436,6 +436,15 @@ proc getRandomPointOnDisk(center: Vec3, radius: MilliMeter, rnd: var Rand): Vec3
   y = sin(degToRad(angle)) * r
   result = vec3(x.float, y.float, 0.0) + center
 
+proc randomVec(rnd: var Rand, min = 0.0, max = 1.0): Vec3[float] =
+  ## generate a random 3 vector
+  result = vec3(rnd.rand(min .. max), rnd.rand(min .. max), rnd.rand(min .. max))
+
+proc randomInUnitSphere(rnd: var Rand): Vec3[float] =
+  while true:
+    let p = rnd.randomVec(-1, 1)
+    if p.length2() >= 1: continue
+    return p
 
 proc getRandomPointFromSolarModel(center: Vec3, radius: KiloMeter,
                                   fluxRadiusCDF: seq[float],
@@ -446,16 +455,11 @@ proc getRandomPointFromSolarModel(center: Vec3, radius: KiloMeter,
   ## `fluxRadiusCDF` is the normalized (to 1.0) cumulative sum of the total flux per
   ## radius of all radii of the solar model.
   let
-    angle1 = 360 * rnd.rand(1.0)
-    angle2 = 180 * rnd.rand(1.0)
-    ## random number from 0 to 1 corresponding to possible solar radii.
     randEmRate = rnd.rand(1.0)
     rIdx = fluxRadiusCDF.lowerBound(randEmRate)
-    r = (0.0015 + (rIdx).float * 0.0005) * radius.to(mm)
-  let x = cos(degToRad(angle1)) * sin(degToRad(angle2)) * r
-  let y = sin(degToRad(angle1)) * sin(degToRad(angle2)) * r
-  let z = cos(degToRad(angle2)) * r
-  result = vec3(x.float, y.float, z.float) + center
+    r = (0.0015 + (rIdx).float * 0.0005) * radius.to(mm) # in mm
+  let p = rnd.randomInUnitSphere() * r.float
+  result = p + center
 
 template genGetRandomFromSolar(name, arg, typ, retTyp, body: untyped): untyped =
   ## This templates generates a procedure, which either returns a random energy
