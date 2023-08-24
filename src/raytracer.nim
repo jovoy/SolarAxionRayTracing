@@ -472,7 +472,8 @@ template genGetRandomFromSolar(name, arg, typ, retTyp, body: untyped): untyped =
       r = rad / radius # `UnitLess` radius (radius auto converted)
       iRad {.inject.}: int
       indexRad = (r - 0.0015) / 0.0005
-    if indexRad - 0.5 > floor(indexRad):
+    if indexRad < 0.0: iRad = 0
+    elif indexRad - 0.5 > floor(indexRad):
       iRad = int(ceil(indexRad))
     else: iRad = int(floor(indexRad))
     # get the normalized (to 1) CDF for this radius
