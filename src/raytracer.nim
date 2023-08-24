@@ -2711,19 +2711,23 @@ proc generateResultPlots(axions: seq[Axion],
  # echo (heatmaptable3[53][84]) * 100.0  #echo heatmaptable3[x][y]
   plotHeatmap("Axion Model Fluxfraction", heatmaptable2, 256, $windowYear, rSigma1W, rSigma2W, outpath, suffix, title) #rSigma1, rSigma2)
 
-proc sanityCheckSampling(setup: FullRaytraceSetup, radii: seq[float],
-                         emRates: seq[seq[float]],
-                         fluxesDf: DataFrame,
-                         suffix, outpath: string) =
+proc sanityCheckSolarModelSampling(setup: FullRaytraceSetup, radii: seq[float],
+                                   emRates: seq[seq[float]],
+                                   fluxesDf: DataFrame,
+                                   suffix, outpath: string) =
   var es = newSeq[float]()
   var ems = newSeq[float]()
   var rs = newSeq[float]()
   var ts = newSeq[float]()
   var ps = newSeq[float]()
   var rnd = initRand(123)
+  var xs = newSeq[float]()
+  var ys = newSeq[float]()
+  var zs = newSeq[float]()
 
   for i in 0 ..< 100_000:
     let pos = getRandomPointFromSolarModel(setup.centerVecs.sun, RadiusSun, setup.fluxRadiusCDF, rnd)
+    let posC = pos - setup.centerVecs.sun
     let r = (pos - setup.centerVecs.sun).length()
     let energyAx = getRandomEnergyFromSolarModel(
       pos, setup.centerVecs.sun, RadiusSun, setup.energies, setup.diffFluxCDFs, rnd
@@ -2736,6 +2740,10 @@ proc sanityCheckSampling(setup: FullRaytraceSetup, radii: seq[float],
     es.add energyAx.float
     ems.add em
     rs.add r.mm.to(km) / RadiusSun
+
+    xs.add posC.x
+    ys.add posC.y
+    zs.add posC.z
 
   let df = seqsToDf(es, ems, rs)
   ggplot(df, aes("es")) +
@@ -2761,9 +2769,56 @@ proc sanityCheckSampling(setup: FullRaytraceSetup, radii: seq[float],
     geom_line() +
     ggsave(outpath / &"radius_vs_fluxRadiusCDF{suffix}.pdf")
 
+  let dfPos = toDf(xs, ys, zs)
+  ggplot(dfPos, aes("xs", "ys")) +
+    geom_point(size = 1.0) +
+    ggsave(&"{outpath}/sampled_solar_model_{suffix}.pdf")
+  ggplot(dfPos, aes("xs")) +
+    geom_histogram(bins = 300) +
+    ggsave(&"{outpath}/sampled_solar_model_xs_{suffix}.pdf")
+  ggplot(dfPos, aes("ys")) +
+    geom_histogram(bins = 300) +
+    ggsave(&"{outpath}/sampled_solar_model_ys_{suffix}.pdf")
+  ggplot(dfPos, aes("zs")) +
+    geom_histogram(bins = 300) +
+    ggsave(&"{outpath}/sampled_solar_model_zs_{suffix}.pdf")
+
+
   #ggplot(df, aes("ems")) + geom_histogram(bins = 500) + ggsave("/tmp/ems.pdf")
   #ggplot(df, aes("ts")) + geom_histogram() + ggsave("/tmp/ts.pdf")
   #ggplot(df, aes("ps")) + geom_histogram() + ggsave("/tmp/ps.pdf")
+
+proc sanityCheckDiskSampling(suffix, outpath: string) =
+  const num = 100_000
+  var
+    xs = newSeq[float](num)
+    ys = newSeq[float](num)
+    zs = newSeq[float](num)
+
+  var rnd = initRand(345)
+  for i in 0 ..< num:
+    let v = getRandomPointOnDisk(vec3(0.0, 0.0, 0.0), 10.0.mm, rnd)
+    xs[i] = v.x
+    ys[i] = v.y
+    zs[i] = v.z
+
+  let df = toDf(xs,ys,zs)
+  ggplot(df,aes("xs", "ys")) +
+    geom_point(size = 1.0) +
+    ggsave(&"{outpath}/sampled_disk_{suffix}.pdf")
+  ggplot(df,aes("xs")) +
+    geom_histogram(bins = 300) +
+    ggsave(&"{outpath}/sampled_disk_xs_{suffix}.pdf")
+  ggplot(df,aes("ys")) +
+    geom_histogram(bins = 300) +
+    ggsave(&"{outpath}/sampled_disk_ys_{suffix}.pdf")
+
+proc sanityCheckSampling(setup: FullRaytraceSetup, radii: seq[float],
+                         emRates: seq[seq[float]],
+                         fluxesDf: DataFrame,
+                         suffix, outpath: string) =
+  sanityCheckSolarModelSampling(setup, radii, emRates, fluxesDf, suffix, outpath)
+  sanityCheckDiskSampling(suffix, outpath)
 
 proc initFullSetup(setup: ExperimentSetupKind,
                    detectorSetup: DetectorSetupKind,
