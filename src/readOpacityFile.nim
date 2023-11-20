@@ -118,15 +118,13 @@ const sourceDir = currentSourcePath().parentDir
 var ConfigPath = sourceDir / "../config"
 var ConfigFile = ConfigPath / "config.toml"
 
-proc parseResourcesPath(): string =
-  ## parses the config.toml file containing the path to `resources` directory
-  let config = parseToml.parseFile(ConfigFile)
-  result = config["Resources"]["resourcePath"].getStr
-
-proc parseOutputPath(): string =
-  ## parses the config.toml file containing the path to `output` directory
-  let config = parseToml.parseFile(ConfigFile)
-  result = config["Resources"]["outputPath"].getStr
+proc parseField(field, value: string): string =
+  ## parses the config.toml file containing the `field` and returns it.
+  ## Returns `value` if `value.len > 0` instead.
+  if value.len > 0: result = value # if given a path, use that instead
+  else:
+    let config = parseToml.parseFile(ConfigFile)
+    result = config["Resources"][field].getStr
 
 proc parseSolarModelInputFile(): string =
   ## parses the config.toml file containing the name of the raw solar model input
@@ -611,7 +609,7 @@ proc hash(x: ElementKind): Hash =
   result = h !& int(x)
   result = !$result
 
-proc calculateOpacities(solarModel, outpath, suffix: string,
+proc calculateOpacities(solarModel, plotPath, outpath, suffix: string,
                         distanceSunEarth: AU,
                         fluxKind: FluxKind): DataFrame =
   var df = try:
@@ -633,7 +631,7 @@ proc calculateOpacities(solarModel, outpath, suffix: string,
   ggplot(df, aes("Radius", "Temp", color = "Rho")) +
     geom_line() +
     ggtitle("Radius versus temperature of solar mode, colored by density") +
-    ggsave(outpath / "radius_temp_density.pdf")
+    ggsave(plotPath / "radius_temp_density.pdf")
 
   var
     n_Z = newSeqWith(nRadius, newSeq[float](29)) #29 elements
@@ -715,7 +713,7 @@ proc calculateOpacities(solarModel, outpath, suffix: string,
   ggplot(dfTemp, aes("Radius", "Ne", color = "Temp")) +
     geom_point() +
     ggtitle("Radius versus temperature of solar mode, colored by density") +
-    ggsave(outpath / "radius_temp_ne.pdf")
+    ggsave(plotPath / "radius_temp_ne.pdf")
 
   var dfPlas = seqsToDf({ "Radius": rs3,
                         "Omega": ompls,
@@ -724,11 +722,11 @@ proc calculateOpacities(solarModel, outpath, suffix: string,
     geom_line() +
     scale_y_log10()+
     ggtitle("Radius versus plasma frequency") +
-    ggsave(outpath / "radius_omegapl.pdf")
+    ggsave(plotPath / "radius_omegapl.pdf")
   ggplot(dfPlas, aes("Radius", "B")) +
     geom_line() +
     ggtitle("Radius versus B field") +
-    ggsave(outpath / "radius_B.pdf")]#
+    ggsave(plotPath / "radius_B.pdf")]#
 
 
 
@@ -902,7 +900,7 @@ proc calculateOpacities(solarModel, outpath, suffix: string,
   ggplot(dfNZ, aes("Radius", "nZ", color = "Z")) +
     geom_point() +
     ggtitle("Radius versus atomic density for different Z") +
-    ggsave(outpath / "radius_nZ_Z.pdf")]#
+    ggsave(plotPath / "radius_nZ_Z.pdf")]#
 
   #var dfOp = seqsToDf({ "Radius": rs2,
   #                      "opacity": ops,
@@ -911,7 +909,7 @@ proc calculateOpacities(solarModel, outpath, suffix: string,
   #ggplot(dfOp, aes("Radius", "opacity", color = "energies")) +
   #  geom_point() +
   #  ggtitle("Radius versus opacity for different energies") +
-  #  ggsave(outpath / "radius_op_energies.pdf")
+  #  ggsave(plotPath / "radius_op_energies.pdf")
   let dfRadii = seqsToDf({"Radius": radii, "Flux": totalRadiiFlux})
   echo dfRadii
 
@@ -920,7 +918,7 @@ proc calculateOpacities(solarModel, outpath, suffix: string,
     xlab("Solar radius") +
     ylab("Flux") +
     ggtitle(&"Differential solar axion flux for g_ae = {g_ae}, g_aγ = {g_agamma} GeV⁻¹, g_aN = {ganuclei}") +
-    ggsave(outpath / "radFlux.pdf", width = 800, height = 480)
+    ggsave(plotPath / "radFlux.pdf", width = 800, height = 480)
 
   var diffFluxDf = newDataFrame()
   diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, emratesS, distanceSunEarth, "Total flux")
@@ -950,13 +948,13 @@ proc calculateOpacities(solarModel, outpath, suffix: string,
     .mutate(f{"flux" ~ `emrate` * `energy` * `energy` * 0.5 / Pi / Pi})
   ggplot(dfEmrate, aes("energy", "flux")) +
     geom_line() +
-    ggsave(outpath / "emrate_R10.pdf")
+    ggsave(plotPath / "emrate_R10.pdf")
 
   let dfAbscoef = seqsToDf({ "energy": energies,
                             "absCoefs": absCoefs[10, _].squeeze.clone })
   ggplot(dfAbscoef, aes("energy", "absCoefs")) +
     geom_line() +
-    ggsave(outpath / "abscoefs_R10.pdf")
+    ggsave(plotPath / "abscoefs_R10.pdf")
 
 
   ggplot(diffFluxDf, aes("Energy", "Flux", color = "Radius")) +
@@ -965,7 +963,7 @@ proc calculateOpacities(solarModel, outpath, suffix: string,
     ylab("Flux [keV⁻¹ y⁻¹ m⁻²]") +
     ggtitle(&"Differential solar axion flux for g_ae = {g_ae}, g_aγ = {g_agamma} GeV⁻¹") +
     margin(right = 6.5) +
-    ggsave(outpath / "diffFlux_radii.pdf", width = 800, height = 480)
+    ggsave(plotPath / "diffFlux_radii.pdf", width = 800, height = 480)
 
   when false:
     let dfDiffflux = seqsToDf({ "Axion energy [eV]": energieslong,
@@ -987,13 +985,16 @@ proc calculateOpacities(solarModel, outpath, suffix: string,
     #scale_x_log10() +
     ggtitle(&"Differential solar axion flux for g_ae = {g_ae}, g_aγ = {g_agamma} GeV⁻¹, g_aN = {ganuclei}") +
     margin(right = 6.5) +
-    ggsave(outpath / &"diffFlux{suffix}.pdf", width = 800, height = 480)
+    ggsave(plotPath / &"diffFlux{suffix}.pdf", width = 800, height = 480)
 
 proc main*(config = "", # hand a custom path to a config file
            configPath = "", # Hand a custom path to search in for a config file
            suffix = "", # appended to the generated filenames
            distanceSunEarth = 0.0.AU, # Distance Sun ⇔ Earth to use in AU
-           fluxKind = fkAll
+           fluxKind = fkAll,
+           resources = "", # can overwrite the `resourcePath` field of the `config.toml` file. Location of solar model input
+           plotPath = "", # can overwrite the `plotPath` field of the `config.toml` file. Location of where the plots will be stored
+           outpath = "" # can overwrite the `outputPath` field of the `config.toml` file. This is where the CSV files will be stored
           ) =
   # check if the `config.toml` file exists, otherwise recreate from the default
   if configPath.len > 0:
@@ -1007,15 +1008,19 @@ proc main*(config = "", # hand a custom path to a config file
     let cdata = readFile(ConfigPath / "config_default.toml")
     writeFile(ConfigPath / "config.toml", cdata)
 
-  let resources = parseResourcesPath()
-  let outpath = parseOutputPath()
+  let resources = parseField("resourcePath", resources)
+  createDir(resources)
+  let outpath = parseField("outputPath", outpath)
+  createDir(outpath)
+  let plotPath = parseField("plotPath", plotPath)
+  createDir(plotPath)
   let solarModelInput = parseSolarModelInputFile()
   let solarModelOutput = parseSolarModelOutputFile()
   let distanceSunEarth = if distanceSunEarth > 0.0.AU: distanceSunEarth else: parseDistanceSunEarth()
   ## First lets access the solar model and calculate some necessary values
   let solarModel = resources / solarModelInput
 
-  let solarModelDf = calculateOpacities(solarModel, outpath, suffix,
+  let solarModelDf = calculateOpacities(solarModel, plotPath, outpath, suffix,
                                         distanceSunEarth,
                                         fluxKind)
   solarModelDf.writeCsv(outpath / solarModelOutput.replace(".csv", &"_fluxKind_{fluxKind}{suffix}.csv"))

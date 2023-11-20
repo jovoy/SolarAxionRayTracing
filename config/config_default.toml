@@ -2,6 +2,7 @@
 # the file storing the telescope efficiency of the LLNL telescope
 resourcePath   = "../resources"
 outputPath     = "../out"
+plotPath       = "../out" # path where plots in `readOpacityFile` are stored
 llnlEfficiency = "llnl_xray_telescope_cast_effective_area_parallel_light_DTU_thesis.csv"
 goldFilePrefix = "henke_download/"
 rawSolarModel  = "AGSS09_solar_model_stripped.dat"
