@@ -918,7 +918,7 @@ proc calculateOpacities(solarModel, plotPath, outpath, suffix: string,
     xlab("Solar radius") +
     ylab("Flux") +
     ggtitle(&"Differential solar axion flux for g_ae = {g_ae}, g_aγ = {g_agamma} GeV⁻¹, g_aN = {ganuclei}") +
-    ggsave(plotPath / "radFlux.pdf", width = 800, height = 480)
+    ggsave(plotPath / &"radFlux_fluxKind_{fluxKind}.pdf", width = 800, height = 480)
 
   var diffFluxDf = newDataFrame()
   diffFluxDf.add getFluxFractionR(energies, df, n_es, temperatures, emratesS, distanceSunEarth, "Total flux")
@@ -970,9 +970,12 @@ proc calculateOpacities(solarModel, plotPath, outpath, suffix: string,
                                 "Fluxfraction [keV⁻¹y⁻¹m⁻²]": fluxes,
                                 "type": kinds })]#
 
+  ## Note: The differential axion flux *always* contains all contributons. However, the
+  ## `Total flux` column is the one that corresponds to the emission rate output file
+  ## based on the given `FluxKind`.
   diffFluxDf = diffFluxDf.rename(f{"Flux / keV⁻¹ m⁻² yr⁻¹" <- "diffFlux"},
                                  f{"Energy [keV]" <- "Energy"})
-  diffFluxDf.writeCsv(outpath / &"solar_axion_flux_differential_g_ae_{g_ae}_g_ag_{g_agamma.float}_g_aN_{ganuclei}{suffix}.csv")
+  diffFluxDf.writeCsv(outpath / &"solar_axion_flux_differential_g_ae_{g_ae}_g_ag_{g_agamma.float}_g_aN_{ganuclei}_fluxKind_{fluxKind}{suffix}.csv")
   ggplot(diffFluxDf, aes("Energy [keV]", "Flux / keV⁻¹ m⁻² yr⁻¹", color = "type")) +
     geom_line() + #size = some(0.5)
     xlab("Axion energy [eV]") +
@@ -985,7 +988,7 @@ proc calculateOpacities(solarModel, plotPath, outpath, suffix: string,
     #scale_x_log10() +
     ggtitle(&"Differential solar axion flux for g_ae = {g_ae}, g_aγ = {g_agamma} GeV⁻¹, g_aN = {ganuclei}") +
     margin(right = 6.5) +
-    ggsave(plotPath / &"diffFlux{suffix}.pdf", width = 800, height = 480)
+    ggsave(plotPath / &"diffFlux_fluxKind_{fluxKind}{suffix}.pdf", width = 800, height = 480)
 
 proc main*(config = "", # hand a custom path to a config file
            configPath = "", # Hand a custom path to search in for a config file
